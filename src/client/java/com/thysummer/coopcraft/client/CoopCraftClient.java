@@ -17,6 +17,7 @@ public class CoopCraftClient implements ClientModInitializer {
 		});
 
 		CoordsSharing.register();
+		DeathPoints.register();
 
 		CoopCraft.LOGGER.info("CoopCraft client initialized");
 	}
