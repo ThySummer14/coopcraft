@@ -22,6 +22,9 @@
 			"com.thysummer.coopcraft.client.CoopCraftClient"
 		]
 	},
+	"mixins": [
+		"coopcraft.mixins.json"
+	],
 	"depends": {
 		"fabricloader": ">=0.20.1",
 		"minecraft": "~1.21.1",
