@@ -23,6 +23,7 @@ public final class CoopNetworking {
 		PayloadTypeRegistry.playS2C().register(AdvancementToastPayload.TYPE, AdvancementToastPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playC2S().register(ShareCoordsPayload.TYPE, ShareCoordsPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(CoordsSharedPayload.TYPE, CoordsSharedPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(DeathPointPayload.TYPE, DeathPointPayload.STREAM_CODEC);
 
 		ServerPlayNetworking.registerGlobalReceiver(ShareCoordsPayload.TYPE, (payload, context) -> {
 			ServerPlayer sender = context.player();
@@ -71,6 +72,41 @@ public final class CoopNetworking {
 		}
 
 		CoopCraft.LOGGER.debug("Shared coords of {} with {} player(s)", sender.getScoreboardName(), receivers);
+	}
+
+	/**
+	 * 把玩家死亡的位置推送给其他队友，方便回去帮忙捡装备。
+	 */
+	public static void broadcastDeathPoint(ServerPlayer player) {
+		MinecraftServer server = player.level().getServer();
+		if (server == null) {
+			return;
+		}
+
+		DeathPointPayload payload = new DeathPointPayload(
+			player.getScoreboardName(),
+			player.level().dimension().location().toString(),
+			player.getBlockX(),
+			player.getBlockY(),
+			player.getBlockZ()
+		);
+
+		int receivers = 0;
+
+		for (ServerPlayer other : server.getPlayerList().getPlayers()) {
+			if (other == player) {
+				continue;
+			}
+
+			if (!ServerPlayNetworking.canSend(other, DeathPointPayload.TYPE)) {
+				continue;
+			}
+
+			ServerPlayNetworking.send(other, payload);
+			receivers++;
+		}
+
+		CoopCraft.LOGGER.debug("Broadcast death point of {} to {} player(s)", player.getScoreboardName(), receivers);
 	}
 
 	/**
