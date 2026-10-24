@@ -52,3 +52,11 @@ java {
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
 }
+
+tasks.named('jar') {
+	from('LICENSE')
+}
+
+tasks.named('sourcesJar') {
+	from('LICENSE')
+}
