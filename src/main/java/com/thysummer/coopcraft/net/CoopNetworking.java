@@ -6,13 +6,14 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.DisplayInfo;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 
 /**
- * 进度播报的网络层：注册 payload，并把队友达成的进度转发给其他玩家。
+ * 网络层：注册 payload，并把队友互动消息转发给其他玩家。
  */
 public final class CoopNetworking {
 	private CoopNetworking() {
@@ -20,6 +21,56 @@ public final class CoopNetworking {
 
 	public static void registerPayloads() {
 		PayloadTypeRegistry.playS2C().register(AdvancementToastPayload.TYPE, AdvancementToastPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playC2S().register(ShareCoordsPayload.TYPE, ShareCoordsPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(CoordsSharedPayload.TYPE, CoordsSharedPayload.STREAM_CODEC);
+
+		ServerPlayNetworking.registerGlobalReceiver(ShareCoordsPayload.TYPE, (payload, context) -> {
+			ServerPlayer sender = context.player();
+			context.server().execute(() -> shareCoords(sender));
+		});
+	}
+
+	/**
+	 * 把发送者的位置广播给其他队友。
+	 *
+	 * <p>坐标由服务端从 {@link ServerPlayer} 读取，不信任客户端上报的值。
+	 */
+	private static void shareCoords(ServerPlayer sender) {
+		MinecraftServer server = sender.level().getServer();
+		if (server == null) {
+			return;
+		}
+
+		CoordsSharedPayload payload = new CoordsSharedPayload(
+			sender.getScoreboardName(),
+			sender.level().dimension().location().toString(),
+			sender.getBlockX(),
+			sender.getBlockY(),
+			sender.getBlockZ()
+		);
+
+		int receivers = 0;
+
+		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			if (player == sender) {
+				continue;
+			}
+
+			if (!ServerPlayNetworking.canSend(player, CoordsSharedPayload.TYPE)) {
+				continue;
+			}
+
+			ServerPlayNetworking.send(player, payload);
+			receivers++;
+		}
+
+		if (receivers == 0) {
+			sender.sendSystemMessage(Component.translatable("coopcraft.coords.none"));
+		} else {
+			sender.sendSystemMessage(Component.translatable("coopcraft.coords.confirm", Integer.toString(receivers)));
+		}
+
+		CoopCraft.LOGGER.debug("Shared coords of {} with {} player(s)", sender.getScoreboardName(), receivers);
 	}
 
 	/**

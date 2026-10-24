@@ -1,0 +1,11 @@
+{
+	"category.coopcraft": "CoopCraft",
+	"key.coopcraft.share_coords": "分享坐标",
+	"coopcraft.coords.shared": "队友 %s 在 %s 分享了坐标：%s",
+	"coopcraft.coords.confirm": "坐标已分享给 %s 名队友",
+	"coopcraft.coords.none": "没有队友收到坐标（不在线或未安装 CoopCraft）",
+	"coopcraft.coords.copy": "点击复制坐标",
+	"coopcraft.dimension.overworld": "主世界",
+	"coopcraft.dimension.the_nether": "下界",
+	"coopcraft.dimension.the_end": "末地"
+}

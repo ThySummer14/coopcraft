@@ -16,6 +16,8 @@ public class CoopCraftClient implements ClientModInitializer {
 				context.client().getToasts().addToast(new AdvancementToast(payload.advancement())));
 		});
 
+		CoordsSharing.register();
+
 		CoopCraft.LOGGER.info("CoopCraft client initialized");
 	}
 }
