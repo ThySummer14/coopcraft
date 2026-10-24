@@ -1,0 +1,11 @@
+{
+	"category.coopcraft": "CoopCraft",
+	"key.coopcraft.share_coords": "Share Coordinates",
+	"coopcraft.coords.shared": "%s shared coords in %s: %s",
+	"coopcraft.coords.confirm": "Shared your coords with %s teammate(s)",
+	"coopcraft.coords.none": "No teammate received the coords (offline or mod not installed)",
+	"coopcraft.coords.copy": "Click to copy",
+	"coopcraft.dimension.overworld": "Overworld",
+	"coopcraft.dimension.the_nether": "Nether",
+	"coopcraft.dimension.the_end": "The End"
+}
