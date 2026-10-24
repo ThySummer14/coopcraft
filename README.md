@@ -49,6 +49,10 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
 2. 把 [Fabric API 0.116.17+1.21.1](https://modrinth.com/mod/fabric-api/versions?g=1.21.1) 和 `build/libs/coopcraft-0.1.0.jar` 放进 `.minecraft/mods`
 3. 两端都装好模组后，一方开单人世界并在“对局域网开放”，另一方在多人游戏里连接
 
+## 远程联机
+
+两个人不在同一局域网时，可以用一台常开的 Mac 当专服。开服包、Tailscale 组网、白名单和备份步骤见 [server/README.md](server/README.md)。
+
 ## 目录结构
 
 ```

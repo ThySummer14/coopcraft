@@ -1,0 +1,14 @@
+# 复制为 server.properties 后按需修改
+motd=CoopCraft 1.21.1
+server-port=25565
+online-mode=true
+white-list=true
+max-players=5
+view-distance=8
+simulation-distance=6
+difficulty=normal
+gamemode=survival
+spawn-protection=16
+enable-command-block=false
+allow-flight=false
+level-name=world
