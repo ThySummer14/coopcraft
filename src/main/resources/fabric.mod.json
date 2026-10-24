@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "coopcraft",
+	"version": "${version}",
+	"name": "CoopCraft",
+	"description": "A mod built together with friends.",
+	"authors": [
+		"ThySummer"
+	],
+	"contact": {
+		"homepage": "https://github.com/ThySummer14/coopcraft",
+		"sources": "https://github.com/ThySummer14/coopcraft",
+		"issues": "https://github.com/ThySummer14/coopcraft/issues"
+	},
+	"icon": "assets/coopcraft/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.thysummer.coopcraft.CoopCraft"
+		],
+		"client": [
+			"com.thysummer.coopcraft.client.CoopCraftClient"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
