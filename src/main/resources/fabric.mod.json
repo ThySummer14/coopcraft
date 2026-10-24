@@ -4,6 +4,7 @@
 	"version": "${version}",
 	"name": "CoopCraft",
 	"description": "A mod built together with friends.",
+	"license": "MIT",
 	"authors": [
 		"ThySummer"
 	],
