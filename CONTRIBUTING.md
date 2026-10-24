@@ -3,7 +3,7 @@
 ## 开始之前
 
 - 装好 JDK 25（跑 Gradle 用；模组编译目标是 Java 21）
-- 拿到仓库权限后接受邀请，再 `git clone https://github.com/ThySummer14/coopcraft.git`
+- 直接 `git clone https://github.com/ThySummer14/coopcraft.git`；想向仓库直接推分支需要协作者权限，没有的话 fork 后提 PR
 - 在 IDEA 里用 “Open” 打开 `build.gradle`，等 Gradle 同步完成
 
 ## 分支与 PR

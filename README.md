@@ -49,8 +49,8 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 
 ## 一起写代码
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md)。核心约定：不直接 push `main`，所有改动走分支 + PR，CI 通过后再合并。
+仓库公开，欢迎直接提 PR。详见 [CONTRIBUTING.md](CONTRIBUTING.md)。核心约定：不直接 push `main`，所有改动走分支 + PR，CI 通过后再合并。
 
 ## 许可证
 
-私有项目，未授权外部使用。
+仓库公开，但暂未添加开源许可证。在补充 LICENSE 前，代码默认保留所有权利；如需分发或商用请先联系作者。
