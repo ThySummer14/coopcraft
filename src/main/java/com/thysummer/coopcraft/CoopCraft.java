@@ -1,5 +1,7 @@
 package com.thysummer.coopcraft;
 
+import com.thysummer.coopcraft.net.CoopNetworking;
+
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.resources.ResourceLocation;
 
@@ -12,6 +14,7 @@ public class CoopCraft implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		CoopNetworking.registerPayloads();
 		LOGGER.info("CoopCraft initialized");
 	}
 
