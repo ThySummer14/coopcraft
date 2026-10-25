@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": { "model": "coopcraft:block/farm_station" },
+    "facing=east": { "model": "coopcraft:block/farm_station", "y": 90 },
+    "facing=south": { "model": "coopcraft:block/farm_station", "y": 180 },
+    "facing=west": { "model": "coopcraft:block/farm_station", "y": 270 }
+  }
+}

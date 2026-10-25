@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft;
 
+import com.thysummer.coopcraft.automation.Automation;
 import com.thysummer.coopcraft.net.CoopNetworking;
 
 import net.fabricmc.api.ModInitializer;
@@ -16,6 +17,7 @@ public class CoopCraft implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
+		Automation.register();
 		CoopNetworking.registerPayloads();
 
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
