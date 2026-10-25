@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "particle": "minecraft:block/iron_block",
+    "top": "minecraft:block/hopper_top",
+    "front": "minecraft:block/observer_front",
+    "side": "minecraft:block/iron_block"
+  }
+}

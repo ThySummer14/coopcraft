@@ -2,7 +2,7 @@
 
 [![build](https://github.com/ThySummer14/coopcraft/actions/workflows/build.yml/badge.svg)](https://github.com/ThySummer14/coopcraft/actions/workflows/build.yml)
 
-和朋友一起开发的 Minecraft Fabric 模组，目前是能跑起来的空壳。
+和朋友一起开发的 Minecraft Fabric 联机模组。
 
 ## 功能
 
@@ -17,6 +17,10 @@
 
 - **队友死亡点**：队友死亡时，死亡坐标和维度会发到其他队友的聊天栏，
   点击坐标复制，方便回去帮忙捡装备。
+
+- **自动农艺机**：每 2 秒收割并补种周围 3×3 的一株成熟作物，支持小麦、胡萝卜、
+  马铃薯、甜菜和下界疣。把箱子或其他容器放在机器正上方即可收集产物；空间不足时不会
+  收割，并会提醒附近玩家。右键机器可查看状态，在红石创造物品栏中也能找到。
 
 ## 版本
 

@@ -9,5 +9,13 @@
 	"coopcraft.death.copy": "Click to copy death coords",
 	"coopcraft.dimension.overworld": "Overworld",
 	"coopcraft.dimension.the_nether": "Nether",
-	"coopcraft.dimension.the_end": "The End"
+	"coopcraft.dimension.the_end": "The End",
+	"block.coopcraft.farm_station": "Farm Station",
+	"block.coopcraft.farm_station.tooltip": "Harvests and replants mature crops in a 3×3 area, sending outputs to the container above. Right-click for status.",
+	"coopcraft.farm_station.alert": "Farm station %s: %s",
+	"coopcraft.farm_station.status.running": "Harvesting automatically",
+	"coopcraft.farm_station.status.idle": "Waiting for crops to mature",
+	"coopcraft.farm_station.status.no_output": "No usable container above",
+	"coopcraft.farm_station.status.output_full": "Paused: no room for the harvest",
+	"coopcraft.farm_station.status.missing_seed": "Paused: cannot reserve a seed for replanting"
 }
