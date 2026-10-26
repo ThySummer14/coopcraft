@@ -1,9 +1,11 @@
 package com.thysummer.coopcraft.client;
 
 import com.thysummer.coopcraft.CoopCraft;
+import com.thysummer.coopcraft.client.anim.ToolAnimationController;
 import com.thysummer.coopcraft.net.AdvancementToastPayload;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.components.toasts.AdvancementToast;
 
@@ -18,6 +20,16 @@ public class CoopCraftClient implements ClientModInitializer {
 
 		CoordsSharing.register();
 		DeathPoints.register();
+
+		// 在这里主动取一次实例，触发类初始化——按键必须在客户端初始化阶段完成注册，
+		// 否则不会出现在「选项 → 控制」里，也没办法改键。
+		ToolAnimationController animationController = ToolAnimationController.INSTANCE;
+		ClientTickEvents.END_CLIENT_TICK.register(client -> {
+			animationController.tick();
+			CaptureHelper.tick();
+		});
+
+		CaptureHelper.initialize();
 
 		CoopCraft.LOGGER.info("CoopCraft client initialized");
 	}

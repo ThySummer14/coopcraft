@@ -17,5 +17,7 @@
 	"coopcraft.farm_station.status.idle": "等待作物成熟",
 	"coopcraft.farm_station.status.no_output": "上方没有可用容器",
 	"coopcraft.farm_station.status.output_full": "产物空间不足，已暂停",
-	"coopcraft.farm_station.status.missing_seed": "无法保留补种所需的种子，已暂停"
+	"coopcraft.farm_station.status.missing_seed": "无法保留补种所需的种子，已暂停",
+	"key.coopcraft.inspect": "检视手持工具",
+	"key.coopcraft.capture": "连拍截图（调试）"
 }
