@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "coopcraft:block/mechanical_drill_side",
+    "down": "minecraft:block/iron_block",
+    "up": "coopcraft:block/mechanical_drill_top",
+    "north": "coopcraft:block/mechanical_drill_front",
+    "south": "coopcraft:block/mechanical_drill_back",
+    "east": "coopcraft:block/mechanical_drill_side",
+    "west": "coopcraft:block/mechanical_drill_side"
+  }
+}

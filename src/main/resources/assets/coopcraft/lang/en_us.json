@@ -17,5 +17,15 @@
 	"coopcraft.farm_station.status.idle": "Waiting for crops to mature",
 	"coopcraft.farm_station.status.no_output": "No usable container above",
 	"coopcraft.farm_station.status.output_full": "Paused: no room for the harvest",
-	"coopcraft.farm_station.status.missing_seed": "Paused: cannot reserve a seed for replanting"
+	"coopcraft.farm_station.status.missing_seed": "Paused: cannot reserve a seed for replanting",
+	"block.coopcraft.mechanical_drill": "Mechanical Drill",
+	"block.coopcraft.mechanical_drill.tooltip": "Mines on redstone pulses. Right-click to insert a tool, sneak-right-click to retrieve it. Outputs to the rear container.",
+	"coopcraft.mechanical_drill.status.idle": "Ready for a redstone pulse",
+	"coopcraft.mechanical_drill.status.running": "Block harvested; waiting for the next pulse",
+	"coopcraft.mechanical_drill.status.no_tool": "Requires a damageable tool",
+	"coopcraft.mechanical_drill.status.wrong_tool": "The current tool cannot harvest the block in front",
+	"coopcraft.mechanical_drill.status.protected": "The container or machine in front is protected",
+	"coopcraft.mechanical_drill.status.output_full": "Paused: no room in the rear container",
+	"block.coopcraft.conveyor_belt": "Item Conveyor",
+	"block.coopcraft.conveyor_belt.tooltip": "Moves items on its surface into the container ahead. Apply redstone power to brake."
 }

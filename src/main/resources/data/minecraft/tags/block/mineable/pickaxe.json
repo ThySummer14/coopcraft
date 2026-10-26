@@ -1,6 +1,8 @@
 {
   "replace": false,
   "values": [
-    "coopcraft:farm_station"
+    "coopcraft:farm_station",
+    "coopcraft:mechanical_drill",
+    "coopcraft:conveyor_belt"
   ]
 }

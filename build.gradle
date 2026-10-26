@@ -13,6 +13,15 @@ repositories {
 loom {
 	splitEnvironmentSourceSets()
 
+	runConfigs {
+		gameTestServer {
+			server()
+			runDir "build/gametest"
+			vmArg "-Dfabric-api.gametest=true"
+			ideConfigGenerated false
+		}
+	}
+
 	mods {
 		"coopcraft" {
 			sourceSet sourceSets.main
@@ -49,6 +58,10 @@ tasks.withType(JavaCompile).configureEach {
 
 test {
 	useJUnitPlatform()
+}
+
+tasks.named('check') {
+	dependsOn 'runGameTestServer'
 }
 
 java {

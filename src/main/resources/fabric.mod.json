@@ -21,6 +21,9 @@
 		],
 		"client": [
 			"com.thysummer.coopcraft.client.CoopCraftClient"
+		],
+		"fabric-gametest": [
+			"com.thysummer.coopcraft.automation.AutomationGameTest"
 		]
 	},
 	"mixins": [

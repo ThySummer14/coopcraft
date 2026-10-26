@@ -1,0 +1,31 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "H": {
+      "item": "minecraft:hopper"
+    },
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "O": {
+      "item": "minecraft:observer"
+    },
+    "P": {
+      "item": "minecraft:iron_pickaxe"
+    },
+    "R": {
+      "item": "minecraft:redstone"
+    }
+  },
+  "pattern": [
+    "IPI",
+    "ROR",
+    "IHI"
+  ],
+  "result": {
+    "count": 1,
+    "id": "coopcraft:mechanical_drill"
+  },
+  "show_notification": true
+}

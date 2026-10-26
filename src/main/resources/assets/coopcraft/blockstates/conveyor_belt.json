@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "facing=north,powered=false": { "model": "coopcraft:block/conveyor_belt" },
+    "facing=east,powered=false": { "model": "coopcraft:block/conveyor_belt", "y": 90 },
+    "facing=south,powered=false": { "model": "coopcraft:block/conveyor_belt", "y": 180 },
+    "facing=west,powered=false": { "model": "coopcraft:block/conveyor_belt", "y": 270 },
+    "facing=north,powered=true": { "model": "coopcraft:block/conveyor_belt_stopped" },
+    "facing=east,powered=true": { "model": "coopcraft:block/conveyor_belt_stopped", "y": 90 },
+    "facing=south,powered=true": { "model": "coopcraft:block/conveyor_belt_stopped", "y": 180 },
+    "facing=west,powered=true": { "model": "coopcraft:block/conveyor_belt_stopped", "y": 270 }
+  }
+}
