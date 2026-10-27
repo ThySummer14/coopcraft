@@ -17,5 +17,7 @@
 	"coopcraft.farm_station.status.idle": "Waiting for crops to mature",
 	"coopcraft.farm_station.status.no_output": "No usable container above",
 	"coopcraft.farm_station.status.output_full": "Paused: no room for the harvest",
-	"coopcraft.farm_station.status.missing_seed": "Paused: cannot reserve a seed for replanting"
+	"coopcraft.farm_station.status.missing_seed": "Paused: cannot reserve a seed for replanting",
+	"key.coopcraft.inspect": "Inspect Held Tool",
+	"key.coopcraft.capture": "Capture Screenshot Burst (debug)"
 }
