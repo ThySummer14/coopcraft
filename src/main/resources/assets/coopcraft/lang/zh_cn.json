@@ -84,5 +84,7 @@
 	"coopcraft.crafting_station.set": "已将此工作台设为 %s 的打制石台",
 	"coopcraft.grinding_station.set": "已将此切石机设为 %s 的磨制石台",
 	"coopcraft.resource.marked": "已标记为聚落资源点，村民会前来采集；再次潜行右击可取消",
-	"coopcraft.resource.unmarked": "已取消此资源点，村民不会再采集这里"
+	"coopcraft.resource.unmarked": "已取消此资源点，村民不会再采集这里",
+	"key.coopcraft.inspect": "检视手持工具",
+	"key.coopcraft.capture": "连拍截图（调试）"
 }

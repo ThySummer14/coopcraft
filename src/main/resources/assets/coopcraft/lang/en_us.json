@@ -84,5 +84,7 @@
 	"coopcraft.crafting_station.set": "This crafting table is now the knapping station of %s",
 	"coopcraft.grinding_station.set": "This stonecutter is now the grinding station of %s",
 	"coopcraft.resource.marked": "Marked as a settlement resource. Villagers will gather here; sneak-use again to unmark",
-	"coopcraft.resource.unmarked": "Resource unmarked. Villagers will no longer gather here"
+	"coopcraft.resource.unmarked": "Resource unmarked. Villagers will no longer gather here",
+	"key.coopcraft.inspect": "Inspect Held Tool",
+	"key.coopcraft.capture": "Capture Screenshot Burst (debug)"
 }

@@ -30,7 +30,11 @@
 		]
 	},
 	"mixins": [
-		"coopcraft.mixins.json"
+		"coopcraft.mixins.json",
+		{
+			"config": "coopcraft.client.mixins.json",
+			"environment": "client"
+		}
 	],
 	"depends": {
 		"fabricloader": ">=0.20.1",
