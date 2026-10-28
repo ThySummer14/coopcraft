@@ -10,7 +10,7 @@
 
 1. 从最新的 `main` 开分支：`git switch -c feat/描述`（修复用 `fix/`，杂项用 `chore/`）
 2. 一个 PR 只做一件事，改动尽量小
-3. 提交前本地跑 `./gradlew build`
+3. 提交前本地跑 `./gradlew build runGameTest`
 4. push 分支后在 GitHub 开 PR 到 `main`，填好 PR 模板
 5. CI 绿 + 至少 1 人看过再合并
 

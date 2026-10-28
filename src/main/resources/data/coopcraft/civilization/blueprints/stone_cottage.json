@@ -1,0 +1,52 @@
+{
+  "id": "coopcraft:stone_cottage",
+  "size": [5, 4, 5],
+  "layers": [
+    {
+      "type": "floor",
+      "y": 0,
+      "block": "cobblestone"
+    },
+    {
+      "type": "perimeter",
+      "y": 1,
+      "block": "oak_planks"
+    },
+    {
+      "type": "perimeter",
+      "y": 2,
+      "block": "oak_planks"
+    },
+    {
+      "type": "floor",
+      "y": 3,
+      "block": "cobblestone"
+    }
+  ],
+  "special": [
+    {
+      "pos": [2, 1, 0],
+      "block": "oak_door[facing=north,half=lower]"
+    },
+    {
+      "pos": [2, 2, 0],
+      "block": "oak_door[facing=north,half=upper]"
+    },
+    {
+      "pos": [2, 1, 3],
+      "block": "white_bed[facing=south,part=foot]"
+    },
+    {
+      "pos": [2, 1, 4],
+      "block": "white_bed[facing=south,part=head]"
+    },
+    {
+      "pos": [1, 2, 2],
+      "block": "torch"
+    },
+    {
+      "pos": [3, 2, 2],
+      "block": "torch"
+    }
+  ]
+}
