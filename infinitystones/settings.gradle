@@ -1,0 +1,17 @@
+pluginManagement {
+    repositories {
+        // 国内镜像加速（阿里云）。如果不需要，删掉这一行即可，Gradle 会自动回退到官方源。
+        maven { name = 'AliyunGradlePlugin'; url = 'https://maven.aliyun.com/repository/gradle-plugin' }
+        gradlePluginPortal()
+        maven {
+            name = 'MinecraftForge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.5.0'
+}
+
+rootProject.name = 'infinitystones'

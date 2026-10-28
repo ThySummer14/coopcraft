@@ -1,0 +1,10 @@
+# 子工程独立于仓库根的 .gitattributes
+* text=auto
+
+# Linux 启动脚本必须 LF，Windows 脚本必须 CRLF
+gradlew   text eol=lf
+*.bat     text eol=crlf
+
+# 二进制资源不要做换行转换
+*.jar     binary
+*.png     binary

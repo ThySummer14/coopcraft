@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " D ",
+    "DXD",
+    " D "
+  ],
+  "key": {
+    "D": { "item": "minecraft:diamond" },
+    "X": { "item": "minecraft:clock" }
+  },
+  "result": { "item": "infinitystones:time_stone" }
+}

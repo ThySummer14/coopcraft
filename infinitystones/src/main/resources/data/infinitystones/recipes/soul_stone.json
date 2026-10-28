@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " D ",
+    "DXD",
+    " D "
+  ],
+  "key": {
+    "D": { "item": "minecraft:diamond" },
+    "X": { "item": "minecraft:soul_lantern" }
+  },
+  "result": { "item": "infinitystones:soul_stone" }
+}

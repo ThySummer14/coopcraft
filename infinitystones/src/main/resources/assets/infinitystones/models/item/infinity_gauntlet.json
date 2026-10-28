@@ -1,0 +1,44 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "infinitystones:item/infinity_gauntlet"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 1
+      },
+      "model": "infinitystones:item/infinity_gauntlet_1"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2
+      },
+      "model": "infinitystones:item/infinity_gauntlet_2"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3
+      },
+      "model": "infinitystones:item/infinity_gauntlet_3"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 4
+      },
+      "model": "infinitystones:item/infinity_gauntlet_4"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 5
+      },
+      "model": "infinitystones:item/infinity_gauntlet_5"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 6
+      },
+      "model": "infinitystones:item/infinity_gauntlet_6"
+    }
+  ]
+}

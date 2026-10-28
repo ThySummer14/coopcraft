@@ -1,0 +1,29 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+# 换成你自己的 issue 地址
+#issueTrackerURL = "https://example.com/infinitystones/issues"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "Infinity Stones"
+authors = "${mod_authors}"
+description = '''
+Six stones, one gauntlet. Bend space, mind, reality, power, time and soul.
+Right-click to unleash a stone's power, sneak-right-click with all six to snap.
+'''
+
+[[dependencies.${mod_id}]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "${forge_version_range}"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[dependencies.${mod_id}]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "${minecraft_version_range}"
+    ordering = "NONE"
+    side = "BOTH"

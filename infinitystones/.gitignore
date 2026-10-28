@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# Mojang / Forge
+run/
+run-data/
+mcmodsrepo/
+src/generated/resources/.cache/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+bin/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# build/test logs
+*.log
