@@ -199,6 +199,8 @@ Mac mini 是台机，但 macOS 仍可能自动休眠。三种办法任选：
 
 客户端把 CoopCraft 和 Fabric API 放进 `.minecraft/mods`；服务端放在 `server/mods`。两边 CoopCraft 版本要一致，否则 Fabric 可能拒绝连接。客户端可以额外装 Sodium 之类的客户端优化模组，但不要放到服务端。
 
+整合包中的 DangoMusic `1.5.0-coopcraft.1+1.21.1-fabric` 也是客户端模组，不要复制到 `server/mods`。玩家按需安装即可听音乐，不影响其他玩家连接；安装和许可说明见 [整合包说明](../modpack/README.md)。
+
 ## 10. 常见问题
 
 **启动后马上退出，提示 EULA**  
