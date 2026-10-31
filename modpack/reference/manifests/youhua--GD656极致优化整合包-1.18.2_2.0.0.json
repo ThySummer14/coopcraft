@@ -1,0 +1,689 @@
+{
+ "game": "minecraft",
+ "formatVersion": 1,
+ "versionId": "2.0.0",
+ "name": "GD656极致优化整合包-1.18.2",
+ "summary": "1.18.2, Fabric 0.14.9",
+ "files": [
+  {
+   "path": "mods/advancementinfo-1.18.2-fabric0.47.10-1.3.1.jar",
+   "hashes": {
+    "sha1": "c817fbc6798d50ad45f586a66d5b54dc4fa3bf33",
+    "sha512": "f894e6497653381e52ab4b5c5a6688bc91e80ee7b33932025c306d6a8075320b1711223daf14c81afa5f55dea486c94374117efc7330dafb4207fa2a348ef1e2"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/G1epq3jN/versions/1.18.2-fabric0.47.10-1.3.1/advancementinfo-1.18.2-fabric0.47.10-1.3.1.jar",
+    "https://media.forgecdn.net/files/3687/748/advancementinfo-1.18.2-fabric0.47.10-1.3.1.jar",
+    "https://edge.forgecdn.net/files/3687/748/advancementinfo-1.18.2-fabric0.47.10-1.3.1.jar"
+   ],
+   "fileSize": 1442876
+  },
+  {
+   "path": "mods/animatica-0.5+1.18.2.jar",
+   "hashes": {
+    "sha1": "1073b1e722ea629ef72133cb9968156a0d8beeca",
+    "sha512": "3db21e015cd157b867c80d300a4c364ea399a29bfc62f802ea992995ff0d1c4c3f196922ac244ad74c283d3ba50c01c55ac3435fc7d9bde28c30c689f3d5a0c1"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/PRN43VSY/versions/0.5%2B1.18.2/animatica-0.5%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3844/728/animatica-0.5%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3844/728/animatica-0.5%2b1.18.2.jar"
+   ],
+   "fileSize": 74069
+  },
+  {
+   "path": "mods/antighost-1.18.2-fabric0.47.10-1.1.4.jar",
+   "hashes": {
+    "sha1": "b9a690827fdaa60388bc297d6bf339c7ffd68261",
+    "sha512": "6b72a53bb0829028ac93f6065d0955611268964249795fd09ca0556aa4b4eb80a51e91d3de2e5afdf6e82e4bfa44bb22fa606114710cda243fdc8e2f5aa61ae2"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/Jw3Wx1KR/versions/1.18.2-fabric0.47.10-1.1.4/antighost-1.18.2-fabric0.47.10-1.1.4.jar",
+    "https://media.forgecdn.net/files/3687/749/antighost-1.18.2-fabric0.47.10-1.1.4.jar",
+    "https://edge.forgecdn.net/files/3687/749/antighost-1.18.2-fabric0.47.10-1.1.4.jar"
+   ],
+   "fileSize": 78234
+  },
+  {
+   "path": "mods/bettermounthud-1.1.4.jar",
+   "hashes": {
+    "sha1": "60035cc1e9cf8bf880c42f57427719d773df5cd5",
+    "sha512": "ddaf092fadd0583b75f4d9386d4d597ab04fe01c84c943c53b2db8c2432dafac126b374db98245fc6f986dd59e4538679435b583ebb186cb9a55912cf315e89b"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/kqJFAPU9/versions/1.1.4/bettermounthud-1.1.4.jar",
+    "https://media.forgecdn.net/files/3637/536/bettermounthud-1.1.4.jar",
+    "https://edge.forgecdn.net/files/3637/536/bettermounthud-1.1.4.jar"
+   ],
+   "fileSize": 16760
+  },
+  {
+   "path": "mods/borderless-mining-1.1.2+1.18.2.jar",
+   "hashes": {
+    "sha1": "2a7490d56d040529c86e0d1e4017cb825381bf78",
+    "sha512": "ea1c64edb1d1701be4516d1b8de1c7426ef88714573fec96f0dc448720b69abf82018b9a7f3aa3873e2b173998bc053b22a85dac6d211ea583faf4421f91b621"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/kYq5qkSL/versions/1.1.2%2B1.18.2/borderless-mining-1.1.2%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3755/145/borderless-mining-1.1.2%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3755/145/borderless-mining-1.1.2%2b1.18.2.jar"
+   ],
+   "fileSize": 96156
+  },
+  {
+   "path": "mods/Capes-1.3.1+1.18.2.jar",
+   "hashes": {
+    "sha1": "407dc8d3a02785775deab32033d227a690481083",
+    "sha512": "7a63f7bc55ad10461de81383709794cb7ae5b9fa3d3cc7b316e7062d9559678317495b98ebea82a5c0d83dbff80fd13819c5c6bef439acd639cbbe078a40383d"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/89Wsn8GD/versions/1.3.1%2B1.18.2/Capes-1.3.1%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3780/643/Capes-1.3.1%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3780/643/Capes-1.3.1%2b1.18.2.jar"
+   ],
+   "fileSize": 64302
+  },
+  {
+   "path": "mods/cem-0.7.1.jar",
+   "hashes": {
+    "sha1": "cdee86c59231dbe6df3aa17cfa2041221346306b",
+    "sha512": "076e8e8e72dfa597ee05490852f57a88a04c5ccbf201714039e6bc271e3f7980e124714300fca67bf1b2620959a18ecd16d7311839bbd4b0e03016356c242671"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/YOQCucah/versions/0.7.1/cem-0.7.1.jar",
+    "https://media.forgecdn.net/files/3709/988/cem-0.7.1.jar",
+    "https://edge.forgecdn.net/files/3709/988/cem-0.7.1.jar"
+   ],
+   "fileSize": 1037407
+  },
+  {
+   "path": "mods/colormatic-3.1.1+mc.1.18.2.jar",
+   "hashes": {
+    "sha1": "d3af2a138c40336bd9a62a27499d7ca4e80e8dc4",
+    "sha512": "b29838284971940ac2b7600dd401573d0d85aee7121b437c4e8d7e30f6683c0f0a39fef933dd5a1cd26a105505bee3578e5931152de50429b067a0c9e851314d"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/V4IQxkZC/versions/3.1.1/colormatic-3.1.1%2Bmc.1.18.2.jar",
+    "https://media.forgecdn.net/files/3709/15/colormatic-3.1.1%2bmc.1.18.2.jar",
+    "https://edge.forgecdn.net/files/3709/15/colormatic-3.1.1%2bmc.1.18.2.jar"
+   ],
+   "fileSize": 211049
+  },
+  {
+   "path": "mods/continuity-2.0.1+1.18.2.jar",
+   "hashes": {
+    "sha1": "0ccc70d5e03526597558829bffba2ff3bf5db5c4",
+    "sha512": "1a1827fa6c4358726fea893947dc463c7c1ae13aa6ca0b92918a93f21775edb6efbc718e794902ac521f8ed4cd2ea5c041d46fe0ba7f9ca3bd2b4b3cbf088777"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/1IjD5062/versions/2.0.1%2B1.18.2/continuity-2.0.1%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3927/269/continuity-2.0.1%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3927/269/continuity-2.0.1%2b1.18.2.jar"
+   ],
+   "fileSize": 1128465
+  },
+  {
+   "path": "mods/CullLessLeaves-1.0.1.jar",
+   "hashes": {
+    "sha1": "784f03a763ae04cd4c8df4af74b10f2efbe8f186",
+    "sha512": "8d54bdeabca56a4cf9c8cc648923eee779266fa78e9ceb6b282304f378751aaf4d571493c347454c076affe4c8a8a2a41cb5bed5c46832505f5754a702c5f7ae"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/iG6ZHsUV/versions/1.0.1/CullLessLeaves-1.0.1.jar",
+    "https://media.forgecdn.net/files/3790/158/CullLessLeaves-1.0.1.jar",
+    "https://edge.forgecdn.net/files/3790/158/CullLessLeaves-1.0.1.jar"
+   ],
+   "fileSize": 33945
+  },
+  {
+   "path": "mods/debugify-1.11.0-fabric-1.18.2.jar",
+   "hashes": {
+    "sha1": "c1722e40c0592204e3664c482be3533fc185e578",
+    "sha512": "88a54e4e18d5fe73592169c6b90f9053fec2a7f4d75860c0b69dce6693374c3dc9afa2ae2c212550fea03594ad79f3a01bed3f27c10aecf3447036dbda4b49de"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/QwxR6Gcd/versions/1.11.0-fabric/debugify-1.11.0-fabric-1.18.2.jar",
+    "https://media.forgecdn.net/files/3812/300/debugify-1.11.0-fabric-1.18.2.jar",
+    "https://edge.forgecdn.net/files/3812/300/debugify-1.11.0-fabric-1.18.2.jar"
+   ],
+   "fileSize": 313412
+  },
+  {
+   "path": "mods/dynamic-fps-2.1.0.jar",
+   "hashes": {
+    "sha1": "d4ffc71b2f0ea01b9a6242c23faace5cdc72d947",
+    "sha512": "3e22e5b613abfb17fa83f74348a3c2cf8fb7bdb2a6a6a8d5b561044b37e54d0a0114df1128c7e34df063776975041c5595feb2f94cbb2bfe0f1bc59193cce9e3"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/LQ3K71Q1/versions/v2.1.0/dynamic-fps-2.1.0.jar",
+    "https://media.forgecdn.net/files/3606/973/dynamic-fps-2.1.0.jar",
+    "https://edge.forgecdn.net/files/3606/973/dynamic-fps-2.1.0.jar"
+   ],
+   "fileSize": 88824
+  },
+  {
+   "path": "mods/enhancedblockentities-0.7.1+1.18.2.jar",
+   "hashes": {
+    "sha1": "e09988fed9394ec5858b81400ba96d2b8b8cab1a",
+    "sha512": "183f519a161e7ea1e2259553f8ec7939cf0e2e3ef1e8b191985e84d2e6ecd65eb4ced17a85f9f6ba66b89eb3949838522fa4e1b958bbaf5846b7f8fc46c1759e"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/OVuFYfre/versions/0.7.1%2B1.18.2/enhancedblockentities-0.7.1%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3841/822/enhancedblockentities-0.7.1%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3841/822/enhancedblockentities-0.7.1%2b1.18.2.jar"
+   ],
+   "fileSize": 481307
+  },
+  {
+   "path": "mods/entityculling-fabric-mc1.18-1.5.1.jar",
+   "hashes": {
+    "sha1": "523c57485a469c581d7a9bd18ec86c7a92a0ec93",
+    "sha512": "64c7309b54e4e374e67ce57a848075cf1dcf3e606f8e4aac36983fa06968636fa648a52d978ecdc9ef6c1a2acf8c77780c0ac8f063887acfa664b2220c122b40"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/NNAgCjsB/versions/1.5.1-fabric-1.18/entityculling-fabric-mc1.18-1.5.1.jar"
+   ],
+   "fileSize": 44983
+  },
+  {
+   "path": "mods/entity_texture_features_fabric_1.18.2-4.0.2.jar",
+   "hashes": {
+    "sha1": "36d4c7b2bb844d9c62e99cbd5b87b3125a6abdae",
+    "sha512": "1a57b14a903f77c55dcddd6b7b666a4d09e2e7e2b7daa0565d8164f77d60c829bd4bdd68d077fa90083c9ee15c825eb48c848c7671eb15d9cc481177331ddf5b"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/BVzZfTc1/versions/4.0.2.fabric.1.18/entity_texture_features_fabric_1.18.2-4.0.2.jar",
+    "https://media.forgecdn.net/files/3935/335/entity_texture_features_fabric_1.18.2-4.0.2.jar",
+    "https://edge.forgecdn.net/files/3935/335/entity_texture_features_fabric_1.18.2-4.0.2.jar"
+   ],
+   "fileSize": 1186681
+  },
+  {
+   "path": "mods/fabric-api-0.58.0+1.18.2.jar",
+   "hashes": {
+    "sha1": "b9ab9ab267f8cdff525f9a8edb26435d3e2455f6",
+    "sha512": "92317b8d48b20d1b370ab67e4954d1db4861b8fb561935edc0c0fc8a525fefbd3c159f3cfbf83ec3455e3179561fab554645138c6d79f5f597abea77dc1a03ed"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/P7dR8mSH/versions/0.58.0%2B1.18.2/fabric-api-0.58.0%2B1.18.2.jar",
+    "https://media.forgecdn.net/files/3891/301/fabric-api-0.58.0%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3891/301/fabric-api-0.58.0%2b1.18.2.jar"
+   ],
+   "fileSize": 1445029
+  },
+  {
+   "path": "mods/fabric-language-kotlin-1.8.3+kotlin.1.7.10.jar",
+   "hashes": {
+    "sha1": "80645897db245424cf1efb474e7bf34ddbc34212",
+    "sha512": "4047cc345ec48e50e92a5844e4f7067ef4a537ce72cf0528057cd28b7fa31e538c003cc7e4d5bfe35a3b17704d1aac61fc6f9ad1b04dbf241ccaee4fcba785fe"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/Ha28R6CL/versions/MrMwCJlh/fabric-language-kotlin-1.8.3%2Bkotlin.1.7.10.jar",
+    "https://media.forgecdn.net/files/3951/797/fabric-language-kotlin-1.8.3%2bkotlin.1.7.10.jar",
+    "https://edge.forgecdn.net/files/3951/797/fabric-language-kotlin-1.8.3%2bkotlin.1.7.10.jar"
+   ],
+   "fileSize": 6341669
+  },
+  {
+   "path": "mods/fabrishot-1.7.0.jar",
+   "hashes": {
+    "sha1": "343f31455c666b3979026d8a983abfa9c8ca0c9e",
+    "sha512": "b8febec8bbebf485ca863c7390e7daaa0ad9b533d5a58d4582a3dbd9f0effc3a87ede54f2cb0525e4efbb7637c4bf7ba6420afc6903a04d3b7dc49d659700110"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/3qsfQtE9/versions/1.7.0/fabrishot-1.7.0.jar",
+    "https://media.forgecdn.net/files/3672/13/fabrishot-1.7.0.jar",
+    "https://edge.forgecdn.net/files/3672/13/fabrishot-1.7.0.jar"
+   ],
+   "fileSize": 38520
+  },
+  {
+   "path": "mods/ferritecore-4.2.1-fabric.jar",
+   "hashes": {
+    "sha1": "d5d047374981d614c2a53422be751dc1491f9cd0",
+    "sha512": "066a5644191ee45abde5ad4bf7f1662f8aaef842ed24398e311a35d39861b6159fb55ccd18c6ad8940cabed3341c5163462e7c2895631a6d26945f67db326798"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/uXXizFIs/versions/4.2.1/ferritecore-4.2.1-fabric.jar",
+    "https://media.forgecdn.net/files/3767/285/ferritecore-4.2.1-fabric.jar",
+    "https://edge.forgecdn.net/files/3767/285/ferritecore-4.2.1-fabric.jar"
+   ],
+   "fileSize": 119110
+  },
+  {
+   "path": "mods/indium-1.0.7+mc1.18.2.jar",
+   "hashes": {
+    "sha1": "5f5e0910181572f844171ed4f2f11e23f3c68af6",
+    "sha512": "cdd32ac79e7cb423af95dbd618c383a9e240e84f53eeb02029f679142e4b980e39c7db8190a2cdb542c23067d56c6b7d29bc21204709028ee5538a659f7cf95f"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/Orvt0mRa/versions/1.0.7%2Bmc1.18.2/indium-1.0.7%2Bmc1.18.2.jar",
+    "https://media.forgecdn.net/files/3911/811/indium-1.0.7%2bmc1.18.2.jar",
+    "https://edge.forgecdn.net/files/3911/811/indium-1.0.7%2bmc1.18.2.jar"
+   ],
+   "fileSize": 118746
+  },
+  {
+   "path": "mods/iris-mc1.18.2-1.3.1.jar",
+   "hashes": {
+    "sha1": "5b16d4e32f16f6bbb6291a3805096ed362da1d92",
+    "sha512": "cf33f8e01f2fc8c7587e4930427143e8a1856ee895e80e8416e9afd192bfd871b1f58a5cc52a689e95bff84d712fac41afd1de633d27d6b933d5759f57b84a89"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/YL57xq9U/versions/nnr56Joh/iris-mc1.18.2-1.3.1.jar",
+    "https://media.forgecdn.net/files/3981/797/iris-mc1.18.2-1.3.1.jar",
+    "https://edge.forgecdn.net/files/3981/797/iris-mc1.18.2-1.3.1.jar"
+   ],
+   "fileSize": 1566097
+  },
+  {
+   "path": "mods/item-model-fix-1.0.3+1.18.jar",
+   "hashes": {
+    "sha1": "2aa679f2dc887e2ce45d55fffe67af36250b4841",
+    "sha512": "5e3b7d4c4013b1e045bb5f7f3e217cb27659ffb09c9caf5c4c16c73d04a07640357aa86b131ef18d859d013cd16ad16952653d03a7b8fa01c670628f54e3b603"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/B3HO5V57/versions/1.0.3%2B1.18/item-model-fix-1.0.3%2B1.18.jar",
+    "https://media.forgecdn.net/files/3573/935/item-model-fix-1.0.3%2b1.18.jar",
+    "https://edge.forgecdn.net/files/3573/935/item-model-fix-1.0.3%2b1.18.jar"
+   ],
+   "fileSize": 32533
+  },
+  {
+   "path": "mods/language-reload-1.2.1.jar",
+   "hashes": {
+    "sha1": "4fc9f67f810bbe4a0958999c6eda9c7ebfd1b797",
+    "sha512": "9d647da364fe93226b6679a52f7333702acb3f7df36dcbedff7e1b054acf3b98cbfcbaabcffa8877529c25ded3e0750a23b5dd2336ff83eb1c8b0260c44fb35c"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/uLbm7CG6/versions/1.2.1/language-reload-1.2.1.jar",
+    "https://media.forgecdn.net/files/3641/52/language-reload-1.2.1.jar",
+    "https://edge.forgecdn.net/files/3641/52/language-reload-1.2.1.jar"
+   ],
+   "fileSize": 31360
+  },
+  {
+   "path": "mods/lazydfu-0.1.2.jar",
+   "hashes": {
+    "sha1": "2efec5781f1271bdcdae462eee402ccb97bff6fe",
+    "sha512": "20b1cd3e62051c7d7498ecdc49912acb918fc4748d469c67c078cc97197289760e64b9339a4d4a03d175f648c8be8601d131776a9a6bdb8832cecdda6fc46498"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/hvFnDODi/versions/0.1.2/lazydfu-0.1.2.jar",
+    "https://media.forgecdn.net/files/3209/972/lazydfu-0.1.2.jar",
+    "https://edge.forgecdn.net/files/3209/972/lazydfu-0.1.2.jar"
+   ],
+   "fileSize": 15517
+  },
+  {
+   "path": "mods/lithium-fabric-mc1.18.2-0.7.10.jar",
+   "hashes": {
+    "sha1": "d5c19c3d4edb4228652adcc8abb94f9bd80a634c",
+    "sha512": "05f0e51191c9051224c791d63ad4b7915e6f3c442e5d38225e7b05ea4261ee459edb3d8ce99411e1a5a854547549845f21cc8ee2f0079281fec999c1d319fb07"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/gvQqBUqZ/versions/mc1.18.2-0.7.10/lithium-fabric-mc1.18.2-0.7.10.jar",
+    "https://media.forgecdn.net/files/3801/263/lithium-fabric-mc1.18.2-0.7.10.jar",
+    "https://edge.forgecdn.net/files/3801/263/lithium-fabric-mc1.18.2-0.7.10.jar"
+   ],
+   "fileSize": 466196
+  },
+  {
+   "path": "mods/main-menu-credits-1.1.1.jar",
+   "hashes": {
+    "sha1": "7df757c8d19a13da60c7b85f13870965d61c71d8",
+    "sha512": "20c4455b742e2bff30e043c810483e90b95aa01de6f5223ca12a895b296cc209974c36fb95ae2a0b9f0a9c912ed345f535643d2f19f51c23b3861764f5bd02a4"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/qJDfP7WN/versions/1.1.1/main-menu-credits-1.1.1.jar",
+    "https://media.forgecdn.net/files/3846/496/main-menu-credits-1.1.1.jar",
+    "https://edge.forgecdn.net/files/3846/496/main-menu-credits-1.1.1.jar"
+   ],
+   "fileSize": 14190
+  },
+  {
+   "path": "mods/memoryleakfix-1.18.2-0.7.0.jar",
+   "hashes": {
+    "sha1": "fa27ac9b26a78772b36cb879809302900c3a5185",
+    "sha512": "9d1d666ab1f26659fa56a070a6aed0366a4fb8e2b1333b4eed884b891431b4d73ebcdba64a6107dbf5c1f8defe6b66e4b0df6d9df30b8d68c87e90cc8fd65da5"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/NRjRiSSD/versions/v0.7.0-1.18/memoryleakfix-1.18.2-0.7.0.jar",
+    "https://media.forgecdn.net/files/3910/621/memoryleakfix-1.18.2-0.7.0.jar",
+    "https://edge.forgecdn.net/files/3910/621/memoryleakfix-1.18.2-0.7.0.jar"
+   ],
+   "fileSize": 44890
+  },
+  {
+   "path": "mods/midnightcontrols-1.5.0+1.18.jar",
+   "hashes": {
+    "sha1": "ee6c425b2b9d71cab01db7d9c9fceca6d045c212",
+    "sha512": "446a49044578286283ff9eb4e73e9eabd9c99c530c1478086ae197d1c57b230dac34bffddf5d6fb22b7a52458ca86079a2a6b9069071077251d7d159f22909b5"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/bXX9h73M/versions/1.5.0%2B1.18/midnightcontrols-1.5.0%2B1.18.jar",
+    "https://media.forgecdn.net/files/3914/71/midnightcontrols-1.5.0%2b1.18.jar",
+    "https://edge.forgecdn.net/files/3914/71/midnightcontrols-1.5.0%2b1.18.jar"
+   ],
+   "fileSize": 534205
+  },
+  {
+   "path": "mods/mixintrace-1.1.1+1.17.jar",
+   "hashes": {
+    "sha1": "7fbb0130db0e427ee7180d304dfa65c46f0e3b69",
+    "sha512": "ea9034b60bc1c64629a9bcad2e619907692fe6e7464026236c55cc5a4892a20d21dd6318ad0380ab2ec245f7077939b6717d2ed58e00708c17470be14f5e0b5f"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/sGmHWmeL/versions/1.1.1%2B1.17/mixintrace-1.1.1%2B1.17.jar",
+    "https://media.forgecdn.net/files/3831/43/mixintrace-1.1.1%2b1.17.jar",
+    "https://edge.forgecdn.net/files/3831/43/mixintrace-1.1.1%2b1.17.jar"
+   ],
+   "fileSize": 36039
+  },
+  {
+   "path": "mods/modmenu-3.2.3.jar",
+   "hashes": {
+    "sha1": "463fecec40447519a9a32c1c178a962799583add",
+    "sha512": "e5cb08f55ad3b678a02bfe56c47b378cbfd92a5002807786d64eedf035c07ccbd68af5a72672ae159c18a3fe46871502aa281c0e9ef9e6731e1dca02fc942761"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/mOgUt4GM/versions/3.2.3/modmenu-3.2.3.jar",
+    "https://media.forgecdn.net/files/3850/113/modmenu-3.2.3.jar",
+    "https://edge.forgecdn.net/files/3850/113/modmenu-3.2.3.jar"
+   ],
+   "fileSize": 422628
+  },
+  {
+   "path": "mods/morechathistory-1.18-1.1.0.jar",
+   "hashes": {
+    "sha1": "378a6a5b02f45feff9d55b28be55d36474fca77f",
+    "sha512": "4b8113a6208cde4cce63b10b46f46fb89350aa950adacd5575d20ad8879ae24dbc465541c97d2fa9722acf0c056d02acc5555fe842d21fc2560fe371cc901563"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/8qkXwOnk/versions/mc1.18-1.1.0/morechathistory-1.18-1.1.0.jar",
+    "https://media.forgecdn.net/files/3545/709/morechathistory-1.18-1.1.0.jar",
+    "https://edge.forgecdn.net/files/3545/709/morechathistory-1.18-1.1.0.jar"
+   ],
+   "fileSize": 11104
+  },
+  {
+   "path": "mods/optigui-1.1.0.jar",
+   "hashes": {
+    "sha1": "b63489a74158f6f1940a83a42a1effa9a0bb7a47",
+    "sha512": "81f69091ef5b648c3557a93afc42939aa7d7ec85b48e4bfb90c7038048c022aaacaf950dba5664ac957f4f1641a43c349e08d53c553b94b1161dea6f5d6c85a8"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/JuksLGBQ/versions/v1.1.0%2B1.18.2/optigui-1.1.0.jar",
+    "https://media.forgecdn.net/files/3807/66/optigui-1.1.0.jar",
+    "https://edge.forgecdn.net/files/3807/66/optigui-1.1.0.jar"
+   ],
+   "fileSize": 272097
+  },
+  {
+   "path": "mods/puzzle-1.4.0-1.18.jar",
+   "hashes": {
+    "sha1": "979ad124b3e7030bb589eb7f3f72f65b7740e45f",
+    "sha512": "c338d6da8082068d91fd032a52be9cc040400e5c4fe60792d4124606a23f248a2bc8953139bc1e398fb595c1968c4157ee643feb337238484b2b0b0407b10897"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/3IuO68q1/versions/1.4.0-1.18/puzzle-1.4.0-1.18.jar",
+    "https://media.forgecdn.net/files/3912/554/puzzle-1.4.0-1.18.jar",
+    "https://edge.forgecdn.net/files/3912/554/puzzle-1.4.0-1.18.jar"
+   ],
+   "fileSize": 133058
+  },
+  {
+   "path": "mods/reeses_sodium_options-1.4.7+mc1.18.2-build.58.jar",
+   "hashes": {
+    "sha1": "dee11063b13bad4af53f0fa3ac7f911a877706a7",
+    "sha512": "3dc566c43e2b35c53a0ce93c15082069704aca84993653f84c8a51a8df3e1c01d253efa9b46788220cebbaaba9f01686757718cdaa79cb2d5206bf8c3f14f7f4"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/Bh37bMuy/versions/74LitD6T/reeses_sodium_options-1.4.7%2Bmc1.18.2-build.58.jar",
+    "https://media.forgecdn.net/files/3946/212/reeses_sodium_options-1.4.7%2bmc1.18.2-build.58.jar",
+    "https://edge.forgecdn.net/files/3946/212/reeses_sodium_options-1.4.7%2bmc1.18.2-build.58.jar"
+   ],
+   "fileSize": 49818
+  },
+  {
+   "path": "mods/sodium-extra-0.4.10+mc1.18.2-build.63.jar",
+   "hashes": {
+    "sha1": "109ae769e7610501f0d01bc07e8e5ba910746ac0",
+    "sha512": "584686aca37d46ca81288b3013e779a3f20d0245846087ea8aa8b44fcf4ed620b35dd5ce7c31c637943a21f1cd1ab4345d1a344f0addeb797e0c49c0b4da8f50"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/PtjYWJkn/versions/uCddykP4/sodium-extra-0.4.10%2Bmc1.18.2-build.63.jar",
+    "https://media.forgecdn.net/files/3958/735/sodium-extra-0.4.10%2bmc1.18.2-build.63.jar",
+    "https://edge.forgecdn.net/files/3958/735/sodium-extra-0.4.10%2bmc1.18.2-build.63.jar"
+   ],
+   "fileSize": 189826
+  },
+  {
+   "path": "mods/sodium-fabric-mc1.18.2-0.4.1+build.15.jar",
+   "hashes": {
+    "sha1": "f839863a6be7014b8d80058ea1f361521148d049",
+    "sha512": "86eb4db8fdb9f0bb06274c4f150b55273b5b770ffc89e0ba68011152a231b79ebe0b1adda0dd194f92cdcb386f7a60863d9fee5d15c1c3547ffa22a19083a1ee"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/AANobbMI/versions/mc1.18.2-0.4.1/sodium-fabric-mc1.18.2-0.4.1%2Bbuild.15.jar",
+    "https://media.forgecdn.net/files/3669/187/sodium-fabric-mc1.18.2-0.4.1%2bbuild.15.jar",
+    "https://edge.forgecdn.net/files/3669/187/sodium-fabric-mc1.18.2-0.4.1%2bbuild.15.jar"
+   ],
+   "fileSize": 1318645
+  },
+  {
+   "path": "mods/starlight-1.0.2+fabric.89b8d9f.jar",
+   "hashes": {
+    "sha1": "a436b72ee514bd2b59900159bcc4d461f96ef340",
+    "sha512": "126d40c2453131a8ad91983114b5d6370c2304098c5b5c0d3badf52b2c0d20d24029487ee5f36819f21ba5af784424f730618dce5dbbf3e5bc4ffaf592419010"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/H8CaAYZC/versions/1.0.2%2B1.18.2/starlight-1.0.2%2Bfabric.89b8d9f.jar",
+    "https://media.forgecdn.net/files/3667/443/starlight-1.0.2%2bfabric.89b8d9f.jar",
+    "https://edge.forgecdn.net/files/3667/443/starlight-1.0.2%2bfabric.89b8d9f.jar"
+   ],
+   "fileSize": 127318
+  },
+  {
+   "path": "mods/tooltipfix-1.0.4-1.18.jar",
+   "hashes": {
+    "sha1": "16b844c45ce0e4f1159ff51739479e8747a64d84",
+    "sha512": "c0aa0b7b4c80403970f0d50f24d499cf251978f96dd577a5e3509e4b6533f02417f95ce8e75442afbd0fbb18dc0393b309fc19b2e339c531f77a976c2ce775f4"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/2RKFTmiB/versions/1.0.4-1.18/tooltipfix-1.0.4-1.18.jar",
+    "https://media.forgecdn.net/files/3543/273/tooltipfix-1.0.4-1.18.jar",
+    "https://edge.forgecdn.net/files/3543/273/tooltipfix-1.0.4-1.18.jar"
+   ],
+   "fileSize": 10653
+  },
+  {
+   "path": "mods/yosbr-0.1.1.jar",
+   "hashes": {
+    "sha1": "0643830cab952fc96872702e681b863b550c8530",
+    "sha512": "8edd47fcda376658b5fb8bfb333c441ecaa1fe834d3deaa6b9895bb9c7dfc004d2e8ccc12a41e4b79f10e6634824837b5536c3bb81289e137abc6079d1c871c3"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/WwbubTsV/versions/0.1.1/yosbr-0.1.1.jar",
+    "https://media.forgecdn.net/files/2934/596/yosbr-0.1.1.jar",
+    "https://edge.forgecdn.net/files/2934/596/yosbr-0.1.1.jar"
+   ],
+   "fileSize": 19206
+  },
+  {
+   "path": "mods/Zoomify-1.6.0.jar",
+   "hashes": {
+    "sha1": "836109ec7931a874fac16b4faac41a312fbc60d3",
+    "sha512": "746ae68df508d2ca6da524eaf509dc232b11760b9bdaf7b745dc93597534fa04341a83aa9e96424c15fe5e26f8780ee0f3571696e7ef8b213178562bade6c93c"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/w7ThoJFB/versions/1.6.0/Zoomify-1.6.0.jar",
+    "https://media.forgecdn.net/files/3800/449/Zoomify-1.6.0.jar",
+    "https://edge.forgecdn.net/files/3800/449/Zoomify-1.6.0.jar"
+   ],
+   "fileSize": 362519
+  },
+  {
+   "path": "resourcepacks/Icons v.1.9.1§7.zip",
+   "hashes": {
+    "sha1": "b3f631a1eac5528a827fc1afcc1b7345e060ebbd",
+    "sha512": "cd5f7d8cf2d61ece253f0c556e4f22e77e04022322dc58c82466c9bf250f93a028e2d5f9b7136ddce4c00def664cf5f2bba69bec97f0bda726b4518aa247d7e8"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/O7z3QKAG/versions/V6gZViNb/Icons%20v.1.9.1%C2%A77.zip",
+    "https://media.forgecdn.net/files/4750/760/Icons%20v.1.9.1%c2%a77.zip",
+    "https://edge.forgecdn.net/files/4750/760/Icons%20v.1.9.1%c2%a77.zip"
+   ],
+   "fileSize": 2880198
+  },
+  {
+   "path": "resourcepacks/NewGlowingOres§6[BV-1.3][1.20].zip",
+   "hashes": {
+    "sha1": "5386de443f769021ac09e7be77f04faf4198b7bf",
+    "sha512": "18e9120612d0ae0882666d913774313abd0c3d4d0b932f53c231da67ef5d5687974865c438e0aa9c344548bb6338f95813917d6b76b1d509ebdf993de70290c0"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/oL18adaQ/versions/YoXl9tp0/NewGlowingOres%C2%A76%5BBV-1.3%5D%5B1.20%5D.zip",
+    "https://media.forgecdn.net/files/4630/38/NewGlowingOres%c2%a76%5bBV-1.3%5d%5b1.20%5d.zip",
+    "https://edge.forgecdn.net/files/4630/38/NewGlowingOres%c2%a76%5bBV-1.3%5d%5b1.20%5d.zip"
+   ],
+   "fileSize": 212005
+  },
+  {
+   "path": "resourcepacks/SodiumTranslations.zip",
+   "hashes": {
+    "sha1": "dc361a9fffbedb881e36beaba52b5ff0d35fb2bb",
+    "sha512": "57bfe644767884bfe11fda4dd18e36e739c850bff8838e56c1ff6b25d7e5d47ac83accbb95ab927becbcf234ff3185b466a6306ddb13272ff172fba27f569b20"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/yfDziwn1/versions/AT4kckgH/SodiumTranslations.zip",
+    "https://media.forgecdn.net/files/4568/64/SodiumTranslations.zip",
+    "https://edge.forgecdn.net/files/4568/64/SodiumTranslations.zip"
+   ],
+   "fileSize": 135688
+  },
+  {
+   "path": "resourcepacks/UniqueDark 1.18.2 (free).zip",
+   "hashes": {
+    "sha1": "b85ab05bdf4d072d4cb746371b5388c98f0b46bc",
+    "sha512": "3e7cf2320a9b71c320fc6a64e7059a2c12584310b803a7a70d58d1723cbf53fb087edcd72be999f3b1a711d409a5eb1ac124033b668356d70e5e21bbfb617fa0"
+   },
+   "downloads": [
+    "https://cdn.modrinth.com/data/BaY1UdGV/versions/2D8br7UV/UniqueDark%201.18.2%20%28free%29.zip"
+   ],
+   "fileSize": 7590246
+  },
+  {
+   "path": "mods/CITResewn-1.1.1+1.18.2.jar",
+   "hashes": {
+    "sha1": "43bb55d570be30c4e8d7565689dcf3a481ea59d5",
+    "sha512": "79d68518125261153cef2cec038cff886d7376e19e6ff67aaace4b70230890555a292e40ab74f122af9e5756e73a42cbc7227cb89690ad20063c5c85c232a1f7"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3855/196/CITResewn-1.1.1%2b1.18.2.jar",
+    "https://edge.forgecdn.net/files/3855/196/CITResewn-1.1.1%2b1.18.2.jar"
+   ],
+   "fileSize": 382120
+  },
+  {
+   "path": "mods/cloth-config-6.4.90-fabric.jar",
+   "hashes": {
+    "sha1": "4c88bab53b54736e87776b2b1c13343a70d43114",
+    "sha512": "808fce7208e3941a8deecd8199b7c608de1d61a06ed5c9afdfd0a386a25c10497318bf4b04274e7298a59dc5aedeccb1de4c41a63233d2df130d8bd5aa863c6f"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3972/425/cloth-config-6.4.90-fabric.jar",
+    "https://edge.forgecdn.net/files/3972/425/cloth-config-6.4.90-fabric.jar"
+   ],
+   "fileSize": 1138453
+  },
+  {
+   "path": "mods/DCCH-1.18.x.jar",
+   "hashes": {
+    "sha1": "bd2bcb46acb522dd34567b05bbb3f831e8deac38",
+    "sha512": "4dd78d1730fd692c3e86c0d284eef9d2ee7f7ec0cdf89566db2de3ce67818ebcd0c800d8e6166324a6e9f27e7784d3da37dd23bf792dad7966128485d8feb17e"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3710/782/DCCH-1.18.x.jar",
+    "https://edge.forgecdn.net/files/3710/782/DCCH-1.18.x.jar"
+   ],
+   "fileSize": 7653
+  },
+  {
+   "path": "mods/farsight.fabric-1.18-1.9.jar",
+   "hashes": {
+    "sha1": "c67b60eeef67c9acd69da7ac49e87cf324c4802c",
+    "sha512": "33d334d13fbc1c9cd68a8330d094aaddc90afeefa025031e1551a9779caae5777ece3e92ce367570ad75b6d9db562792a6d5167381050f14ca65dd4917d497b6"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3778/514/farsight.fabric-1.18-1.9.jar",
+    "https://edge.forgecdn.net/files/3778/514/farsight.fabric-1.18-1.9.jar"
+   ],
+   "fileSize": 8426
+  },
+  {
+   "path": "mods/Ksyxis-1.3.3.jar",
+   "hashes": {
+    "sha1": "988bf589b25a9c48c23bccec0326271cf2602c88",
+    "sha512": "90dd4051aae3bbb45b9be20f107f36826b39f9c2057e62e31c04d8b2bbe8b430aba04200b16225306eaab1ce2f502eccc25de3a0eef7ee27918a751545527f02"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/6174/567/Ksyxis-1.3.3.jar",
+    "https://edge.forgecdn.net/files/6174/567/Ksyxis-1.3.3.jar"
+   ],
+   "fileSize": 28483
+  },
+  {
+   "path": "mods/lambdabettergrass-1.2.4+1.18.jar",
+   "hashes": {
+    "sha1": "c3a7ee079b6344222d36cc1615bb2ffe1359e8ff",
+    "sha512": "d910783548270bafe19ecdfaaaae33b7cb023caa68f7d54f55f8d5b07cd3b6e88464ea4dea69a94a2f82ceaf6f68b55be015f617515dd605afdc39da41acb0bf"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3833/479/lambdabettergrass-1.2.4%2b1.18.jar",
+    "https://edge.forgecdn.net/files/3833/479/lambdabettergrass-1.2.4%2b1.18.jar"
+   ],
+   "fileSize": 1142523
+  },
+  {
+   "path": "mods/lambdynamiclights-2.1.0+1.17.jar",
+   "hashes": {
+    "sha1": "812fdc41518b786f05d72de4017c16c88a3e2ea6",
+    "sha512": "bea8294d37291e84d2903e6ac9a90a2498feaad497a31eeae26c67685ec900b88eae43eaed441e7cc602b98f955d1817c1873ba994e3e35e86643898bfc00c8f"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3541/670/lambdynamiclights-2.1.0%2b1.17.jar",
+    "https://edge.forgecdn.net/files/3541/670/lambdynamiclights-2.1.0%2b1.17.jar"
+   ],
+   "fileSize": 592990
+  },
+  {
+   "path": "mods/nofade-1.18-2.0.1.jar",
+   "hashes": {
+    "sha1": "76951fe09b742ba0ca07acc7c54e4c3760157071",
+    "sha512": "1b98e87bf4f9e3181fb8dab70d7d80de157d3ff94d6297e694b78771d66226ce105809513213493714f419d24f37022aa58cc011976f5192c31807fc21b676ae"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3550/935/nofade-1.18-2.0.1.jar",
+    "https://edge.forgecdn.net/files/3550/935/nofade-1.18-2.0.1.jar"
+   ],
+   "fileSize": 16197
+  },
+  {
+   "path": "mods/smoothboot-fabric-1.18.2-1.7.0.jar",
+   "hashes": {
+    "sha1": "3ca71bca131120dcea2b6edf4d71773f0e1f820b",
+    "sha512": "c30a01b405b0a5aa06023e47ebeca1be576e602ba20344906b8f738c4189e5a170c60cfbe1097b3cee629242cad715c1a0e756bfba7012954be6f6fac7086510"
+   },
+   "downloads": [
+    "https://media.forgecdn.net/files/3692/365/smoothboot-fabric-1.18.2-1.7.0.jar",
+    "https://edge.forgecdn.net/files/3692/365/smoothboot-fabric-1.18.2-1.7.0.jar"
+   ],
+   "fileSize": 88736
+  }
+ ],
+ "dependencies": {
+  "minecraft": "1.18.2",
+  "fabric-loader": "0.14.9"
+ }
+}
