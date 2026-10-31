@@ -10,6 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -24,6 +25,7 @@ public final class CoopNetworking {
 		PayloadTypeRegistry.playC2S().register(ShareCoordsPayload.TYPE, ShareCoordsPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(CoordsSharedPayload.TYPE, CoordsSharedPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(DeathPointPayload.TYPE, DeathPointPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(TeamHealthPayload.TYPE, TeamHealthPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(SettlementOverviewPayload.TYPE, SettlementOverviewPayload.STREAM_CODEC);
 
 		ServerPlayNetworking.registerGlobalReceiver(ShareCoordsPayload.TYPE, (payload, context) -> {
@@ -73,6 +75,35 @@ public final class CoopNetworking {
 		}
 
 		CoopCraft.LOGGER.debug("Shared coords of {} with {} player(s)", sender.getScoreboardName(), receivers);
+	}
+
+	/**
+	 * 把全队血量推给每个玩家，供队友血量板渲染。
+	 *
+	 * <p>单人游戏直接跳过 —— HUD 上没有别的人可显示，没必要每秒发一个空包。
+	 */
+	public static void broadcastTeamHealth(MinecraftServer server) {
+		List<ServerPlayer> players = server.getPlayerList().getPlayers();
+		if (players.size() <= 1) {
+			return;
+		}
+
+		List<TeamHealthPayload.Entry> entries = new ArrayList<>(players.size());
+		for (ServerPlayer player : players) {
+			entries.add(new TeamHealthPayload.Entry(
+				player.getScoreboardName(),
+				(int) Math.ceil(player.getHealth()),
+				(int) Math.ceil(player.getMaxHealth())
+			));
+		}
+
+		TeamHealthPayload payload = new TeamHealthPayload(List.copyOf(entries));
+
+		for (ServerPlayer player : players) {
+			if (ServerPlayNetworking.canSend(player, TeamHealthPayload.TYPE)) {
+				ServerPlayNetworking.send(player, payload);
+			}
+		}
 	}
 
 	/**
