@@ -4,7 +4,8 @@
 	"package": "com.thysummer.coopcraft.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
-		"PlayerAdvancementsMixin"
+		"PlayerAdvancementsMixin",
+		"MobAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

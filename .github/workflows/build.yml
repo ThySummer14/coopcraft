@@ -33,6 +33,8 @@ jobs:
         run: chmod +x ./gradlew
       - name: build
         run: ./gradlew build
+      - name: game test
+        run: ./gradlew runGameTest
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:

@@ -31,6 +31,7 @@ public class CoopCraftClient implements ClientModInitializer {
 
 		CoordsSharing.register();
 		DeathPoints.register();
+		SettlementScreens.register();
 
 		// 在这里主动取一次实例，触发类初始化——按键必须在客户端初始化阶段完成注册，
 		// 否则不会出现在「选项 → 控制」里，也没办法改键。

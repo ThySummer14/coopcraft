@@ -26,6 +26,7 @@ public final class CoopNetworking {
 		PayloadTypeRegistry.playS2C().register(CoordsSharedPayload.TYPE, CoordsSharedPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(DeathPointPayload.TYPE, DeathPointPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(TeamHealthPayload.TYPE, TeamHealthPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(SettlementOverviewPayload.TYPE, SettlementOverviewPayload.STREAM_CODEC);
 
 		ServerPlayNetworking.registerGlobalReceiver(ShareCoordsPayload.TYPE, (payload, context) -> {
 			ServerPlayer sender = context.player();
