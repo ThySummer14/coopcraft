@@ -1,0 +1,5 @@
+accessWidener	v2	named
+
+# GuiMixin 需要引用 Gui$HeartType 来区分「普通红心」和「中毒/凋零/冰冻/伤害吸收」，
+# 原版把这个内部枚举声明成了 private，这里只放开可见性，不改任何行为。
+accessible	class	net/minecraft/client/gui/Gui$HeartType
