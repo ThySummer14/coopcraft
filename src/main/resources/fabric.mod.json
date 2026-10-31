@@ -21,6 +21,12 @@
 		],
 		"client": [
 			"com.thysummer.coopcraft.client.CoopCraftClient"
+		],
+		"fabric-gametest": [
+			"com.thysummer.coopcraft.civilization.CivilizationGameTest",
+			"com.thysummer.coopcraft.civilization.MinecraftStockpileAdapterGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementSimulationStateGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementSurvivalGameTest"
 		]
 	},
 	"mixins": [

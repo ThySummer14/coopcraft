@@ -17,6 +17,16 @@ loom {
 	// 只放开这一个类的可见性，不改任何行为。
 	accessWidenerPath = file("src/main/resources/coopcraft.accesswidener")
 
+	runs {
+		gameTest {
+			inherit server
+			name "Game Test"
+			vmArg "-Dfabric-api.gametest"
+			vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/test-results/gametest/junit.xml"
+			runDir "build/gametest"
+		}
+	}
+
 	mods {
 		"coopcraft" {
 			sourceSet sourceSets.main
@@ -49,6 +59,16 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 21
+}
+
+def gameTestRunDir = new File(project.projectDir, "build/gametest")
+
+tasks.named('runGameTest') {
+	doFirst {
+		if (gameTestRunDir.exists()) {
+			gameTestRunDir.deleteDir()
+		}
+	}
 }
 
 test {
