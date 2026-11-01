@@ -172,6 +172,51 @@ public final class SimulationWorld {
 			.toList();
 	}
 
+	public long recordCrafting(String personId, String recipe, Map<String, String> context, List<Long> causalLinks) {
+		person(personId);
+		if (recipe.isBlank()) {
+			throw new IllegalArgumentException("Crafting recipe cannot be blank");
+		}
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("recipe", recipe);
+		return recordSocialEvent(EventType.CRAFT_COMPLETED, List.of(personId), eventContext, causalLinks);
+	}
+
+	public long recordBirth(
+		String firstParentId,
+		String secondParentId,
+		String childId,
+		Map<String, String> context
+	) {
+		Person child = person(childId);
+		if (!person(firstParentId).canMakeDecisions() || !person(secondParentId).canMakeDecisions()) {
+			throw new IllegalArgumentException("Birth parents must be living adults");
+		}
+		assignParents(child, List.of(firstParentId, secondParentId));
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("householdId", child.householdId());
+		eventContext.put("campId", child.campId());
+		return recordSocialEvent(
+			EventType.BIRTH, List.of(firstParentId, secondParentId, childId), eventContext, List.of()
+		);
+	}
+
+	public void restoreParentage(String childId, List<String> parentIds) {
+		assignParents(person(childId), parentIds);
+	}
+
+	private void assignParents(Person child, List<String> parentIds) {
+		if (parentIds.size() != 2 || parentIds.getFirst().equals(parentIds.get(1)) || parentIds.contains(child.id())) {
+			throw new IllegalArgumentException("A birth needs two distinct parents other than the child");
+		}
+		for (String parentId : parentIds) {
+			if (!person(parentId).campId().equals(child.campId())) {
+				throw new IllegalArgumentException("Birth parents and child must belong to the same camp");
+			}
+		}
+		child.assignParents(parentIds);
+	}
+
 	long recordSocialEvent(EventType type, List<String> actors, Map<String, String> context, List<Long> causalLinks) {
 		long eventId = ledger.nextEventId();
 		ledger.append(new SimulationEvent(eventId, day, type, actors, List.of(), List.of(), context, causalLinks));
@@ -316,6 +361,27 @@ public final class SimulationWorld {
 	}
 
 	public ResourceBatch importExternalBatch(ResourceType resourceType, long quantity, StorageOwner holder) {
+		return importExternalBatch(resourceType, quantity, holder, List.of(), Map.of());
+	}
+
+	public ResourceBatch importExternalBatch(
+		ResourceType resourceType,
+		long quantity,
+		StorageOwner holder,
+		List<String> actors,
+		Map<String, String> context
+	) {
+		return importExternalBatch(resourceType, quantity, holder, actors, context, List.of());
+	}
+
+	public ResourceBatch importExternalBatch(
+		ResourceType resourceType,
+		long quantity,
+		StorageOwner holder,
+		List<String> actors,
+		Map<String, String> context,
+		List<Long> causalLinks
+	) {
 		validateStorageOwner(holder);
 		if (quantity <= 0) {
 			throw new IllegalArgumentException("External import must have a positive quantity");
@@ -327,14 +393,25 @@ public final class SimulationWorld {
 		);
 		batches.put(batch.batchId(), batch);
 		ResourceFlow output = batchFlow(batch, quantity, null, batch.location());
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("holder", holder.toString());
 		ledger.append(new SimulationEvent(
-			eventId, day, EventType.EXTERNAL_IMPORT, List.of(), List.of(), List.of(output),
-			Map.of("holder", holder.toString()), List.of()
+			eventId, day, EventType.EXTERNAL_IMPORT, actors, List.of(), List.of(output), eventContext, causalLinks
 		));
 		return batch;
 	}
 
 	public long exportExternalBatch(StorageOwner expectedHolder, String batchId, long quantity) {
+		return exportExternalBatch(expectedHolder, batchId, quantity, List.of(), Map.of());
+	}
+
+	public long exportExternalBatch(
+		StorageOwner expectedHolder,
+		String batchId,
+		long quantity,
+		List<String> actors,
+		Map<String, String> context
+	) {
 		ResourceBatch batch = batch(batchId);
 		if (!batch.holder().equals(expectedHolder) || quantity <= 0 || quantity > batch.quantity()) {
 			throw new IllegalArgumentException("External export exceeds the holder's batch authority");
@@ -348,9 +425,11 @@ public final class SimulationWorld {
 		} else {
 			batch.recordEvent(eventId);
 		}
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("batchId", batchId);
+		eventContext.put("holder", expectedHolder.toString());
 		ledger.append(new SimulationEvent(
-			eventId, day, EventType.EXTERNAL_EXPORT, List.of(), List.of(input), List.of(),
-			Map.of("batchId", batchId, "holder", expectedHolder.toString()), List.of(cause)
+			eventId, day, EventType.EXTERNAL_EXPORT, actors, List.of(input), List.of(), eventContext, List.of(cause)
 		));
 		return quantity;
 	}

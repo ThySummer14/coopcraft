@@ -191,9 +191,9 @@ public final class CivilizationGameTest implements FabricGameTest {
 		ConstructionPlan plan = BlueprintManager.get(ConstructionSystem.STONE_COTTAGE);
 		helper.assertTrue(plan != null, "The JSON cottage blueprint must be loaded");
 		for (Direction direction : new Direction[] {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-			BlockPos origin = settlement.center().relative(direction, 6);
+			BlockPos cleanupOrigin = settlement.center().relative(direction, 6);
 			for (ConstructionInstruction instruction : plan.instructions()) {
-				helper.getLevel().removeBlock(origin.offset(instruction.offset()), false);
+				helper.getLevel().removeBlock(cleanupOrigin.offset(instruction.offset()), false);
 			}
 		}
 		SettlementStockpile.insert(stockpile, new ItemStack(Items.COBBLESTONE, 64));
@@ -213,11 +213,31 @@ public final class CivilizationGameTest implements FabricGameTest {
 			data.getGrindingStation(settlement).orElseThrow(),
 			"The stonecutter must become the grinding station"
 		);
+		ConstructionSystem.BuildTarget firstTarget = ConstructionSystem.nextBuildTarget(
+			helper.getLevel(), data, settlement, villager
+		).orElseThrow();
+		BlockPos origin = firstTarget.job().origin();
+		for (ConstructionInstruction instruction : plan.instructions()) {
+			BlockPos position = origin.offset(instruction.offset());
+			helper.assertTrue(
+				helper.getLevel().isPositionEntityTicking(position),
+				"The construction origin must keep the whole cottage inside entity-ticking chunks: " + position
+			);
+		}
 
 		helper.succeedWhen(() -> {
+			helper.assertTrue(
+				helper.getLevel().isPositionEntityTicking(villager.blockPosition()),
+				"Construction entered a non-entity-ticking chunk at " + villager.blockPosition() + ", target=" + origin
+			);
 			String constructionProgress = data.getConstructionJob(settlement)
-				.map(job -> job.nextIndex() + "/" + plan.instructions().size() + " at " + job.origin())
+				.map(job -> job.nextIndex() + "/" + plan.instructions().size() + " at " + job.origin()
+					+ (job.nextIndex() < plan.instructions().size()
+						? ", next=" + plan.instructions().get(job.nextIndex()).item() : ""))
 				.orElse("not started");
+			String nextTargetState = ConstructionSystem.nextBuildTarget(helper.getLevel(), data, settlement, villager)
+				.map(target -> "present at " + target.position() + ", distance=" + villager.distanceToSqr(target.position().getCenter()))
+				.orElse("empty");
 			String workState = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()
 				.filter(prioritized -> prioritized.getGoal() instanceof VillagerWorkGoal)
 				.map(prioritized -> ((VillagerWorkGoal) prioritized.getGoal()).debugState())
@@ -227,6 +247,8 @@ public final class CivilizationGameTest implements FabricGameTest {
 				data.housingCapacity(settlement) == 1,
 				"Cottage incomplete: job=" + constructionProgress + ", villager=" + villager.blockPosition()
 					+ ", cobblestone=" + stockpile.countItem(Items.COBBLESTONE) + ", planks=" + stockpile.countItem(Items.OAK_PLANKS)
+					+ ", door=" + stockpile.countItem(Items.OAK_DOOR) + ", bed=" + stockpile.countItem(Items.WHITE_BED)
+					+ ", torches=" + stockpile.countItem(Items.TORCH) + ", nextTarget=" + nextTargetState
 					+ ", work=" + workState + ", testTick=" + helper.getTick()
 			);
 			BlockPos grindingStation = helper.absolutePos(GRINDING_STATION);
@@ -240,7 +262,6 @@ public final class CivilizationGameTest implements FabricGameTest {
 			helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)), "The tool must have Efficiency I");
 			helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)), "The tool must have Unbreaking I");
 			helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "A completed cottage must clear its construction job");
-			BlockPos origin = settlement.center().relative(Direction.NORTH, 6);
 			for (ConstructionInstruction instruction : plan.instructions()) {
 				BlockPos expected = origin.offset(instruction.offset());
 				helper.assertTrue(

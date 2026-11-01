@@ -6,7 +6,9 @@ public enum ResourceType {
 	FISH(WorkType.FISH, 20, 2),
 	GAME(WorkType.HUNT, 28, 2),
 	WOOD(WorkType.GATHER, 0, Long.MAX_VALUE),
-	STONE(WorkType.GATHER, 0, Long.MAX_VALUE);
+	STONE(WorkType.GATHER, 0, Long.MAX_VALUE),
+	STICK(WorkType.CRAFT, 0, Long.MAX_VALUE),
+	SMOOTH_STONE(WorkType.CRAFT, 0, Long.MAX_VALUE);
 
 	private final WorkType workType;
 	private final int nutritionPerUnit;

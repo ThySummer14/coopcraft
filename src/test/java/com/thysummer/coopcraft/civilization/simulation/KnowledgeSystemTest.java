@@ -135,6 +135,35 @@ class KnowledgeSystemTest {
 	}
 
 	@Test
+	void realWorkPracticeImprovesSkillAndRetainsItsCause() {
+		SimulationWorld world = new SimulationWorld();
+		world.registerCamp(new Camp("camp", "Camp"));
+		world.registerHousehold(new Household("h", "camp"));
+		Person person = new Person("p", "camp", "h", Person.AgeBand.ADULT, 0, 50);
+		world.registerPerson(person);
+		ResourceBatch stock = world.createInitialBatch(ResourceType.STONE, 1, StorageOwner.camp("camp"));
+		KnowledgeSystem knowledge = new KnowledgeSystem(world, KnowledgeConfig.disabled());
+
+		assertTrue(knowledge.practice(
+			person, WorkType.GATHER, java.util.Map.of("activity", "gather"), List.of(stock.originEventId())
+		));
+
+		assertEquals(1.01, person.skill(WorkType.GATHER), 0.000001);
+		SimulationEvent event = world.ledger().events().getLast();
+		assertEquals(EventType.SKILL_PRACTICED, event.type());
+		assertEquals(List.of("p"), event.actors());
+		assertEquals("GATHER", event.context().get("workType"));
+		assertEquals("gather", event.context().get("activity"));
+		assertEquals(List.of(stock.originEventId()), event.causalLinks());
+		assertTrue(world.ledger().traceAncestry(event.eventId()).stream()
+			.anyMatch(cause -> cause.eventId() == stock.originEventId()));
+		person.setSkill(WorkType.GATHER, 2.0);
+		assertFalse(knowledge.practice(person, WorkType.GATHER, java.util.Map.of(), List.of()));
+		assertEquals(2, world.ledger().events().size());
+		world.assertConservation();
+	}
+
+	@Test
 	void knowledgeScenarioReplaysAndConservesResources() {
 		PrimitiveSocietySimulation first = RiverValleyKnowledgeScenario.create(7);
 		PrimitiveSocietySimulation replay = RiverValleyKnowledgeScenario.create(7);

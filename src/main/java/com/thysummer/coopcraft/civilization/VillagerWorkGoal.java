@@ -74,6 +74,10 @@ public class VillagerWorkGoal extends Goal {
 			target = null;
 			return false;
 		}
+		if (searchCooldown > 0) {
+			searchCooldown--;
+			return false;
+		}
 		if (action != Action.BUILD) {
 			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
 				(ServerLevel) villager.level(), settlementData(), settlement, villager
@@ -88,10 +92,6 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action != null && isTargetValid()) {
 			return true;
-		}
-		if (searchCooldown > 0) {
-			searchCooldown--;
-			return false;
 		}
 
 		action = chooseAction();
@@ -130,7 +130,11 @@ public class VillagerWorkGoal extends Goal {
 			.anyMatch(goal -> goal.getGoal() == this && goal.isRunning());
 		return "action=" + action + ", target=" + target + ", progress=" + progress + ", running=" + running
 			+ ", canContinue=" + canContinueToUse() + ", alive=" + villager.isAlive() + ", villagerTick=" + villager.tickCount
-			+ ", navigationDone=" + villager.getNavigation().isDone() + ", path=" + villager.getNavigation().getPath();
+			+ ", gameTime=" + villager.level().getGameTime()
+			+ ", entityTicking=" + ((ServerLevel) villager.level()).isPositionEntityTicking(villager.blockPosition())
+			+ ", travel=" + travelTicks + ", approach=" + approachIndex
+			+ ", navigationDone=" + villager.getNavigation().isDone() + ", path=" + villager.getNavigation().getPath()
+			+ ", pathTarget=" + (villager.getNavigation().getPath() == null ? null : villager.getNavigation().getPath().getTarget());
 	}
 
 	@Override
@@ -159,6 +163,11 @@ public class VillagerWorkGoal extends Goal {
 		int duration = settlementData().personalityOf(settlement, villager.getUUID()).workDuration(baseDuration, workType);
 		if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
 			duration = duration * 5 / 4;
+		}
+		if (action == Action.GATHER) {
+			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+		} else if (action != Action.BUILD && action != Action.EAT) {
+			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		}
 		if (progress < duration) {
 			return;
@@ -222,6 +231,9 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private BlockPos chooseGatherTarget() {
+		if (settlement == null || !SettlementSimulationService.hasGatherTime(settlementData(), settlement, villager.getUUID())) {
+			return null;
+		}
 		if (needsSticks()) {
 			BlockPos logs = nearestResource(true);
 			if (logs != null) {
@@ -262,6 +274,11 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null) {
 			return false;
 		}
+		if (action == Action.BUILD && !constructionPathIsTicking()) {
+			villager.getNavigation().stop();
+			approachIndex++;
+			travelTicks = 0;
+		}
 		if (action == Action.BUILD && villager.getBoundingBox().intersects(new AABB(target))) {
 			travelTicks++;
 			if (villager.getNavigation().isDone() || travelTicks >= 20) {
@@ -278,6 +295,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		double interactionDistance = action == Action.BUILD ? BUILD_INTERACTION_DISTANCE_SQUARED : INTERACTION_DISTANCE_SQUARED;
 		if (villager.distanceToSqr(target.getCenter()) <= interactionDistance) {
+			if (action == Action.BUILD) {
+				villager.getNavigation().stop();
+			}
 			villager.getLookControl().setLookAt(target.getCenter());
 			travelTicks = 0;
 			approachIndex = 0;
@@ -306,7 +326,7 @@ public class VillagerWorkGoal extends Goal {
 		for (int vertical : new int[] {0, 1, -1, -2}) {
 			for (Direction direction : Direction.Plane.HORIZONTAL) {
 				BlockPos candidate = target.relative(direction).above(vertical);
-				if (level.isLoaded(candidate)
+				if (level.isPositionEntityTicking(candidate)
 					&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
 					&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
 					&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
@@ -321,12 +341,34 @@ public class VillagerWorkGoal extends Goal {
 				return true;
 			}
 		}
-		return false;
+		return navigateTo(target.above());
 	}
 
 	private boolean navigateTo(BlockPos pos) {
 		double speed = settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed();
-		return villager.getNavigation().moveTo(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, speed);
+		boolean moving = villager.getNavigation().moveTo(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, speed);
+		if (!moving || action != Action.BUILD) {
+			return moving;
+		}
+		if (constructionPathIsTicking()) {
+			return true;
+		}
+		villager.getNavigation().stop();
+		return false;
+	}
+
+	private boolean constructionPathIsTicking() {
+		var path = villager.getNavigation().getPath();
+		if (path == null) {
+			return true;
+		}
+		ServerLevel level = (ServerLevel) villager.level();
+		for (int index = 0; index < path.getNodeCount(); index++) {
+			if (!level.isPositionEntityTicking(path.getNodePos(index))) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private boolean isTargetValid() {
@@ -359,7 +401,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean hasFoodAvailable() {
 		if (SettlementSimulationService.isSurvivalEnabled(settlementData(), settlement)) {
-			return SettlementSimulationService.hasFood(settlementData(), settlement);
+			return SettlementSimulationService.hasFoodFor(settlementData(), settlement, villager.getUUID());
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
 		return SettlementNeeds.hasFood(villager.getInventory(), stockpile);
@@ -386,9 +428,14 @@ public class VillagerWorkGoal extends Goal {
 
 		level.destroyBlock(target, false, villager);
 		for (ItemStack drop : drops) {
+			int produced = drop.getCount();
 			ItemStack remainder = villager.getInventory().addItem(drop);
 			if (!remainder.isEmpty()) {
 				villager.spawnAtLocation(remainder);
+			}
+			int inserted = produced - remainder.getCount();
+			if (inserted > 0) {
+				SettlementSimulationService.recordProduction(villager, settlementData(), settlement, drop.getItem(), inserted);
 			}
 		}
 		settlementData().removeResource(settlement, target);
@@ -403,6 +450,7 @@ public class VillagerWorkGoal extends Goal {
 			return;
 		}
 		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_PICKAXE));
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "stone_pickaxe");
 	}
 
 	private void craftSticks() {
@@ -413,6 +461,10 @@ public class VillagerWorkGoal extends Goal {
 		if (inserted < 8) {
 			villager.spawnAtLocation(new ItemStack(Items.STICK, 8 - inserted));
 		}
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "sticks");
+		SettlementSimulationService.recordCraftedProduct(
+			villager, settlementData(), settlement, "sticks", Items.STICK, inserted
+		);
 	}
 
 	private boolean canCraftPickaxe() {
@@ -458,6 +510,7 @@ public class VillagerWorkGoal extends Goal {
 		polished.enchant(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), 1);
 		polished.enchant(enchantments.getHolderOrThrow(Enchantments.UNBREAKING), 1);
 		villager.setItemInHand(InteractionHand.MAIN_HAND, polished);
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "polished_stone_pickaxe");
 	}
 
 	private void grindSmoothStone() {
@@ -465,14 +518,30 @@ public class VillagerWorkGoal extends Goal {
 			|| removeItems(villager.getInventory(), Items.COBBLESTONE, 1) != 1) {
 			return;
 		}
-		if (SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.SMOOTH_STONE)) != 1) {
+		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.SMOOTH_STONE));
+		if (inserted < 1) {
 			villager.spawnAtLocation(new ItemStack(Items.SMOOTH_STONE));
 		}
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "smooth_stone");
+		SettlementSimulationService.recordCraftedProduct(
+			villager, settlementData(), settlement, "smooth_stone", Items.SMOOTH_STONE, inserted
+		);
 	}
 
-	private int availableItems(Item item) {
+	private String craftingRecipe() {
+		return switch (action) {
+			case CRAFT_PICKAXE -> "stone_pickaxe";
+			case CRAFT_STICKS -> "sticks";
+			case POLISH_PICKAXE -> "polished_stone_pickaxe";
+			case GRIND_SMOOTH_STONE -> "smooth_stone";
+			default -> "other";
+		};
+	}
+
+	private long availableItems(Item item) {
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		return villager.getInventory().countItem(item) + (stockpile == null ? 0 : stockpile.countItem(item));
+		return villager.getInventory().countItem(item) + (stockpile == null ? 0 : stockpile.countItem(item))
+			+ SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
 	}
 
 	private boolean withdrawItems(Item item, int count) {
@@ -481,16 +550,23 @@ public class VillagerWorkGoal extends Goal {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile == null || stockpile.countItem(item) < missing) {
+		int realAvailable = stockpile == null ? 0 : stockpile.countItem(item);
+		long abstractAvailable = SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
+		if (realAvailable + abstractAvailable < missing) {
 			return false;
 		}
-		int removed = removeItems(stockpile, item, missing);
-		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(item, removed));
-		if (inserted < removed) {
-			SettlementStockpile.insert(stockpile, new ItemStack(item, removed - inserted));
-			return false;
+		if (realAvailable > 0) {
+			int removed = removeItems(stockpile, item, Math.min(missing, realAvailable));
+			int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(item, removed));
+			if (inserted < removed) {
+				SettlementStockpile.insert(stockpile, new ItemStack(item, removed - inserted));
+				return false;
+			}
+			missing -= inserted;
 		}
-		return true;
+		return missing == 0 || SettlementSimulationService.withdrawForCrafting(
+			villager, settlementData(), settlement, item, missing, craftingRecipe()
+		) == missing;
 	}
 
 	private boolean withdrawOneLog() {
@@ -498,21 +574,22 @@ public class VillagerWorkGoal extends Goal {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile == null) {
-			return false;
-		}
-		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-			if (!stockpile.getItem(slot).is(ItemTags.LOGS)) {
-				continue;
+		if (stockpile != null) {
+			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+				if (!stockpile.getItem(slot).is(ItemTags.LOGS)) {
+					continue;
+				}
+				ItemStack removed = stockpile.removeItem(slot, 1);
+				if (SettlementStockpile.insert(villager.getInventory(), removed) == removed.getCount()) {
+					return true;
+				}
+				SettlementStockpile.insert(stockpile, removed);
+				return false;
 			}
-			ItemStack removed = stockpile.removeItem(slot, 1);
-			if (SettlementStockpile.insert(villager.getInventory(), removed) == removed.getCount()) {
-				return true;
-			}
-			SettlementStockpile.insert(stockpile, removed);
-			return false;
 		}
-		return false;
+		return SettlementSimulationService.withdrawForCrafting(
+			villager, settlementData(), settlement, Items.OAK_LOG, 1, craftingRecipe()
+		) == 1;
 	}
 
 	private boolean isPolishedPickaxe(ItemStack stack) {
@@ -555,7 +632,10 @@ public class VillagerWorkGoal extends Goal {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		return stockpile != null && stockpile.hasAnyMatching(stack -> stack.is(ItemTags.LOGS));
+		if (stockpile != null && stockpile.hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
+			return true;
+		}
+		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, Items.OAK_LOG) > 0;
 	}
 
 	private boolean hasStonePickaxe() {

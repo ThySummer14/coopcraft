@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -20,7 +21,9 @@ public final class MinecraftStockpileAdapter {
 		Items.COD, ResourceType.FISH,
 		Items.BEEF, ResourceType.GAME,
 		Items.OAK_LOG, ResourceType.WOOD,
-		Items.COBBLESTONE, ResourceType.STONE
+		Items.COBBLESTONE, ResourceType.STONE,
+		Items.STICK, ResourceType.STICK,
+		Items.SMOOTH_STONE, ResourceType.SMOOTH_STONE
 	);
 
 	private MinecraftStockpileAdapter() {
@@ -40,6 +43,31 @@ public final class MinecraftStockpileAdapter {
 		ResourceType resourceType,
 		int requested
 	) {
+		return importToSimulation(container, world, camp, resourceType, requested, List.of(), Map.of());
+	}
+
+	public static int importToSimulation(
+		Container container,
+		SimulationWorld world,
+		StorageOwner camp,
+		ResourceType resourceType,
+		int requested,
+		List<String> actors,
+		Map<String, String> context
+	) {
+		return importToSimulation(container, world, camp, resourceType, requested, actors, context, List.of());
+	}
+
+	public static int importToSimulation(
+		Container container,
+		SimulationWorld world,
+		StorageOwner camp,
+		ResourceType resourceType,
+		int requested,
+		List<String> actors,
+		Map<String, String> context,
+		List<Long> causalLinks
+	) {
 		validateCamp(world, camp);
 		if (requested <= 0) {
 			throw new IllegalArgumentException("Import quantity must be positive");
@@ -49,7 +77,7 @@ public final class MinecraftStockpileAdapter {
 			return 0;
 		}
 		try {
-			world.importExternalBatch(resourceType, removed, camp);
+			world.importExternalBatch(resourceType, removed, camp, actors, context, causalLinks);
 			return removed;
 		} catch (RuntimeException exception) {
 			int restored = SettlementStockpile.insert(container, new ItemStack(itemFor(resourceType), removed));
@@ -67,6 +95,18 @@ public final class MinecraftStockpileAdapter {
 		int requested,
 		Container container
 	) {
+		return exportToContainer(world, camp, batchId, requested, container, List.of(), Map.of());
+	}
+
+	public static int exportToContainer(
+		SimulationWorld world,
+		StorageOwner camp,
+		String batchId,
+		int requested,
+		Container container,
+		List<String> actors,
+		Map<String, String> context
+	) {
 		validateCamp(world, camp);
 		if (requested <= 0) {
 			throw new IllegalArgumentException("Export quantity must be positive");
@@ -82,7 +122,7 @@ public final class MinecraftStockpileAdapter {
 			return 0;
 		}
 		try {
-			world.exportExternalBatch(camp, batchId, inserted);
+			world.exportExternalBatch(camp, batchId, inserted, actors, context);
 			return inserted;
 		} catch (RuntimeException exception) {
 			int removed = removeSupportedItems(container, resourceType, inserted);
@@ -126,6 +166,8 @@ public final class MinecraftStockpileAdapter {
 			case GAME -> Items.BEEF;
 			case WOOD -> Items.OAK_LOG;
 			case STONE -> Items.COBBLESTONE;
+			case STICK -> Items.STICK;
+			case SMOOTH_STONE -> Items.SMOOTH_STONE;
 		};
 	}
 }

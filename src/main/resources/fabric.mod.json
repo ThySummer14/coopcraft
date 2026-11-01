@@ -26,7 +26,12 @@
 			"com.thysummer.coopcraft.civilization.CivilizationGameTest",
 			"com.thysummer.coopcraft.civilization.MinecraftStockpileAdapterGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementSimulationStateGameTest",
-			"com.thysummer.coopcraft.civilization.SettlementSurvivalGameTest"
+			"com.thysummer.coopcraft.civilization.SettlementSurvivalGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementProductionGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementGrowthGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementDistributionGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementNormGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementKinshipGameTest"
 		]
 	},
 	"mixins": [

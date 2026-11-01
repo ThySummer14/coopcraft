@@ -43,6 +43,31 @@ public final class NormProposal {
 		this.revision = revision;
 	}
 
+	public static NormProposal restore(
+		String proposalId,
+		String campId,
+		String normId,
+		String proposerId,
+		long proposedDay,
+		long originEventId,
+		int allocationUnitCap,
+		int revision,
+		int rounds,
+		Status status,
+		Map<String, Position> positions
+	) {
+		if (rounds < 0 || status == null) {
+			throw new IllegalArgumentException("Invalid restored proposal progress");
+		}
+		NormProposal proposal = new NormProposal(
+			proposalId, campId, normId, proposerId, proposedDay, originEventId, allocationUnitCap, revision
+		);
+		proposal.rounds = rounds;
+		proposal.status = status;
+		Map.copyOf(positions).forEach(proposal::learn);
+		return proposal;
+	}
+
 	public String proposalId() {
 		return proposalId;
 	}

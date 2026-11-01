@@ -41,4 +41,24 @@ class SurvivalSystemTest {
 		assertEquals(0, world.availableNutrition(StorageOwner.camp("camp")));
 		world.assertConservation();
 	}
+
+	@Test
+	void commonMealRespectsItsUnitLimit() {
+		SimulationWorld world = new SimulationWorld();
+		world.registerCamp(new Camp("camp", "Camp"));
+		world.registerHousehold(new Household("h", "camp"));
+		Person person = new Person("p", "camp", "h", Person.AgeBand.ADULT, 100, 50);
+		world.registerPerson(person);
+		ResourceBatch stock = world.importExternalBatch(ResourceType.FISH, 10, StorageOwner.camp("camp"));
+		SurvivalSystem survival = new SurvivalSystem(world, SimulationConfig.defaults());
+
+		SurvivalSystem.MealResult meal = survival.eatFromCommon(person, 3);
+
+		assertEquals(60, meal.nutrition());
+		assertEquals(3, meal.units());
+		assertEquals(40, person.hunger());
+		assertEquals(7, stock.quantity());
+		assertEquals(3, world.ledger().events().getLast().inputs().getFirst().quantity());
+		world.assertConservation();
+	}
 }

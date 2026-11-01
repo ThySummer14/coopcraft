@@ -153,6 +153,40 @@ class SimulationWorldTest {
 	}
 
 	@Test
+	void externalProductionRecordsActorAndActivity() {
+		ResourceBatch produced = world.importExternalBatch(
+			ResourceType.STONE, 3, StorageOwner.camp("camp"), List.of("p1"), java.util.Map.of("activity", "gather")
+		);
+
+		SimulationEvent event = world.ledger().event(produced.originEventId()).orElseThrow();
+		assertEquals(List.of("p1"), event.actors());
+		assertEquals("gather", event.context().get("activity"));
+		assertEquals(3, world.inventoryTotals().get(ResourceType.STONE));
+		assertTrue(world.ledger().traceOrigins(event.eventId()).contains(event));
+		world.assertConservation();
+	}
+
+	@Test
+	void externalCraftingWithdrawalRecordsActorAndRecipe() {
+		ResourceBatch stock = world.importExternalBatch(ResourceType.WOOD, 2, StorageOwner.camp("camp"));
+
+		world.exportExternalBatch(
+			StorageOwner.camp("camp"), stock.batchId(), 1,
+			List.of("p1"), java.util.Map.of("activity", "craft", "recipe", "sticks")
+		);
+
+		SimulationEvent event = world.ledger().events().getLast();
+		assertEquals(EventType.EXTERNAL_EXPORT, event.type());
+		assertEquals(List.of("p1"), event.actors());
+		assertEquals("craft", event.context().get("activity"));
+		assertEquals("sticks", event.context().get("recipe"));
+		assertEquals(1, stock.quantity());
+		assertTrue(world.ledger().traceOrigins(event.eventId()).stream()
+			.anyMatch(origin -> origin.eventId() == stock.originEventId()));
+		world.assertConservation();
+	}
+
+	@Test
 	void restoredExternalStateContinuesWithoutDuplicatingBatches() {
 		ResourceBatch imported = world.importExternalBatch(ResourceType.TUBERS, 5, StorageOwner.camp("camp"));
 		world.exportExternalBatch(StorageOwner.camp("camp"), imported.batchId(), 2);

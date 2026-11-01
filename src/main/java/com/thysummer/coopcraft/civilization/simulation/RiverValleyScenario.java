@@ -27,8 +27,9 @@ public final class RiverValleyScenario {
 				"person-" + String.format("%02d", index), CAMP_ID, "household-" + household, ageBand,
 				15 + index * 7 % 20, index * 37 % 101
 			);
-			WorkType preferred = WorkType.values()[index % WorkType.values().length];
-			for (WorkType workType : WorkType.values()) {
+			WorkType[] workTypes = WorkType.harvestingTypes();
+			WorkType preferred = workTypes[index % workTypes.length];
+			for (WorkType workType : workTypes) {
 				person.setSkill(workType, workType == preferred ? 1.25 + index % 3 * 0.1 : 0.75 + index % 4 * 0.05);
 			}
 			person.observeNorm("neighbor-requests");

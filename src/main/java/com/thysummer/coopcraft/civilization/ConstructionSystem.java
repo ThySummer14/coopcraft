@@ -20,7 +20,6 @@ import net.minecraft.world.phys.AABB;
 
 public final class ConstructionSystem {
 	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
-	private static final double BUILD_RADIUS_SQUARED = 16.0 * 16.0;
 
 	private ConstructionSystem() {
 	}
@@ -55,7 +54,7 @@ public final class ConstructionSystem {
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
 		BlockPos position = job.origin().offset(instruction.offset());
-		if (!level.isLoaded(position) || villager.distanceToSqr(position.getCenter()) > BUILD_RADIUS_SQUARED) {
+		if (!level.isLoaded(position)) {
 			return Optional.empty();
 		}
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
@@ -138,7 +137,7 @@ public final class ConstructionSystem {
 	private static boolean canPlace(ServerLevel level, ConstructionPlan plan, BlockPos origin) {
 		for (ConstructionInstruction instruction : plan.instructions()) {
 			BlockPos position = origin.offset(instruction.offset());
-			if (!level.isLoaded(position) || !level.getBlockState(position).isAir()) {
+			if (!level.isPositionEntityTicking(position) || !level.getBlockState(position).isAir()) {
 				return false;
 			}
 		}
