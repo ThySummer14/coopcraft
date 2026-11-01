@@ -46,8 +46,30 @@ if ! grep -qi '^eula=true' eula.txt 2>/dev/null; then
 	exit 1
 fi
 
-MEMORY="${MEMORY:-2G}"
+MEMORY="${MEMORY:-4G}"
 mkdir -p logs
 
+# Aikar 风格 G1 参数（面向 4G 档位，可按需要调）
+FLAGS=(
+	-XX:+UseG1GC
+	-XX:+ParallelRefProcEnabled
+	-XX:MaxGCPauseMillis=200
+	-XX:+UnlockExperimentalVMOptions
+	-XX:+DisableExplicitGC
+	-XX:+AlwaysPreTouch
+	-XX:G1NewSizePercent=30
+	-XX:G1MaxNewSizePercent=40
+	-XX:G1HeapRegionSize=8M
+	-XX:G1ReservePercent=20
+	-XX:G1HeapWastePercent=5
+	-XX:G1MixedGCCountTarget=4
+	-XX:InitiatingHeapOccupancyPercent=15
+	-XX:G1MixedGCLiveThresholdPercent=90
+	-XX:G1RSetUpdatingPauseTimePercent=5
+	-XX:SurvivorRatio=32
+	-XX:+PerfDisableSharedMem
+	-XX:MaxTenuringThreshold=1
+)
+
 echo "Starting CoopCraft server with ${MEMORY} heap..."
-exec "$JAVA" -Xms"$MEMORY" -Xmx"$MEMORY" -jar fabric-server-launch.jar nogui
+exec "$JAVA" -Xms"$MEMORY" -Xmx"$MEMORY" "${FLAGS[@]}" -jar fabric-server-launch.jar nogui
