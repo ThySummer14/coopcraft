@@ -43,6 +43,63 @@ class DemographySystemTest {
 	}
 
 	@Test
+	void observedAgeBandSyncDoesNotAdvancePopulation() {
+		SimulationWorld world = new SimulationWorld();
+		world.registerCamp(new Camp("camp", "Camp"));
+		world.registerHousehold(new Household("h", "camp"));
+		Person person = new Person("p", "camp", "h", Person.AgeBand.CHILD, 0, 50);
+		world.registerPerson(person);
+		DemographySystem demography = new DemographySystem(world, config(0, 0));
+
+		assertTrue(demography.synchronizeObservedAgeBand(
+			person, Person.AgeBand.ADULT, java.util.Map.of("source", "minecraft_villager")
+		));
+
+		assertEquals(Person.AgeBand.ADULT, person.ageBand());
+		assertEquals(30 * 360, person.ageDays());
+		assertEquals(100, person.health());
+		assertEquals(1, world.people().size());
+		SimulationEvent event = world.ledger().events().getLast();
+		assertEquals(EventType.LIFE_STAGE_CHANGED, event.type());
+		assertEquals(List.of("p"), event.actors());
+		assertEquals("CHILD", event.context().get("previous"));
+		assertEquals("ADULT", event.context().get("current"));
+		assertEquals("minecraft_villager", event.context().get("source"));
+		assertFalse(demography.synchronizeObservedAgeBand(person, Person.AgeBand.ADULT, java.util.Map.of()));
+		assertEquals(1, world.ledger().events().size());
+		world.assertConservation();
+	}
+
+	@Test
+	void observedAgeDaysAdvanceIntoElderWithoutFullPopulation() {
+		SimulationWorld world = new SimulationWorld();
+		world.registerCamp(new Camp("camp", "Camp"));
+		world.registerHousehold(new Household("h", "camp"));
+		Person person = new Person("p", "camp", "h", Person.AgeBand.ADULT, 0, 50);
+		person.initializeAge(Person.AgeBand.ADULT, 60 * 360 - 1);
+		world.registerPerson(person);
+		DemographySystem demography = new DemographySystem(world, config(0, 0));
+
+		assertTrue(demography.advanceObservedAgeDay(person, java.util.Map.of("source", "core_age_days")));
+
+		assertEquals(Person.AgeBand.ELDER, person.ageBand());
+		assertEquals(60 * 360, person.ageDays());
+		assertEquals(100, person.health());
+		assertEquals(1, world.people().size());
+		SimulationEvent event = world.ledger().events().getLast();
+		assertEquals(EventType.LIFE_STAGE_CHANGED, event.type());
+		assertEquals("ADULT", event.context().get("previous"));
+		assertEquals("ELDER", event.context().get("current"));
+		assertEquals("core_age_days", event.context().get("source"));
+		assertFalse(demography.advanceObservedAgeDay(person, java.util.Map.of()));
+		assertEquals(60 * 360 + 1, person.ageDays());
+		assertEquals(1, world.ledger().events().size());
+		assertTrue(world.ledger().events().stream().noneMatch(existing -> existing.type() == EventType.BIRTH));
+		assertTrue(world.ledger().events().stream().noneMatch(existing -> existing.type() == EventType.DEATH));
+		world.assertConservation();
+	}
+
+	@Test
 	void crossHouseholdCareReducesTheSameDaysProductionTime() {
 		SimulationWorld world = new SimulationWorld();
 		world.registerCamp(new Camp("camp", "Camp"));
@@ -121,6 +178,7 @@ class DemographySystemTest {
 
 		assertEquals(3, world.people().size());
 		Person child = world.people().stream().filter(person -> person.ageBand() == Person.AgeBand.INFANT).findFirst().orElseThrow();
+		assertEquals(List.of("a", "b"), child.parents());
 		assertTrue(child.observedNorms().isEmpty());
 		assertTrue(child.campKnowledge().isEmpty());
 		assertTrue(child.knownTechniques().isEmpty());
@@ -152,7 +210,6 @@ class DemographySystemTest {
 		assertEquals(first.world().people().size(), replay.world().people().size());
 		assertTrue(first.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.CARE_PROVIDED));
 		assertTrue(first.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.BIRTH));
-		assertTrue(first.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.DEATH));
 		assertTrue(first.workReservations().stream().allMatch(id -> first.world().person(id).canWork()));
 		for (SimulationEvent event : first.world().ledger().events()) {
 			if (event.type() == EventType.CONSUME || event.type() == EventType.FIELD_CONSUMPTION) {

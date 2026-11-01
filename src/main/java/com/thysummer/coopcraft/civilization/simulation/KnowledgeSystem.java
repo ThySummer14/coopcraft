@@ -43,6 +43,29 @@ public final class KnowledgeSystem {
 		}
 	}
 
+	public boolean practice(
+		Person person,
+		WorkType workType,
+		Map<String, String> context,
+		java.util.List<Long> causalLinks
+	) {
+		double skillBefore = person.skill(workType);
+		if (skillBefore >= config.maximumSkill()) {
+			return false;
+		}
+		double gain = 0.02 * (config.maximumSkill() - skillBefore) / config.maximumSkill();
+		double skillAfter = Math.min(config.maximumSkill(), skillBefore + gain);
+		person.setSkill(workType, skillAfter);
+		Map<String, String> eventContext = new java.util.LinkedHashMap<>(context);
+		eventContext.put("workType", workType.name());
+		eventContext.put("skillBefore", Double.toString(skillBefore));
+		eventContext.put("skillAfter", Double.toString(skillAfter));
+		world.recordSocialEvent(
+			EventType.SKILL_PRACTICED, java.util.List.of(person.id()), eventContext, causalLinks
+		);
+		return true;
+	}
+
 	public boolean canPerform(Person person, WorkType workType) {
 		return !config.enabled() || person.knowsTechnique(workType);
 	}

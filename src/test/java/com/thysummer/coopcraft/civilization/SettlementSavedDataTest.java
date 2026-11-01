@@ -39,23 +39,31 @@ class SettlementSavedDataTest {
 		assertEquals(settlement, restored.find(center).orElseThrow());
 		assertEquals(SocialOrganization.PRIMITIVE_COMMUNE, restored.socialOrganizationOf(settlement));
 		assertTrue(restored.simulationOf(settlement).isEmpty());
-		assertEquals(9, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(16, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
-	void migratesSimulationWithoutSurvivalFlag() {
+	void migratesSimulationWithoutFeatureFlags() {
 		SettlementSavedData data = new SettlementSavedData();
 		Settlement settlement = data.getOrCreate(new BlockPos(10, 64, 10), "Testhaven", 4);
 		data.getOrCreateSimulation(settlement);
 		CompoundTag tag = data.save(new CompoundTag(), null);
 		CompoundTag simulation = tag.getList("Simulations", net.minecraft.nbt.ListTag.TAG_COMPOUND).getCompound(0);
 		simulation.remove("SurvivalEnabled");
+		simulation.remove("ProductionEnabled");
+		simulation.remove("GrowthEnabled");
+		simulation.remove("SkillsEnabled");
+		simulation.remove("NormsEnabled");
 		simulation.remove("LastSurvivalDay");
 
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
 
 		SettlementSimulationState state = restored.simulationOf(settlement).orElseThrow();
 		assertFalse(state.survivalEnabled());
+		assertFalse(state.productionEnabled());
+		assertFalse(state.growthEnabled());
+		assertFalse(state.skillsEnabled());
+		assertFalse(state.normsEnabled());
 		assertEquals(Long.MIN_VALUE, state.lastSurvivalDay());
 	}
 

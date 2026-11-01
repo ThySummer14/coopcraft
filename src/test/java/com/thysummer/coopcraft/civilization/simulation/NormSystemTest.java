@@ -133,6 +133,20 @@ class NormSystemTest {
 		simulation.world().assertConservation();
 	}
 
+	@Test
+	void commonStoreMeetingCountsOnlyActiveResidents() {
+		world.person("p1").restoreSocialState(6, 0, 0);
+		refusal();
+		NormSystem norms = new NormSystem(world, SimulationConfig.defaults());
+
+		norms.processSocialPhase(List.of(world.person("p1"), world.person("p2")), true);
+
+		NormProposal proposal = world.proposalsForCamp("camp").stream().findFirst().orElseThrow();
+		assertEquals(Set.of("p1", "p2"), proposal.knownBy());
+		assertTrue(!proposal.knownBy().contains("p3") && !proposal.knownBy().contains("p4"));
+		assertEquals(List.of("p1", "p2"), lastEvent(EventType.NORM_DELIBERATED).actors());
+	}
+
 	private long refusal() {
 		long request = world.recordShareRequest("p2", "p1", 40);
 		return world.recordShareRefusal(request, "p2", "p1", 20);

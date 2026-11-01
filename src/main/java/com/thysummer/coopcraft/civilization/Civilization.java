@@ -5,6 +5,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+import com.thysummer.coopcraft.civilization.simulation.EventType;
+import com.thysummer.coopcraft.civilization.simulation.Norm;
+import com.thysummer.coopcraft.civilization.simulation.NormProposal;
 import com.thysummer.coopcraft.civilization.simulation.ResourceFlow;
 import com.thysummer.coopcraft.civilization.simulation.SimulationEvent;
 import com.thysummer.coopcraft.mixin.MobAccessor;
@@ -127,7 +130,7 @@ public final class Civilization {
 			SettlementStockpile.communalResourceCount(stockpile),
 			data.socialOrganizationOf(settlement),
 			summaries,
-			simulationEvents(data, settlement)
+			simulationEvents(serverLevel, data, settlement)
 		));
 		return InteractionResult.SUCCESS;
 	}
@@ -239,20 +242,118 @@ public final class Civilization {
 	}
 
 	private static List<SettlementOverviewPayload.SimulationEventInfo> simulationEvents(
+		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement
 	) {
 		return SettlementSimulationService.recentEvents(data, settlement, SettlementOverviewPayload.MAX_SIMULATION_EVENTS)
 			.stream()
-			.map(Civilization::toSimulationEventInfo)
+			.map(event -> toSimulationEventInfo(level, data, settlement, event))
 			.toList();
 	}
 
-	private static SettlementOverviewPayload.SimulationEventInfo toSimulationEventInfo(SimulationEvent event) {
+	static SettlementOverviewPayload.SimulationEventInfo toSimulationEventInfo(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		SimulationEvent event
+	) {
 		List<ResourceFlow> flows = event.outputs().isEmpty() ? event.inputs() : event.outputs();
 		String resourceType = flows.stream().findFirst().map(flow -> flow.resourceType().name()).orElse("NONE");
 		long quantity = flows.stream().mapToLong(ResourceFlow::quantity).sum();
-		return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType, quantity);
+		List<SettlementOverviewPayload.SimulationEventDetail> details = new ArrayList<>();
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		String campId = state == null ? "" : state.campOwner().id();
+		Optional<NormProposal> proposal = state == null || !event.context().containsKey("proposalId")
+			? Optional.empty() : state.world().proposal(event.context().get("proposalId"));
+		if (event.type() == EventType.BIRTH && event.actors().size() == 3) {
+			addDetail(details, "parents", residentNames(level, event.actors().subList(0, 2)));
+			addDetail(details, "child", residentName(level, event.actors().get(2)));
+		} else if (proposal.isPresent()) {
+			addDetail(details, "proposer", residentName(level, proposal.get().proposerId()));
+		} else if (!event.actors().isEmpty()) {
+			addDetail(details, "actor", residentName(level, event.actors().getFirst()));
+		}
+		if (event.context().containsKey("normId")) {
+			addDetail(details, "rule", "coopcraft.simulation.norm." + event.context().get("normId"));
+		}
+		addDetail(details, "recipe", event.context().get("recipe"));
+		addDetail(details, "work_type", event.context().containsKey("workType")
+			? "coopcraft.simulation.worktype." + event.context().get("workType") : null);
+		if (event.context().containsKey("skillBefore") && event.context().containsKey("skillAfter")) {
+			addDetail(details, "skill", event.context().get("skillBefore") + " → " + event.context().get("skillAfter"));
+		}
+		if (event.context().containsKey("previousCap") && event.context().containsKey("newCap")) {
+			addDetail(details, "cap", event.context().get("previousCap") + " → " + event.context().get("newCap"));
+		} else if (event.context().containsKey("allocatedUnits") && event.context().containsKey("cap")) {
+			addDetail(details, "allocation", event.context().get("allocatedUnits") + "/" + event.context().get("cap"));
+			addDetail(details, "care_bonus", event.context().get("careBonus"));
+		} else {
+			addDetail(details, "cap", event.context().get("cap"));
+		}
+		addDetail(details, "round", event.context().get("round"));
+		addDetail(details, "participants", event.context().get("participants"));
+		if (event.type() == EventType.NORM_DELIBERATED || event.type() == EventType.NORM_REJECTED) {
+			proposal.ifPresent(value -> {
+				addDetail(details, "supporters", residentNames(level, positions(value, NormProposal.Position.SUPPORT)));
+				addDetail(details, "opponents", residentNames(level, positions(value, NormProposal.Position.OPPOSE)));
+			});
+		} else if (event.type() == EventType.NORM_ADOPTED || event.type() == EventType.NORM_REVISED
+			|| event.type() == EventType.NORM_ENFORCED) {
+			Optional<Norm> norm = state == null ? Optional.empty() : state.world().norm(campId, event.context().get("normId"));
+			norm.ifPresent(value -> {
+				addDetail(details, "supporters", residentNames(level, value.supporters()));
+				addDetail(details, "opponents", residentNames(level, value.opponents()));
+			});
+		}
+		addDetail(details, "reason", event.context().containsKey("reason")
+			? "coopcraft.simulation.reason." + event.context().get("reason") : null);
+		return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType, quantity, details);
+	}
+
+	private static List<String> positions(NormProposal proposal, NormProposal.Position position) {
+		return proposal.positions().entrySet().stream()
+			.filter(entry -> entry.getValue() == position)
+			.map(java.util.Map.Entry::getKey)
+			.sorted()
+			.toList();
+	}
+
+	private static String residentNames(ServerLevel level, Iterable<String> personIds) {
+		List<String> names = new ArrayList<>();
+		for (String personId : personIds) {
+			names.add(residentName(level, personId));
+		}
+		return abbreviate(String.join(", ", names));
+	}
+
+	private static String residentName(ServerLevel level, String personId) {
+		if (personId.startsWith("minecraft-person:")) {
+			try {
+				java.util.UUID villagerId = java.util.UUID.fromString(personId.substring("minecraft-person:".length()));
+				if (level != null && level.getEntity(villagerId) instanceof Villager villager) {
+					return villager.getCustomName() == null
+						? villager.getType().getDescription().getString() : villager.getCustomName().getString();
+				}
+			} catch (IllegalArgumentException ignored) {
+				return personId;
+			}
+		}
+		return personId;
+	}
+
+	private static String abbreviate(String value) {
+		return value.length() <= 96 ? value : value.substring(0, 95) + "…";
+	}
+
+	private static void addDetail(
+		List<SettlementOverviewPayload.SimulationEventDetail> details,
+		String label,
+		String value
+	) {
+		if (details.size() < SettlementOverviewPayload.MAX_EVENT_DETAILS && value != null && !value.isBlank()) {
+			details.add(new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail." + label, value));
+		}
 	}
 
 	private static SettlementOverviewPayload.ResidentInfo toResidentInfo(

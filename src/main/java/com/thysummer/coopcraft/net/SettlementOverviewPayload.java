@@ -28,6 +28,7 @@ public record SettlementOverviewPayload(
 ) implements CustomPacketPayload {
 	public static final int MAX_RESIDENTS = 12;
 	public static final int MAX_SIMULATION_EVENTS = 3;
+	public static final int MAX_EVENT_DETAILS = 6;
 	public static final Type<SettlementOverviewPayload> TYPE = new Type<>(CoopCraft.id("settlement_overview"));
 	public static final StreamCodec<RegistryFriendlyByteBuf, SettlementOverviewPayload> STREAM_CODEC = StreamCodec.of(
 		(buf, payload) -> payload.write(buf),
@@ -81,6 +82,11 @@ public record SettlementOverviewPayload(
 			buf.writeUtf(event.eventType());
 			buf.writeUtf(event.resourceType());
 			buf.writeVarLong(event.quantity());
+			buf.writeVarInt(event.details().size());
+			for (SimulationEventDetail detail : event.details()) {
+				buf.writeUtf(detail.label());
+				buf.writeUtf(detail.value());
+			}
 		}
 	}
 
@@ -132,7 +138,19 @@ public record SettlementOverviewPayload(
 		}
 		List<SimulationEventInfo> simulationEvents = new ArrayList<>(simulationEventCount);
 		for (int i = 0; i < simulationEventCount; i++) {
-			simulationEvents.add(new SimulationEventInfo(buf.readVarLong(), buf.readUtf(), buf.readUtf(), buf.readVarLong()));
+			long day = buf.readVarLong();
+			String eventType = buf.readUtf();
+			String resourceType = buf.readUtf();
+			long quantity = buf.readVarLong();
+			int detailCount = buf.readVarInt();
+			if (detailCount < 0 || detailCount > MAX_EVENT_DETAILS) {
+				throw new IllegalArgumentException("Invalid simulation event detail count");
+			}
+			List<SimulationEventDetail> details = new ArrayList<>(detailCount);
+			for (int detailIndex = 0; detailIndex < detailCount; detailIndex++) {
+				details.add(new SimulationEventDetail(buf.readUtf(), buf.readUtf()));
+			}
+			simulationEvents.add(new SimulationEventInfo(day, eventType, resourceType, quantity, details));
 		}
 		return new SettlementOverviewPayload(
 			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity,
@@ -145,10 +163,22 @@ public record SettlementOverviewPayload(
 		return TYPE;
 	}
 
-	public record SimulationEventInfo(long day, String eventType, String resourceType, long quantity) {
+	public record SimulationEventInfo(long day, String eventType, String resourceType, long quantity, List<SimulationEventDetail> details) {
 		public SimulationEventInfo {
 			if (day < 0 || eventType.isBlank() || resourceType.isBlank() || quantity < 0) {
 				throw new IllegalArgumentException("Invalid simulation event summary");
+			}
+			details = List.copyOf(details);
+			if (details.size() > MAX_EVENT_DETAILS) {
+				throw new IllegalArgumentException("Too many simulation event details");
+			}
+		}
+	}
+
+	public record SimulationEventDetail(String label, String value) {
+		public SimulationEventDetail {
+			if (label.isBlank() || value.isBlank() || label.length() > 96 || value.length() > 96) {
+				throw new IllegalArgumentException("Invalid simulation event detail");
 			}
 		}
 	}

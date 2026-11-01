@@ -24,6 +24,7 @@ public final class Person {
 	private int careHours;
 	private int learningHours;
 	private final int riskPreference;
+	private List<String> parents = List.of();
 	private final EnumMap<WorkType, Double> skills = new EnumMap<>(WorkType.class);
 	private final Set<WorkType> knownTechniques = new LinkedHashSet<>();
 	private final Map<String, Integer> trust = new HashMap<>();
@@ -78,6 +79,17 @@ public final class Person {
 		return householdId;
 	}
 
+	public List<String> parents() {
+		return parents;
+	}
+
+	void assignParents(List<String> parentIds) {
+		if (!parents.isEmpty()) {
+			throw new IllegalArgumentException("Birth parents have already been assigned");
+		}
+		parents = List.copyOf(parentIds);
+	}
+
 	public AgeBand ageBand() {
 		return ageBand;
 	}
@@ -102,11 +114,15 @@ public final class Person {
 		return alive && health > 20 && (ageBand == AgeBand.ADULT || ageBand == AgeBand.ELDER);
 	}
 
+	public boolean needsCare() {
+		return ageBand == AgeBand.INFANT || ageBand == AgeBand.CHILD || ageBand == AgeBand.ELDER;
+	}
+
 	public boolean canProvideCare() {
 		return alive && health > 20 && ageBand != AgeBand.INFANT && ageBand != AgeBand.CHILD;
 	}
 
-	void initializeAge(AgeBand band, long days) {
+	public void initializeAge(AgeBand band, long days) {
 		if (days < 0) {
 			throw new IllegalArgumentException("Age cannot be negative");
 		}
@@ -198,6 +214,10 @@ public final class Person {
 
 	public int trustIn(String otherPersonId) {
 		return trust.getOrDefault(otherPersonId, 0);
+	}
+
+	public Map<String, Integer> trustedPeople() {
+		return Map.copyOf(trust);
 	}
 
 	public void adjustTrust(String otherPersonId, int delta) {
@@ -301,6 +321,17 @@ public final class Person {
 			throw new IllegalArgumentException("Grievance increase cannot be negative");
 		}
 		grievance = Math.min(100, grievance + amount);
+	}
+
+	public void restoreSocialState(int restoredGrievance, int restoredSocialHours, int restoredPreviousSocialHours) {
+		if (restoredGrievance < 0 || restoredGrievance > 100
+			|| restoredSocialHours < 0 || restoredSocialHours > 6
+			|| restoredPreviousSocialHours < 0 || restoredPreviousSocialHours > 6) {
+			throw new IllegalArgumentException("Invalid restored social state");
+		}
+		grievance = restoredGrievance;
+		socialHours = restoredSocialHours;
+		previousSocialHours = restoredPreviousSocialHours;
 	}
 
 	void startDay() {

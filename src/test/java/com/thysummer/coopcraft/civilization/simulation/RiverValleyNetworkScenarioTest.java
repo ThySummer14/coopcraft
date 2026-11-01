@@ -17,7 +17,7 @@ class RiverValleyNetworkScenarioTest {
 		assertEquals(first.world().ledger().events(), replay.world().ledger().events());
 		assertEquals(first.reports(), replay.reports());
 		assertTrue(count(first, EventType.MIGRATED) > 0);
-		assertTrue(first.world().peopleInCamp(RiverValleyNetworkScenario.RIDGE_CAMP_ID).size() > 0);
+		assertTrue(first.world().peopleInCamp(RiverValleyScenario.CAMP_ID).size() > 0);
 		assertTrue(first.world().ledger().events().stream()
 			.anyMatch(event -> event.type() == EventType.INFORMATION_SHARED && event.context().containsKey("routeId")));
 

@@ -12,13 +12,19 @@ import java.util.UUID;
 import com.thysummer.coopcraft.civilization.simulation.Camp;
 import com.thysummer.coopcraft.civilization.simulation.EventType;
 import com.thysummer.coopcraft.civilization.simulation.Household;
+import com.thysummer.coopcraft.civilization.simulation.Norm;
+import com.thysummer.coopcraft.civilization.simulation.NormProposal;
+import com.thysummer.coopcraft.civilization.simulation.NormSystem;
 import com.thysummer.coopcraft.civilization.simulation.Person;
 import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 import com.thysummer.coopcraft.civilization.simulation.ResourceFlow;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
+import com.thysummer.coopcraft.civilization.simulation.SimulationConfig;
 import com.thysummer.coopcraft.civilization.simulation.SimulationEvent;
 import com.thysummer.coopcraft.civilization.simulation.SimulationWorld;
+import com.thysummer.coopcraft.civilization.simulation.SocialInformation;
 import com.thysummer.coopcraft.civilization.simulation.StorageOwner;
+import com.thysummer.coopcraft.civilization.simulation.WorkType;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -27,13 +33,23 @@ import net.minecraft.nbt.StringTag;
 public final class SettlementSimulationState {
 	private final Settlement settlement;
 	private final SimulationWorld world;
+	private final NormSystem norms;
+	private static final int DAILY_FOOD_UNIT_CAP = 3;
+
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
+	private final Map<String, Integer> foodAllocations = new LinkedHashMap<>();
 	private boolean survivalEnabled;
+	private boolean productionEnabled;
+	private boolean growthEnabled;
+	private boolean skillsEnabled;
+	private boolean normsEnabled;
 	private long lastSurvivalDay = Long.MIN_VALUE;
+	private long foodAllocationDay = Long.MIN_VALUE;
 
 	private SettlementSimulationState(Settlement settlement, SimulationWorld world) {
 		this.settlement = settlement;
 		this.world = world;
+		this.norms = new NormSystem(world, SimulationConfig.defaults());
 	}
 
 	public static SettlementSimulationState create(Settlement settlement) {
@@ -44,6 +60,10 @@ public final class SettlementSimulationState {
 
 	public SimulationWorld world() {
 		return world;
+	}
+
+	public NormSystem norms() {
+		return norms;
 	}
 
 	public StorageOwner campOwner() {
@@ -62,6 +82,38 @@ public final class SettlementSimulationState {
 		return survivalEnabled;
 	}
 
+	public boolean productionEnabled() {
+		return productionEnabled;
+	}
+
+	public void setProductionEnabled(boolean enabled) {
+		productionEnabled = enabled;
+	}
+
+	public boolean growthEnabled() {
+		return growthEnabled;
+	}
+
+	public void setGrowthEnabled(boolean enabled) {
+		growthEnabled = enabled;
+	}
+
+	public boolean skillsEnabled() {
+		return skillsEnabled;
+	}
+
+	public void setSkillsEnabled(boolean enabled) {
+		skillsEnabled = enabled;
+	}
+
+	public boolean normsEnabled() {
+		return normsEnabled;
+	}
+
+	public void setNormsEnabled(boolean enabled) {
+		normsEnabled = enabled;
+	}
+
 	public long lastSurvivalDay() {
 		return lastSurvivalDay;
 	}
@@ -75,13 +127,80 @@ public final class SettlementSimulationState {
 		lastSurvivalDay = currentDay;
 	}
 
+	public int remainingFoodUnits(String personId) {
+		if (foodAllocationDay != world.day()) {
+			return dailyFoodUnitCap(personId);
+		}
+		return Math.max(0, dailyFoodUnitCap(personId) - foodAllocations.getOrDefault(personId, 0));
+	}
+
+	public void recordFoodAllocation(String personId, int units) {
+		if (units <= 0) {
+			throw new IllegalArgumentException("Allocated food units must be positive");
+		}
+		if (foodAllocationDay != world.day()) {
+			foodAllocationDay = world.day();
+			foodAllocations.clear();
+		}
+		int total = foodAllocations.getOrDefault(personId, 0) + units;
+		if (total > dailyFoodUnitCap(personId)) {
+			throw new IllegalArgumentException("Daily food allocation cap exceeded");
+		}
+		foodAllocations.put(personId, total);
+	}
+
+	private int dailyFoodUnitCap(String personId) {
+		int baseCap = normsEnabled ? world.norm(campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
+			.filter(Norm::isActive)
+			.map(Norm::allocationUnitCap)
+			.orElse(DAILY_FOOD_UNIT_CAP) : DAILY_FOOD_UNIT_CAP;
+		if (!normsEnabled || !world.person(personId).needsCare()) {
+			return baseCap;
+		}
+		return baseCap + world.norm(campOwner().id(), Norm.CARE_FIRST_COMMON_STORE)
+			.filter(Norm::isActive)
+			.map(Norm::allocationUnitCap)
+			.orElse(0);
+	}
+
 	public boolean mapResident(UUID villagerId, boolean child, int satiety) {
+		return mapResident(villagerId, child, satiety, householdId(villagerId));
+	}
+
+	public boolean mapResidentWithParents(UUID villagerId, int satiety, UUID firstParentId, UUID secondParentId) {
 		if (residentIds.containsKey(villagerId)) {
 			return false;
 		}
-		String householdId = householdId(villagerId);
+		if (firstParentId.equals(secondParentId)) {
+			throw new IllegalArgumentException("Birth parents must be distinct");
+		}
+		String firstPersonId = residentId(firstParentId)
+			.orElseThrow(() -> new IllegalArgumentException("Birth parents must be mapped residents"));
+		String secondPersonId = residentId(secondParentId)
+			.orElseThrow(() -> new IllegalArgumentException("Birth parents must be mapped residents"));
+		Person firstParent = world.person(firstPersonId);
+		Person secondParent = world.person(secondPersonId);
+		if (!firstParent.canMakeDecisions() || !secondParent.canMakeDecisions()) {
+			throw new IllegalArgumentException("Birth parents must be living adults");
+		}
+		mapResident(villagerId, true, satiety, firstParent.householdId());
+		world.recordBirth(firstPersonId, secondPersonId, personId(villagerId), Map.of(
+			"source", "minecraft_villager",
+			"villagerId", villagerId.toString(),
+			"firstParentVillagerId", firstParentId.toString(),
+			"secondParentVillagerId", secondParentId.toString()
+		));
+		return true;
+	}
+
+	private boolean mapResident(UUID villagerId, boolean child, int satiety, String householdId) {
+		if (residentIds.containsKey(villagerId)) {
+			return false;
+		}
 		String personId = personId(villagerId);
-		world.registerHousehold(new Household(householdId, campId(settlement)));
+		if (world.households().stream().noneMatch(household -> household.id().equals(householdId))) {
+			world.registerHousehold(new Household(householdId, campId(settlement)));
+		}
 		Person person = new Person(
 			personId,
 			campId(settlement),
@@ -109,7 +228,21 @@ public final class SettlementSimulationState {
 		tag.putLong("Day", world.day());
 		tag.putLong("NextBatchId", world.nextBatchId());
 		tag.putBoolean("SurvivalEnabled", survivalEnabled);
+		tag.putBoolean("ProductionEnabled", productionEnabled);
+		tag.putBoolean("GrowthEnabled", growthEnabled);
+		tag.putBoolean("SkillsEnabled", skillsEnabled);
+		tag.putBoolean("NormsEnabled", normsEnabled);
 		tag.putLong("LastSurvivalDay", lastSurvivalDay);
+		tag.putLong("FoodAllocationDay", foodAllocationDay);
+		ListTag allocations = new ListTag();
+		for (Map.Entry<String, Integer> entry : foodAllocations.entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag allocation = new CompoundTag();
+			allocation.putString("PersonId", entry.getKey());
+			allocation.putInt("Units", entry.getValue());
+			allocations.add(allocation);
+		}
+		tag.put("FoodAllocations", allocations);
 		ListTag residents = new ListTag();
 		for (Map.Entry<UUID, String> entry : residentIds.entrySet().stream()
 			.sorted(Map.Entry.comparingByKey(Comparator.comparing(UUID::toString)))
@@ -120,8 +253,18 @@ public final class SettlementSimulationState {
 			resident.putString("PersonId", person.id());
 			resident.putString("HouseholdId", person.householdId());
 			resident.putString("AgeBand", person.ageBand().name());
+			resident.putLong("AgeDays", person.ageDays());
 			resident.putInt("Hunger", person.hunger());
 			resident.putInt("RiskPreference", person.riskPreference());
+			if (!person.parents().isEmpty()) {
+				resident.put("Parents", saveStrings(person.parents()));
+			}
+			CompoundTag skills = new CompoundTag();
+			for (WorkType workType : WorkType.values()) {
+				skills.putDouble(workType.name(), person.skill(workType));
+			}
+			resident.put("Skills", skills);
+			resident.put("Social", saveSocial(person));
 			residents.add(resident);
 		}
 		tag.put("Residents", residents);
@@ -135,14 +278,29 @@ public final class SettlementSimulationState {
 			events.add(saveEvent(event));
 		}
 		tag.put("Events", events);
+		ListTag savedNorms = new ListTag();
+		for (Norm norm : world.normsForCamp(campOwner().id())) {
+			savedNorms.add(saveNorm(norm));
+		}
+		tag.put("Norms", savedNorms);
+		ListTag proposals = new ListTag();
+		for (NormProposal proposal : world.proposalsForCamp(campOwner().id())) {
+			proposals.add(saveProposal(proposal));
+		}
+		tag.put("NormProposals", proposals);
 		return tag;
 	}
 
 	static SettlementSimulationState load(Settlement settlement, CompoundTag tag) {
 		SettlementSimulationState state = create(settlement);
 		state.survivalEnabled = tag.contains("SurvivalEnabled") && tag.getBoolean("SurvivalEnabled");
+		state.productionEnabled = tag.contains("ProductionEnabled") && tag.getBoolean("ProductionEnabled");
+		state.growthEnabled = tag.contains("GrowthEnabled") && tag.getBoolean("GrowthEnabled");
+		state.skillsEnabled = tag.contains("SkillsEnabled") && tag.getBoolean("SkillsEnabled");
+		state.normsEnabled = tag.contains("NormsEnabled") && tag.getBoolean("NormsEnabled");
 		state.lastSurvivalDay = tag.contains("LastSurvivalDay") ? tag.getLong("LastSurvivalDay") : Long.MIN_VALUE;
 		ListTag residents = tag.getList("Residents", ListTag.TAG_COMPOUND);
+		Map<String, List<String>> parentage = new LinkedHashMap<>();
 		for (int i = 0; i < residents.size(); i++) {
 			CompoundTag resident = residents.getCompound(i);
 			String householdId = resident.getString("HouseholdId");
@@ -157,8 +315,26 @@ public final class SettlementSimulationState {
 				resident.getInt("Hunger"),
 				resident.getInt("RiskPreference")
 			);
+			if (resident.contains("AgeDays")) {
+				person.initializeAge(person.ageBand(), resident.getLong("AgeDays"));
+			}
+			CompoundTag skills = resident.getCompound("Skills");
+			for (WorkType workType : WorkType.values()) {
+				if (skills.contains(workType.name())) {
+					person.setSkill(workType, skills.getDouble(workType.name()));
+				}
+			}
+			if (resident.contains("Social")) {
+				loadSocial(person, resident.getCompound("Social"));
+			}
 			state.world.registerPerson(person);
 			state.residentIds.put(resident.getUUID("VillagerId"), person.id());
+			if (resident.contains("Parents")) {
+				parentage.put(person.id(), loadStrings(resident.getList("Parents", ListTag.TAG_STRING)));
+			}
+		}
+		for (Map.Entry<String, List<String>> entry : parentage.entrySet()) {
+			state.world.restoreParentage(entry.getKey(), entry.getValue());
 		}
 		List<SimulationWorld.RestoredBatch> batches = new ArrayList<>();
 		ListTag batchList = tag.getList("Batches", ListTag.TAG_COMPOUND);
@@ -171,7 +347,194 @@ public final class SettlementSimulationState {
 			events.add(loadEvent(eventList.getCompound(i)));
 		}
 		state.world.restoreState(tag.getLong("Day"), tag.getLong("NextBatchId"), batches, events);
+		ListTag savedNorms = tag.getList("Norms", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < savedNorms.size(); i++) {
+			state.world.registerNorm(loadNorm(savedNorms.getCompound(i)));
+		}
+		ListTag proposals = tag.getList("NormProposals", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < proposals.size(); i++) {
+			state.world.registerProposal(loadProposal(proposals.getCompound(i)));
+		}
+		state.foodAllocationDay = tag.contains("FoodAllocationDay") ? tag.getLong("FoodAllocationDay") : Long.MIN_VALUE;
+		ListTag allocations = tag.getList("FoodAllocations", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < allocations.size(); i++) {
+			CompoundTag allocation = allocations.getCompound(i);
+			int units = allocation.getInt("Units");
+			if (units <= 0) {
+				throw new IllegalArgumentException("Restored food allocation must be positive");
+			}
+			if (state.foodAllocationDay != state.world.day()) {
+				state.foodAllocationDay = state.world.day();
+				state.foodAllocations.clear();
+			}
+			state.foodAllocations.put(allocation.getString("PersonId"), units);
+		}
 		return state;
+	}
+
+	private static CompoundTag saveSocial(Person person) {
+		CompoundTag tag = new CompoundTag();
+		tag.putInt("Grievance", person.grievance());
+		tag.putInt("SocialHours", person.socialHours());
+		tag.putInt("PreviousSocialHours", person.previousSocialHours());
+		ListTag trust = new ListTag();
+		for (Map.Entry<String, Integer> entry : person.trustedPeople().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag relationship = new CompoundTag();
+			relationship.putString("PersonId", entry.getKey());
+			relationship.putInt("Value", entry.getValue());
+			trust.add(relationship);
+		}
+		tag.put("Trust", trust);
+		tag.put("ObservedNorms", saveStrings(person.observedNorms().stream().sorted().toList()));
+		ListTag information = new ListTag();
+		for (SocialInformation known : person.information()) {
+			information.add(saveInformation(known));
+		}
+		tag.put("Information", information);
+		return tag;
+	}
+
+	private static void loadSocial(Person person, CompoundTag tag) {
+		person.restoreSocialState(tag.getInt("Grievance"), tag.getInt("SocialHours"), tag.getInt("PreviousSocialHours"));
+		ListTag trust = tag.getList("Trust", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < trust.size(); i++) {
+			CompoundTag relationship = trust.getCompound(i);
+			person.setTrust(relationship.getString("PersonId"), relationship.getInt("Value"));
+		}
+		for (String normId : loadStrings(tag.getList("ObservedNorms", ListTag.TAG_STRING))) {
+			person.observeNorm(normId);
+		}
+		ListTag information = tag.getList("Information", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < information.size(); i++) {
+			person.learnInformation(loadInformation(information.getCompound(i)));
+		}
+	}
+
+	private static CompoundTag saveInformation(SocialInformation information) {
+		CompoundTag tag = new CompoundTag();
+		tag.putString("InformationId", information.informationId());
+		tag.putString("Kind", information.kind().name());
+		tag.putString("SubjectId", information.subjectId());
+		tag.putString("ObjectId", information.objectId());
+		tag.putLong("SourceEventId", information.sourceEventId());
+		tag.putLong("LearnedDay", information.learnedDay());
+		if (information.learnedFrom() != null) {
+			tag.putString("LearnedFrom", information.learnedFrom());
+		}
+		tag.putDouble("Confidence", information.confidence());
+		return tag;
+	}
+
+	private static SocialInformation loadInformation(CompoundTag tag) {
+		return new SocialInformation(
+			tag.getString("InformationId"),
+			SocialInformation.Kind.valueOf(tag.getString("Kind")),
+			tag.getString("SubjectId"),
+			tag.getString("ObjectId"),
+			tag.getLong("SourceEventId"),
+			tag.getLong("LearnedDay"),
+			tag.contains("LearnedFrom") ? tag.getString("LearnedFrom") : null,
+			tag.getDouble("Confidence")
+		);
+	}
+
+	private static CompoundTag saveNorm(Norm norm) {
+		CompoundTag tag = new CompoundTag();
+		tag.putString("NormId", norm.normId());
+		tag.putString("CampId", norm.campId());
+		tag.putInt("AllocationUnitCap", norm.allocationUnitCap());
+		tag.put("Supporters", saveStrings(norm.supporters().stream().sorted().toList()));
+		tag.put("Opponents", saveStrings(norm.opponents().stream().sorted().toList()));
+		tag.put("KnownBy", saveStrings(norm.knownBy().stream().sorted().toList()));
+		tag.putInt("Stability", norm.stability());
+		tag.putString("Status", norm.status().name());
+		ListTag revisions = new ListTag();
+		for (Norm.Revision revision : norm.revisionHistory()) {
+			CompoundTag saved = new CompoundTag();
+			saved.putLong("Day", revision.day());
+			saved.putString("ProposalId", revision.proposalId());
+			saved.putLong("EventId", revision.eventId());
+			saved.putInt("PreviousCap", revision.previousCap());
+			saved.putInt("NewCap", revision.newCap());
+			saved.putString("Action", revision.action().name());
+			revisions.add(saved);
+		}
+		tag.put("Revisions", revisions);
+		return tag;
+	}
+
+	private static Norm loadNorm(CompoundTag tag) {
+		List<Norm.Revision> revisions = new ArrayList<>();
+		ListTag savedRevisions = tag.getList("Revisions", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < savedRevisions.size(); i++) {
+			CompoundTag revision = savedRevisions.getCompound(i);
+			revisions.add(new Norm.Revision(
+				revision.getLong("Day"),
+				revision.getString("ProposalId"),
+				revision.getLong("EventId"),
+				revision.getInt("PreviousCap"),
+				revision.getInt("NewCap"),
+				Norm.Revision.Action.valueOf(revision.getString("Action"))
+			));
+		}
+		return new Norm(
+			tag.getString("NormId"),
+			tag.getString("CampId"),
+			tag.getInt("AllocationUnitCap"),
+			Set.copyOf(loadStrings(tag.getList("Supporters", ListTag.TAG_STRING))),
+			Set.copyOf(loadStrings(tag.getList("Opponents", ListTag.TAG_STRING))),
+			Set.copyOf(loadStrings(tag.getList("KnownBy", ListTag.TAG_STRING))),
+			tag.getInt("Stability"),
+			Norm.Status.valueOf(tag.getString("Status")),
+			revisions
+		);
+	}
+
+	private static CompoundTag saveProposal(NormProposal proposal) {
+		CompoundTag tag = new CompoundTag();
+		tag.putString("ProposalId", proposal.proposalId());
+		tag.putString("CampId", proposal.campId());
+		tag.putString("NormId", proposal.normId());
+		tag.putString("ProposerId", proposal.proposerId());
+		tag.putLong("ProposedDay", proposal.proposedDay());
+		tag.putLong("OriginEventId", proposal.originEventId());
+		tag.putInt("AllocationUnitCap", proposal.allocationUnitCap());
+		tag.putInt("Revision", proposal.revision());
+		tag.putInt("Rounds", proposal.rounds());
+		tag.putString("Status", proposal.status().name());
+		ListTag positions = new ListTag();
+		for (Map.Entry<String, NormProposal.Position> entry : proposal.positions().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag position = new CompoundTag();
+			position.putString("PersonId", entry.getKey());
+			position.putString("Position", entry.getValue().name());
+			positions.add(position);
+		}
+		tag.put("Positions", positions);
+		return tag;
+	}
+
+	private static NormProposal loadProposal(CompoundTag tag) {
+		Map<String, NormProposal.Position> positions = new LinkedHashMap<>();
+		ListTag savedPositions = tag.getList("Positions", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < savedPositions.size(); i++) {
+			CompoundTag position = savedPositions.getCompound(i);
+			positions.put(position.getString("PersonId"), NormProposal.Position.valueOf(position.getString("Position")));
+		}
+		return NormProposal.restore(
+			tag.getString("ProposalId"),
+			tag.getString("CampId"),
+			tag.getString("NormId"),
+			tag.getString("ProposerId"),
+			tag.getLong("ProposedDay"),
+			tag.getLong("OriginEventId"),
+			tag.getInt("AllocationUnitCap"),
+			tag.getInt("Revision"),
+			tag.getInt("Rounds"),
+			NormProposal.Status.valueOf(tag.getString("Status")),
+			positions
+		);
 	}
 
 	private static CompoundTag saveBatch(ResourceBatch batch) {

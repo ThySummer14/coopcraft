@@ -27,8 +27,9 @@ public final class RiverValleyNetworkScenario {
 				"ridge-person-" + String.format("%02d", index), RIDGE_CAMP_ID, "ridge-household-" + household,
 				ageBand, 45 + index * 5 % 35, index * 29 % 101
 			);
-			WorkType preferred = WorkType.values()[index % WorkType.values().length];
-			for (WorkType workType : WorkType.values()) {
+			WorkType[] workTypes = WorkType.harvestingTypes();
+			WorkType preferred = workTypes[index % workTypes.length];
+			for (WorkType workType : workTypes) {
 				person.setSkill(workType, workType == preferred ? 1.2 + index % 3 * 0.1 : 0.7 + index % 4 * 0.05);
 			}
 			person.observeNorm("neighbor-requests");

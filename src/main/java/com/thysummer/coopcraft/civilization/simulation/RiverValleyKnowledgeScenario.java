@@ -21,7 +21,8 @@ public final class RiverValleyKnowledgeScenario {
 				continue;
 			}
 			int index = Integer.parseInt(person.id().substring("person-".length()));
-			person.learnTechnique(WorkType.values()[index % WorkType.values().length]);
+			WorkType[] workTypes = WorkType.harvestingTypes();
+			person.learnTechnique(workTypes[index % workTypes.length]);
 		}
 		return new PrimitiveSocietySimulation(world, config, demographyConfig, knowledgeConfig, seed);
 	}

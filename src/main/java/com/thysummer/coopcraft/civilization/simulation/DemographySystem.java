@@ -77,6 +77,46 @@ public final class DemographySystem {
 		processBirths(random);
 	}
 
+	public boolean synchronizeObservedAgeBand(Person person, Person.AgeBand observed, Map<String, String> context) {
+		if (person.ageBand() == observed) {
+			return false;
+		}
+		Person.AgeBand previous = person.ageBand();
+		person.initializeAge(observed, representativeAgeDays(observed));
+		recordObservedLifeStage(person, previous, context);
+		return true;
+	}
+
+	public boolean advanceObservedAgeDay(Person person, Map<String, String> context) {
+		person.advanceAgeDays();
+		if (person.ageBand() != Person.AgeBand.ADULT
+			|| person.ageDays() < (long) config.elderStartYears() * config.daysPerYear()) {
+			return false;
+		}
+		Person.AgeBand previous = person.ageBand();
+		person.updateAgeBand(Person.AgeBand.ELDER);
+		recordObservedLifeStage(person, previous, context);
+		return true;
+	}
+
+	private void recordObservedLifeStage(Person person, Person.AgeBand previous, Map<String, String> context) {
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("previous", previous.name());
+		eventContext.put("current", person.ageBand().name());
+		eventContext.put("ageDays", Long.toString(person.ageDays()));
+		world.recordSocialEvent(EventType.LIFE_STAGE_CHANGED, List.of(person.id()), eventContext, List.of());
+	}
+
+	private static long representativeAgeDays(Person.AgeBand ageBand) {
+		return switch (ageBand) {
+			case INFANT -> 360;
+			case CHILD -> 8 * 360;
+			case ADOLESCENT -> 15 * 360;
+			case ADULT -> 30 * 360;
+			case ELDER -> 65 * 360;
+		};
+	}
+
 	private Optional<Person> findCaregiver(Person dependent) {
 		return world.peopleInCamp(dependent.campId()).stream()
 			.filter(candidate -> !candidate.id().equals(dependent.id()))
@@ -147,12 +187,7 @@ public final class DemographySystem {
 			String childId = "child-" + world.ledger().nextEventId();
 			Person child = new Person(childId, household.campId(), household.id(), Person.AgeBand.INFANT, 20, random.nextInt(101));
 			world.registerPerson(child);
-			world.recordSocialEvent(
-				EventType.BIRTH,
-				List.of(adults.getFirst().id(), adults.get(1).id(), childId),
-				Map.of("householdId", household.id(), "campId", household.campId()),
-				List.of()
-			);
+			world.recordBirth(adults.getFirst().id(), adults.get(1).id(), childId, Map.of());
 		}
 	}
 

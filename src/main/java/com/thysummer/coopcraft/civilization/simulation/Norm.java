@@ -7,6 +7,7 @@ import java.util.Set;
 
 public final class Norm {
 	public static final String NEED_FIRST_COMMON_STORE = "need-first-common-store";
+	public static final String CARE_FIRST_COMMON_STORE = "care-first-common-store";
 
 	private final String normId;
 	private final String campId;
