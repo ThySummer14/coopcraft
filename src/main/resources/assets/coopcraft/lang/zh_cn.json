@@ -86,5 +86,22 @@
 	"coopcraft.resource.marked": "已标记为聚落资源点，村民会前来采集；再次潜行右击可取消",
 	"coopcraft.resource.unmarked": "已取消此资源点，村民不会再采集这里",
 	"key.coopcraft.inspect": "检视手持工具",
-	"key.coopcraft.capture": "连拍截图（调试）"
+	"key.coopcraft.capture": "连拍截图（调试）",
+	"key.coopcraft.waypoints": "路径点列表",
+	"key.coopcraft.add_waypoint": "在当前位置添加路径点",
+	"coopcraft.waypoint.new_title": "新建路径点",
+	"coopcraft.waypoint.name_hint": "给这个点起个名字",
+	"coopcraft.waypoint.confirm": "添加",
+	"coopcraft.waypoint.list_header": "共享路径点（%s 个）",
+	"coopcraft.waypoint.list_entry": "%s  %s  %s  %s  %s",
+	"coopcraft.waypoint.remove_button": "[删除]",
+	"coopcraft.waypoint.remove_hover": "删除路径点「%s」",
+	"coopcraft.waypoint.empty": "还没有路径点。按 N 在当前脚下添加一个。",
+	"coopcraft.waypoint.added": "已添加路径点「%s」（%s, %s, %s）",
+	"coopcraft.waypoint.exists": "这附近已经有点了：%s",
+	"coopcraft.waypoint.full": "路径点已达上限（%s 个），先删掉几个吧。",
+	"coopcraft.waypoint.removed": "已删除路径点「%s」",
+	"coopcraft.waypoint.missing": "这个路径点已经不在了。",
+	"coopcraft.waypoint.missing_name": "没有叫「%s」的路径点。",
+	"coopcraft.waypoint.ambiguous": "有 %s 个同名路径点，改用列表里的删除按钮吧。"
 }
