@@ -42,3 +42,6 @@ replay_*.log
 
 # local third-party source checkouts
 references/DangoMusic/
+
+# 整合包构建缓存
+/packbuild/

@@ -13,6 +13,10 @@ repositories {
 loom {
 	splitEnvironmentSourceSets()
 
+	// GuiMixin 需要引用原版 private 的 Gui$HeartType（区分普通红心与中毒/凋零/吸收心），
+	// 只放开这一个类的可见性，不改任何行为。
+	accessWidenerPath = file("src/main/resources/coopcraft.accesswidener")
+
 	runs {
 		gameTest {
 			inherit server

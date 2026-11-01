@@ -151,5 +151,22 @@
 	"coopcraft.resource.marked": "Marked as a settlement resource. Villagers will gather here; sneak-use again to unmark",
 	"coopcraft.resource.unmarked": "Resource unmarked. Villagers will no longer gather here",
 	"key.coopcraft.inspect": "Inspect Held Tool",
-	"key.coopcraft.capture": "Capture Screenshot Burst (debug)"
+	"key.coopcraft.capture": "Capture Screenshot Burst (debug)",
+	"key.coopcraft.waypoints": "Waypoint list",
+	"key.coopcraft.add_waypoint": "Add waypoint here",
+	"coopcraft.waypoint.new_title": "New waypoint",
+	"coopcraft.waypoint.name_hint": "Name this spot",
+	"coopcraft.waypoint.confirm": "Add",
+	"coopcraft.waypoint.list_header": "Shared waypoints (%s)",
+	"coopcraft.waypoint.list_entry": "%s  %s  %s  %s  %s",
+	"coopcraft.waypoint.remove_button": "[remove]",
+	"coopcraft.waypoint.remove_hover": "Remove waypoint %s",
+	"coopcraft.waypoint.empty": "No waypoints yet. Press N to add one at your feet.",
+	"coopcraft.waypoint.added": "Waypoint %s added at %s, %s, %s",
+	"coopcraft.waypoint.exists": "There is already one nearby: %s",
+	"coopcraft.waypoint.full": "Waypoint limit reached (%s). Remove a few first.",
+	"coopcraft.waypoint.removed": "Waypoint %s removed",
+	"coopcraft.waypoint.missing": "That waypoint is gone.",
+	"coopcraft.waypoint.missing_name": "No waypoint named %s.",
+	"coopcraft.waypoint.ambiguous": "%s waypoints share that name; use the remove button in the list."
 }

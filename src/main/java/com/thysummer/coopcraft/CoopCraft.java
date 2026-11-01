@@ -4,9 +4,11 @@ import com.thysummer.coopcraft.automation.Automation;
 import com.thysummer.coopcraft.civilization.Civilization;
 import com.thysummer.coopcraft.civilization.SettlementSavedData;
 import com.thysummer.coopcraft.net.CoopNetworking;
+import com.thysummer.coopcraft.waypoint.Waypoints;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -24,6 +26,7 @@ public class CoopCraft implements ModInitializer {
 		Automation.register();
 		Civilization.register();
 		CoopNetworking.registerPayloads();
+		Waypoints.register();
 
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
 			if (entity instanceof ServerPlayer player) {
@@ -31,6 +34,14 @@ public class CoopCraft implements ModInitializer {
 			}
 			if (entity instanceof Villager villager && entity.level() instanceof ServerLevel serverLevel) {
 				SettlementSavedData.get(serverLevel).removeMember(villager.getUUID());
+			}
+		});
+
+		// 队友血量每秒推一次。心跳式轮询而不是监听伤害事件：
+		// 回血、自然恢复、药水效果都不走伤害路径，只在受伤时推送会看到过期的血条。
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			if (server.getTickCount() % 20 == 0) {
+				CoopNetworking.broadcastTeamHealth(server);
 			}
 		});
 

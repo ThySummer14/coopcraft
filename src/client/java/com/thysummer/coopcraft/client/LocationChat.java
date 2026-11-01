@@ -35,7 +35,7 @@ public final class LocationChat {
 		client.gui.getChat().addMessage(message);
 	}
 
-	private static Component dimensionName(String dimension) {
+	static Component dimensionName(String dimension) {
 		return switch (dimension) {
 			case "minecraft:overworld" -> Component.translatable("coopcraft.dimension.overworld");
 			case "minecraft:the_nether" -> Component.translatable("coopcraft.dimension.the_nether");
