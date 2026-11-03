@@ -45,3 +45,5 @@ references/DangoMusic/
 
 # 整合包构建缓存
 /packbuild/
+__pycache__/
+*.pyc
