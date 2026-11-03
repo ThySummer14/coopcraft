@@ -1,7 +1,6 @@
 package com.thysummer.coopcraft.client;
 
 import com.thysummer.coopcraft.CoopCraft;
-import com.thysummer.coopcraft.client.anim.ToolAnimationController;
 import com.thysummer.coopcraft.net.AdvancementToastPayload;
 import com.thysummer.coopcraft.net.TeamHealthPayload;
 
@@ -35,13 +34,8 @@ public class CoopCraftClient implements ClientModInitializer {
 		BiomeTitles.register();
 		WaypointClient.register();
 
-		// 在这里主动取一次实例，触发类初始化——按键必须在客户端初始化阶段完成注册，
-		// 否则不会出现在「选项 → 控制」里，也没办法改键。
-		ToolAnimationController animationController = ToolAnimationController.INSTANCE;
-		ClientTickEvents.END_CLIENT_TICK.register(client -> {
-			animationController.tick();
-			CaptureHelper.tick();
-		});
+		// 原版第一人称手部/工具动画：不再接管 ItemInHandRenderer。
+		ClientTickEvents.END_CLIENT_TICK.register(client -> CaptureHelper.tick());
 
 		CaptureHelper.initialize();
 
