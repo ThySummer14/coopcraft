@@ -37,6 +37,7 @@ public class VillagerWorkGoal extends Goal {
 	private static final int EAT_TICKS = 40;
 	private static final int FORAGE_TICKS = 40;
 	private static final long FORAGE_RETRY_TICKS = 200;
+	private static final int FOOD_RESERVE_POINTS_PER_MEMBER = 8;
 
 	private final Villager villager;
 	private Action action;
@@ -44,6 +45,7 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private Settlement settlement;
+	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
 	private int searchCooldown;
 	private int travelTicks;
@@ -64,6 +66,9 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		settlement = workSettlement.get();
+		role = LaborAllocator.roleOf(
+			(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+		);
 		if (action == Action.EAT && isTargetValid()) {
 			return true;
 		}
@@ -256,6 +261,17 @@ public class VillagerWorkGoal extends Goal {
 		if (settlement == null || !SettlementSimulationService.hasGatherTime(settlementData(), settlement, villager.getUUID())) {
 			return null;
 		}
+		if (role == WorkRole.WOODCUTTER) {
+			BlockPos logs = nearestResource(true);
+			if (logs != null) {
+				return logs;
+			}
+		} else if (role == WorkRole.MINER) {
+			BlockPos stone = nearestResource(false);
+			if (stone != null) {
+				return stone;
+			}
+		}
 		if (needsSticks()) {
 			BlockPos logs = nearestResource(true);
 			if (logs != null) {
@@ -447,10 +463,22 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean shouldForage() {
-		return SettlementForaging.canForage(settlementData(), settlement)
-			&& SettlementForaging.needsForage(
-				hasFoodAvailable(), villager.level().getGameTime(), forageCooldownUntil
-			);
+		if (!SettlementForaging.canForage(settlementData(), settlement)) {
+			return false;
+		}
+		boolean missingFood = !hasFoodAvailable();
+		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
+		return SettlementForaging.needsForage(
+			missingFood || reserveLow, villager.level().getGameTime(), forageCooldownUntil
+		);
+	}
+
+	private boolean foodReserveLow() {
+		Container stockpile = SettlementStockpile.getStockpile(
+			(ServerLevel) villager.level(), settlementData(), settlement
+		);
+		return SettlementStockpile.communalFoodPoints(stockpile)
+			< settlementData().registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
 	}
 
 	private BlockPos findRipeBerryBush() {

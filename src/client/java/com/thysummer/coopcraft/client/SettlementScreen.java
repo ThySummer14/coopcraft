@@ -190,7 +190,11 @@ public class SettlementScreen extends Screen {
 		String position = resident.x() + ", " + resident.y() + ", " + resident.z();
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.resident", name, profession, position
-		), x, y, textWidth, maxY, PRIMARY_TEXT) + 10;
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 6;
+		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.resident_role",
+			Component.translatable("coopcraft.work_role." + resident.role())
+		), x, y, textWidth, maxY, SECONDARY_TEXT) + 6;
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.resident_summary",
 			Component.translatable("coopcraft.personality." + resident.archetype()),
