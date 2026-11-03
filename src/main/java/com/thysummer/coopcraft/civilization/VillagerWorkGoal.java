@@ -35,16 +35,20 @@ public class VillagerWorkGoal extends Goal {
 	private static final int CRAFT_TICKS = 60;
 	private static final int BUILD_TICKS = 20;
 	private static final int EAT_TICKS = 40;
+	private static final int FORAGE_TICKS = 40;
+	private static final long FORAGE_RETRY_TICKS = 200;
 
 	private final Villager villager;
 	private Action action;
 	private BlockPos target;
+	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private Settlement settlement;
 	private int progress;
 	private int searchCooldown;
 	private int travelTicks;
 	private int approachIndex;
+	private long forageCooldownUntil;
 
 	public VillagerWorkGoal(Villager villager) {
 		this.villager = villager;
@@ -78,9 +82,20 @@ public class VillagerWorkGoal extends Goal {
 			searchCooldown--;
 			return false;
 		}
+		if (shouldForage()) {
+			BlockPos bush = findRipeBerryBush();
+			if (bush != null) {
+				action = Action.FORAGE;
+				forageTarget = bush;
+				target = bush;
+				progress = 0;
+				return true;
+			}
+			forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
+		}
 		if (action != Action.BUILD) {
 			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
-				(ServerLevel) villager.level(), settlementData(), settlement, villager
+				(ServerLevel) villager.level(), settlementData(), settlement
 			);
 			if (buildTarget.isPresent()) {
 				currentBuildTarget = buildTarget.get();
@@ -117,6 +132,7 @@ public class VillagerWorkGoal extends Goal {
 	public void stop() {
 		action = null;
 		target = null;
+		forageTarget = null;
 		currentBuildTarget = null;
 		settlement = null;
 		progress = 0;
@@ -150,12 +166,14 @@ public class VillagerWorkGoal extends Goal {
 		progress++;
 		int baseDuration = switch (action) {
 			case GATHER -> hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
+			case FORAGE -> FORAGE_TICKS;
 			case BUILD -> BUILD_TICKS;
 			case EAT -> EAT_TICKS;
 			default -> CRAFT_TICKS;
 		};
 		var workType = switch (action) {
 			case GATHER -> VillagerPersonality.WorkType.GATHER;
+			case FORAGE -> VillagerPersonality.WorkType.GATHER;
 			case BUILD -> VillagerPersonality.WorkType.BUILD;
 			case EAT -> VillagerPersonality.WorkType.GENERAL;
 			default -> VillagerPersonality.WorkType.CRAFT;
@@ -175,6 +193,7 @@ public class VillagerWorkGoal extends Goal {
 
 		switch (action) {
 			case GATHER -> gather();
+			case FORAGE -> forage();
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
 			case BUILD -> ConstructionSystem.buildNext(
@@ -220,6 +239,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget == null ? null : currentBuildTarget.position();
+		}
+		if (action == Action.FORAGE) {
+			return forageTarget;
 		}
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).orElse(null);
@@ -310,7 +332,8 @@ public class VillagerWorkGoal extends Goal {
 			travelTicks = 0;
 		}
 		if (villager.getNavigation().isDone()) {
-			boolean moving = action == Action.BUILD ? navigateToConstructionApproach() : navigateTo(target.above());
+			boolean moving = action == Action.BUILD ? navigateToConstructionApproach()
+				: action == Action.FORAGE ? navigateToForageApproach() : navigateTo(target.above());
 			if (!moving) {
 				stop();
 			} else {
@@ -318,6 +341,27 @@ public class VillagerWorkGoal extends Goal {
 			}
 		}
 		return false;
+	}
+
+	private boolean navigateToForageApproach() {
+		ServerLevel level = (ServerLevel) villager.level();
+		List<BlockPos> candidates = new ArrayList<>();
+		for (Direction direction : Direction.Plane.HORIZONTAL) {
+			BlockPos candidate = target.relative(direction);
+			if (level.isPositionEntityTicking(candidate)
+				&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
+				&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
+				&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
+				candidates.add(candidate);
+			}
+		}
+		candidates.sort(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())));
+		for (BlockPos candidate : candidates) {
+			if (navigateTo(candidate)) {
+				return true;
+			}
+		}
+		return navigateTo(target);
 	}
 
 	private boolean navigateToConstructionApproach() {
@@ -383,8 +427,11 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.GATHER) {
 			return isGatherable(target);
 		}
+		if (action == Action.FORAGE) {
+			return SettlementForaging.isRipe(level.getBlockState(target));
+		}
 		if (action == Action.BUILD) {
-			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement, villager)
+			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
 		}
@@ -397,6 +444,27 @@ public class VillagerWorkGoal extends Goal {
 	private boolean shouldEat() {
 		return settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
 			&& hasFoodAvailable();
+	}
+
+	private boolean shouldForage() {
+		return SettlementForaging.canForage(settlementData(), settlement)
+			&& SettlementForaging.needsForage(
+				hasFoodAvailable(), villager.level().getGameTime(), forageCooldownUntil
+			);
+	}
+
+	private BlockPos findRipeBerryBush() {
+		if (!(villager.level() instanceof ServerLevel level)) {
+			return null;
+		}
+		return SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
+	}
+
+	private void forage() {
+		if (target == null || !(villager.level() instanceof ServerLevel level)) {
+			return;
+		}
+		SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
 	}
 
 	private boolean hasFoodAvailable() {
@@ -695,6 +763,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private enum Action {
 		GATHER,
+		FORAGE,
 		CRAFT_PICKAXE,
 		CRAFT_STICKS,
 		BUILD,

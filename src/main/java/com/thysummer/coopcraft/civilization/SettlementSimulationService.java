@@ -299,6 +299,17 @@ public final class SettlementSimulationService {
 		Item item,
 		int inserted
 	) {
+		return recordProduction(villager, data, settlement, item, inserted, "gather");
+	}
+
+	public static int recordProduction(
+		Villager villager,
+		SettlementSavedData data,
+		Settlement settlement,
+		Item item,
+		int inserted,
+		String activity
+	) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled() || inserted <= 0) {
 			return 0;
@@ -313,7 +324,7 @@ public final class SettlementSimulationService {
 		if (state.productionEnabled() && resourceType != null) {
 			moved = MinecraftStockpileAdapter.importToSimulation(
 				villager.getInventory(), state.world(), state.campOwner(), resourceType, inserted,
-				List.of(personId), Map.of("activity", "gather", "villagerId", villager.getUUID().toString())
+				List.of(personId), Map.of("activity", activity, "villagerId", villager.getUUID().toString())
 			);
 			if (moved > 0) {
 				productionEventId = state.world().ledger().events().getLast().eventId();
@@ -323,7 +334,7 @@ public final class SettlementSimulationService {
 		if (state.skillsEnabled()) {
 			boolean practiced = knowledge(state).practice(
 				state.world().person(personId), WorkType.GATHER,
-				Map.of("activity", "gather", "villagerId", villager.getUUID().toString()),
+				Map.of("activity", activity, "villagerId", villager.getUUID().toString()),
 				productionEventId < 0 ? List.of() : List.of(productionEventId)
 			);
 			if (practiced) {

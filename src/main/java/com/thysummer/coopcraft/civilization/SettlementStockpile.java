@@ -203,6 +203,29 @@ public final class SettlementStockpile {
 		return insertedTotal;
 	}
 
+	static int depositItem(Container stockpile, Container inventory, Item item) {
+		int insertedTotal = 0;
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			ItemStack stack = inventory.getItem(slot);
+			if (!stack.is(item)) {
+				continue;
+			}
+			int inserted = insert(stockpile, stack);
+			if (inserted == 0) {
+				continue;
+			}
+			stack.shrink(inserted);
+			if (stack.isEmpty()) {
+				inventory.setItem(slot, ItemStack.EMPTY);
+			}
+			insertedTotal += inserted;
+		}
+		if (insertedTotal > 0) {
+			inventory.setChanged();
+		}
+		return insertedTotal;
+	}
+
 	static int communalFoodPoints(Container stockpile) {
 		return stockpile == null ? 0 : foodPoints(stockpile);
 	}

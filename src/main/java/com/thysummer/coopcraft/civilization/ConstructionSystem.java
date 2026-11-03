@@ -20,14 +20,15 @@ import net.minecraft.world.phys.AABB;
 
 public final class ConstructionSystem {
 	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
+	private static final int[] BUILD_DISTANCES = {6, 12, 18};
 
 	private ConstructionSystem() {
 	}
 
-	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager) {
+	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
 		if (job == null) {
-			if (data.housingCapacity(settlement) > 0) {
+			if (!ConstructionPlanner.housingPlan(data, settlement).needsHousing()) {
 				return Optional.empty();
 			}
 			ConstructionPlan plan = BlueprintManager.get(STONE_COTTAGE);
@@ -125,10 +126,12 @@ public final class ConstructionSystem {
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {
-		for (Direction direction : new Direction[] {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-			BlockPos origin = settlement.center().relative(direction, 6);
-			if (canPlace(level, plan, origin)) {
-				return origin;
+		for (int distance : BUILD_DISTANCES) {
+			for (Direction direction : Direction.Plane.HORIZONTAL) {
+				BlockPos origin = settlement.center().relative(direction, distance);
+				if (canPlace(level, plan, origin)) {
+					return origin;
+				}
 			}
 		}
 		return null;
