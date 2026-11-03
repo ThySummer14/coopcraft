@@ -2,7 +2,7 @@
 
 与 CoopCraft 分开的第三方客户端模组、整合包产物和参考清单。CoopCraft 本体从 `build/libs/` 构建，不在 `mods/` 里重复保存。
 
-> 2026-11-03 注意：当前实际客户端为 **81 jar / 212 mods（79 第三方 + CoopCraft + DangoMusic）**；Better Combat 与 playerAnimator 已移除，恢复原版攻击/砍树动作。`dist/` 已重打为 **79 个第三方 + CoopCraft（180.3 MiB 下载 / 469 KiB 包体，SHA-256 `58dac22c…b8ee0882`）**，DangoMusic 仍按手动安装。当前有效清单以实例 `coopcraft-client-mod-manifest.json` 和 [PACK-MODS.md](PACK-MODS.md) 顶部说明为准。
+> 2026-11-03 注意：当前实际客户端为 **81 jar / 212 mods（79 第三方 + CoopCraft + DangoMusic）**；Better Combat 与 playerAnimator 已移除，恢复原版攻击/砍树动作。`dist/` 已重打为 **79 个第三方 + CoopCraft（180.3 MiB 下载 / 469 KiB 包体，SHA-256 `911ef73b…2cd49e3e`）**，DangoMusic 仍按手动安装。当前有效清单以实例 `coopcraft-client-mod-manifest.json` 和 [PACK-MODS.md](PACK-MODS.md) 顶部说明为准。
 
 ## 目录
 
@@ -17,7 +17,7 @@
 
 ## 客户端整合包
 
-`dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`：79 个第三方模组 + CoopCraft 本体（在 `overrides/mods/` 里），180.3 MiB 下载量，469 KiB 的包文件，SHA-256 `58dac22cddcc2dfa0f10be4527de2c72b15b501087215e0db1164efeb8ee0882`。
+`dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`：79 个第三方模组 + CoopCraft 本体（在 `overrides/mods/` 里），180.3 MiB 下载量，469 KiB 的包文件，SHA-256 `911ef73b8603e90db0d856002a92d25ad8b03965a3ddf2837ef272a02cd49e3e`。
 
 内容分四类：性能优化（Sodium、Lithium、ModernFix、FerriteCore、ImmediatelyFast、EntityCulling、Krypton、BadOptimizations 等）、界面提示（Jade、AppleSkin、Xaero 地图、Chat Heads、BetterF3）、实用功能（REI、LambdaDynamicLights、3D Skin Layers、I18NUpdateMod），以及从 GD656 养老包重新解析的 Fabric 1.21.1 内容（天境、BetterNether、农夫乐事、装饰、结构与驿站等）。BetterEnd 因与 Sodium 硬冲突而不包含。完整清单见 [PACK-MODS.md](PACK-MODS.md)。
 
