@@ -23,7 +23,7 @@ SEEDS = [
 
 YANGLAO_CONTENT = [
     "advanced-netherite", "aether-villages", "amendments", "another-furniture",
-    "basicweapons", "better-archeology", "better-combat", "betternether",
+    "basicweapons", "better-archeology", "betternether",
     "charm-of-undying", "ct-overhaul-village", "comforts", "deeperdarker",
     "double-doors", "easy-anvils", "easy-magic", "elytra-slot", "ends-delight",
     "farmers-delight-refabricated", "frights-delight", "geophilic", "handcrafted",
@@ -41,7 +41,7 @@ YANGLAO_CONTENT = [
 
 YANGLAO_DEPENDENCIES = [
     "balm", "bclib", "collective", "cristel-lib", "forge-config-api-port", "geckolib",
-    "lithostitched", "moogs-structure-lib", "moonlight", "owo-lib", "playeranimator",
+    "lithostitched", "moogs-structure-lib", "moonlight", "owo-lib",
     "puzzles-lib", "resourceful-config", "resourceful-lib", "terrablender", "trinkets",
     "worldweaver",
 ]

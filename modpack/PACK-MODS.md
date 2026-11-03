@@ -1,10 +1,10 @@
 # 客户端整合包模组清单
 
-> 2026-11-03 精简：当前实际客户端为 **81 个第三方模组 + CoopCraft + DangoMusic（83 jar / 214 mods）**，以实例目录 `coopcraft-client-mod-manifest.json` 为准。下表是历史 122 全集，保留版本/许可证/链接参考；未列出的模组已移到 `mods-disabled/trim-20261103`。`dist/` 已重打为 **81 个第三方 + CoopCraft（181.4 MiB / 455 KiB）**。
+> 2026-11-03：当前实际客户端为 **79 个第三方模组 + CoopCraft + DangoMusic（81 jar / 212 mods）**；Better Combat 与 playerAnimator 已移除并移到 `mods-disabled/vanilla-anim-20261103`，恢复原版攻击/砍树动作。下表是历史 122 全集，保留版本/许可证/链接参考。`dist/` 已重打为 **79 个第三方 + CoopCraft（180.3 MiB / 456 KiB）**。
 
 对应 `modpack/dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`，版本与哈希以包内 `modrinth.index.json` 为准。
 
-下表为历史 122 个第三方模组全集（不含 CoopCraft 本体）；当前 `dist/` 实际为 81 个。
+下表为历史 122 个第三方模组全集（不含 CoopCraft 本体）；当前 `dist/` 实际为 79 个。
 
 ## 性能优化
 
@@ -71,7 +71,6 @@
 | Another Furniture | `4.0.2` | LicenseRef-Custom | [another-furniture](https://modrinth.com/mod/another-furniture) |
 | Basic Weapons | `2.1.5+1.21.1` | GPL-3.0-only | [basicweapons](https://modrinth.com/mod/basicweapons) |
 | Better Archeology | `1.21.1-1.3.9` | MIT | [better-archeology](https://modrinth.com/mod/better-archeology) |
-| Better Combat | `2.4.0+1.21.1-fabric` | LicenseRef-All-Rights-Reserved | [better-combat](https://modrinth.com/mod/better-combat) |
 | BetterNether | `21.0.11` | MIT | [betternether](https://modrinth.com/mod/betternether) |
 | Charm of Undying | `9.1.0+1.21.1` | LGPL-3.0-or-later | [charm-of-undying](https://modrinth.com/mod/charm-of-undying) |
 | Comforts | `9.0.5+1.21.1` | LGPL-3.0-or-later | [comforts](https://modrinth.com/mod/comforts) |
@@ -143,7 +142,6 @@
 | Moonlight Lib | `1.21.1-3.7.2` | LicenseRef-LGPL-with-additional-dependency-clause | [moonlight](https://modrinth.com/mod/moonlight) |
 | oωo (owo-lib) | `0.12.15.4+1.21` | MIT | [owo-lib](https://modrinth.com/mod/owo-lib) |
 | Text Placeholder API | `2.4.2+1.21` | LGPL-3.0-only | [placeholder-api](https://modrinth.com/mod/placeholder-api) |
-| playerAnimator | `2.0.4+1.21.1-fabric` | MIT | [playeranimator](https://modrinth.com/mod/playeranimator) |
 | Puzzles Lib | `21.1.66` | MPL-2.0 | [puzzles-lib](https://modrinth.com/mod/puzzles-lib) |
 | Resourceful Config | `3.0.11` | MIT | [resourceful-config](https://modrinth.com/mod/resourceful-config) |
 | Resourceful Lib | `3.0.12` | MIT | [resourceful-lib](https://modrinth.com/mod/resourceful-lib) |
