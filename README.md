@@ -70,7 +70,7 @@
 
 ## 整合包附加模组
 
-`modpack/mods/` 已加入 **DangoMusic 1.5.0-coopcraft.1（1.21.1 Fabric 客户端版）**，游戏内默认按 `M` 打开网易云音乐播放器。此修订版基于官方 v1.5.0，修复三个辉光着色器引用缺失顶点文件的问题。它与 CoopCraft 分开加载，不需要安装到服务端。安装方式、上游来源、SHA-256、修改版源码和 GPL-3.0 许可说明见 [整合包说明](modpack/README.md)。
+`modpack/mods/` 已加入 **DangoMusic 1.5.0-coopcraft.2（1.21.1 Fabric 客户端版）**，游戏内默认按 `M` 打开网易云音乐播放器。此修订版基于官方 v1.5.0，修复三个辉光着色器引用缺失顶点文件的问题；`.2` 增加灵动岛/Now Playing 的 X/Y 位置设置，以及默认 `H` 键的 HUD 显示开关。它与 CoopCraft 分开加载，不需要安装到服务端。安装方式、上游来源、SHA-256、修改版源码和 GPL-3.0 许可说明见 [整合包说明](modpack/README.md)。
 
 ## 版本
 
