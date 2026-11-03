@@ -22,7 +22,6 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SweetBerryBushBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
@@ -37,8 +36,6 @@ public class VillagerWorkGoal extends Goal {
 	private static final int BUILD_TICKS = 20;
 	private static final int EAT_TICKS = 40;
 	private static final int FORAGE_TICKS = 40;
-	private static final int FORAGE_RADIUS = 12;
-	private static final int FORAGE_VERTICAL_RADIUS = 4;
 	private static final long FORAGE_RETRY_TICKS = 200;
 
 	private final Villager villager;
@@ -431,7 +428,7 @@ public class VillagerWorkGoal extends Goal {
 			return isGatherable(target);
 		}
 		if (action == Action.FORAGE) {
-			return isRipeBerryBush(level.getBlockState(target));
+			return SettlementForaging.isRipe(level.getBlockState(target));
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
@@ -450,76 +447,24 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean shouldForage() {
-		return !SettlementSimulationService.isSurvivalEnabled(settlementData(), settlement)
-			&& needsForage(hasFoodAvailable(), villager.level().getGameTime(), forageCooldownUntil);
-	}
-
-	static boolean needsForage(boolean hasFood, long gameTime, long cooldownUntil) {
-		return !hasFood && gameTime >= cooldownUntil;
+		return SettlementForaging.canForage(settlementData(), settlement)
+			&& SettlementForaging.needsForage(
+				hasFoodAvailable(), villager.level().getGameTime(), forageCooldownUntil
+			);
 	}
 
 	private BlockPos findRipeBerryBush() {
 		if (!(villager.level() instanceof ServerLevel level)) {
 			return null;
 		}
-		BlockPos origin = villager.blockPosition();
-		BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-		BlockPos best = null;
-		double bestDistance = Double.MAX_VALUE;
-		for (int dx = -FORAGE_RADIUS; dx <= FORAGE_RADIUS; dx++) {
-			for (int dz = -FORAGE_RADIUS; dz <= FORAGE_RADIUS; dz++) {
-				if (dx * dx + dz * dz > FORAGE_RADIUS * FORAGE_RADIUS) {
-					continue;
-				}
-				for (int dy = -FORAGE_VERTICAL_RADIUS; dy <= FORAGE_VERTICAL_RADIUS; dy++) {
-					cursor.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
-					if (!level.isLoaded(cursor) || !level.isPositionEntityTicking(cursor)) {
-						continue;
-					}
-					if (isRipeBerryBush(level.getBlockState(cursor))) {
-						double distance = origin.distSqr(cursor);
-						if (distance < bestDistance) {
-							bestDistance = distance;
-							best = cursor.immutable();
-						}
-					}
-				}
-			}
-		}
-		return best;
-	}
-
-	static boolean isRipeBerryBush(BlockState state) {
-		return state.is(Blocks.SWEET_BERRY_BUSH) && state.getValue(SweetBerryBushBlock.AGE) >= 2;
+		return SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
 	}
 
 	private void forage() {
 		if (target == null || !(villager.level() instanceof ServerLevel level)) {
 			return;
 		}
-		BlockState state = level.getBlockState(target);
-		if (!isRipeBerryBush(state)) {
-			return;
-		}
-		List<ItemStack> drops = Block.getDrops(state, level, target, level.getBlockEntity(target));
-		level.setBlock(target, state.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL);
-		villager.swing(InteractionHand.MAIN_HAND);
-		Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
-		for (ItemStack drop : drops) {
-			if (drop.isEmpty()) {
-				continue;
-			}
-			int inserted = stockpile == null ? 0 : SettlementStockpile.insert(stockpile, drop);
-			if (inserted >= drop.getCount()) {
-				continue;
-			}
-			ItemStack remainder = drop.copy();
-			remainder.setCount(drop.getCount() - inserted);
-			ItemStack leftover = villager.getInventory().addItem(remainder);
-			if (!leftover.isEmpty()) {
-				villager.spawnAtLocation(leftover);
-			}
-		}
+		SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
 	}
 
 	private boolean hasFoodAvailable() {

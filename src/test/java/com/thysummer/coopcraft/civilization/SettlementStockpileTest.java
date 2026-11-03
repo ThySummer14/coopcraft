@@ -140,6 +140,20 @@ class SettlementStockpileTest {
 	}
 
 	@Test
+	void depositsOnlyTheRequestedItem() {
+		SimpleContainer villagerInventory = new SimpleContainer(3);
+		villagerInventory.setItem(0, new ItemStack(Items.SWEET_BERRIES, 3));
+		villagerInventory.setItem(1, new ItemStack(Items.BREAD, 2));
+		villagerInventory.setItem(2, new ItemStack(Items.SWEET_BERRIES, 2));
+		SimpleContainer stockpile = new SimpleContainer(2);
+
+		assertEquals(5, SettlementStockpile.depositItem(stockpile, villagerInventory, Items.SWEET_BERRIES));
+		assertEquals(5, stockpile.countItem(Items.SWEET_BERRIES));
+		assertEquals(2, villagerInventory.countItem(Items.BREAD));
+		assertEquals(0, villagerInventory.countItem(Items.SWEET_BERRIES));
+	}
+
+	@Test
 	void readsPublicSurplusFromRealContents() {
 		SimpleContainer stockpile = new SimpleContainer(3);
 		stockpile.setItem(0, new ItemStack(Items.BREAD, 2));

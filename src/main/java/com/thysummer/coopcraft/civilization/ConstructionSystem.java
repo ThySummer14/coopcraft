@@ -28,7 +28,7 @@ public final class ConstructionSystem {
 	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
 		if (job == null) {
-			if (!needsHousing(data.housingCapacity(settlement), data.registeredCount(settlement))) {
+			if (!ConstructionPlanner.housingPlan(data, settlement).needsHousing()) {
 				return Optional.empty();
 			}
 			ConstructionPlan plan = BlueprintManager.get(STONE_COTTAGE);
@@ -123,10 +123,6 @@ public final class ConstructionSystem {
 			}
 		}
 		return true;
-	}
-
-	static boolean needsHousing(int housingCapacity, int registeredMembers) {
-		return registeredMembers > 0 && housingCapacity < registeredMembers;
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {
