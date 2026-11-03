@@ -37,10 +37,10 @@ class SettlementOverviewPayloadTest {
 			SocialOrganization.PRIMITIVE_COMMUNE,
 			List.of(
 				new SettlementOverviewPayload.ResidentInfo(
-					"", "farmer", false, -8, 64, 20, 72, 35, 81, 66, "ambitious", List.of("greedy", "fast"), true
+					"", "farmer", "forager", false, -8, 64, 20, 72, 35, 81, 66, "ambitious", List.of("greedy", "fast"), true
 				),
 				new SettlementOverviewPayload.ResidentInfo(
-					"Ada", "librarian", true, -12, 64, 26, 48, 90, 22, 18, "honest", List.of("generous", "wise"), false
+					"Ada", "librarian", "generalist", true, -12, 64, 26, 48, 90, 22, 18, "honest", List.of("generous", "wise"), false
 				)
 			),
 			List.of(

@@ -118,7 +118,7 @@ public final class Civilization {
 
 		java.util.UUID leaderId = data.leaderOf(settlement).orElse(null);
 		List<SettlementOverviewPayload.ResidentInfo> summaries = residents.stream()
-			.map(villager -> toResidentInfo(data, settlement, leaderId, villager))
+			.map(villager -> toResidentInfo(serverLevel, data, settlement, leaderId, villager))
 			.sorted((first, second) -> Boolean.compare(second.leader(), first.leader()))
 			.limit(SettlementOverviewPayload.MAX_RESIDENTS)
 			.toList();
@@ -385,6 +385,7 @@ public final class Civilization {
 	}
 
 	private static SettlementOverviewPayload.ResidentInfo toResidentInfo(
+		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement,
 		java.util.UUID leaderId,
@@ -395,6 +396,7 @@ public final class Civilization {
 		return new SettlementOverviewPayload.ResidentInfo(
 			customName,
 			villager.getVillagerData().getProfession().name(),
+			LaborAllocator.roleOf(level, data, settlement, villager.getUUID()).id(),
 			villager.isBaby(),
 			villager.getBlockX(),
 			villager.getBlockY(),

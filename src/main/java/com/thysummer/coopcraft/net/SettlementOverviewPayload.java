@@ -8,6 +8,7 @@ import com.thysummer.coopcraft.CoopCraft;
 import com.thysummer.coopcraft.civilization.PersonalityArchetype;
 import com.thysummer.coopcraft.civilization.SocialOrganization;
 import com.thysummer.coopcraft.civilization.VillagerTrait;
+import com.thysummer.coopcraft.civilization.WorkRole;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -63,6 +64,7 @@ public record SettlementOverviewPayload(
 		for (ResidentInfo resident : residents) {
 			buf.writeUtf(resident.customName());
 			buf.writeUtf(resident.profession());
+			buf.writeUtf(resident.role());
 			buf.writeBoolean(resident.child());
 			buf.writeVarInt(resident.x());
 			buf.writeVarInt(resident.y());
@@ -113,6 +115,7 @@ public record SettlementOverviewPayload(
 		for (int i = 0; i < count; i++) {
 			String customName = buf.readUtf();
 			String profession = buf.readUtf();
+			String role = buf.readUtf();
 			boolean child = buf.readBoolean();
 			int x = buf.readVarInt();
 			int y = buf.readVarInt();
@@ -132,7 +135,7 @@ public record SettlementOverviewPayload(
 			}
 			boolean leader = buf.readBoolean();
 			residents.add(new ResidentInfo(
-				customName, profession, child, x, y, z, diligence, selfishness, sociability, satiety, archetype, traits, leader
+				customName, profession, role, child, x, y, z, diligence, selfishness, sociability, satiety, archetype, traits, leader
 			));
 		}
 		int simulationEventCount = buf.readVarInt();
@@ -189,6 +192,7 @@ public record SettlementOverviewPayload(
 	public record ResidentInfo(
 		String customName,
 		String profession,
+		String role,
 		boolean child,
 		int x,
 		int y,
@@ -207,6 +211,7 @@ public record SettlementOverviewPayload(
 				throw new IllegalArgumentException("Personality and needs values must be between 0 and 100");
 			}
 			PersonalityArchetype.byId(archetype);
+			WorkRole.byId(role);
 			traits = List.copyOf(traits);
 			if (traits.size() > 4) {
 				throw new IllegalArgumentException("Too many resident traits");
