@@ -20,15 +20,15 @@ REPO = Path(__file__).resolve().parents[2]
 def curl_json(url, path):
     path = Path(path)
     if path.exists() and path.stat().st_size > 2:
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
     path.parent.mkdir(parents=True, exist_ok=True)
     last = ""
     for _ in range(3):
-        p = subprocess.run(["curl", "-sS", "--fail", "--max-time", "40",
+        p = subprocess.run(["curl.exe" if os.name == "nt" else "curl", "-sS", "--fail", "--max-time", "40",
                             "-H", f"User-Agent: {UA}", url, "-o", str(path)],
                            capture_output=True, text=True)
         if p.returncode == 0:
-            return json.loads(path.read_text())
+            return json.loads(path.read_text(encoding="utf-8"))
         last = p.stderr.strip()
     raise RuntimeError(f"{url}: {last}")
 
@@ -69,11 +69,11 @@ def main():
         if slug in seen:
             continue
         seen.add(slug)
-        ver = pick(json.loads((api / f"vers-{slug}.json").read_text()))
+        ver = pick(curl_json(f"{API}/project/{slug}/version?{q}", api / f"vers-{slug}.json"))
         if not ver:
             missing.append(slug)
             continue
-        meta = json.loads((api / f"proj-{slug}.json").read_text())
+        meta = curl_json(f"{API}/project/{slug}", api / f"proj-{slug}.json")
         f = primary(ver)
         mods[slug] = {
             "title": meta["title"], "version": ver["version_number"], "version_id": ver["id"],
@@ -95,7 +95,7 @@ def main():
 
     out = {"game": catalog.GAME, "loader": catalog.LOADER, "mods": mods, "missing": missing}
     work.mkdir(parents=True, exist_ok=True)
-    (work / "pack.json").write_text(json.dumps(out, ensure_ascii=False, indent=1))
+    (work / "pack.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
     total = sum(m["size"] for m in mods.values())
     print(f"解析完成：{len(mods)} 个模组，{total / 1048576:.1f} MiB")
     if missing:

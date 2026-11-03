@@ -20,7 +20,7 @@ def main():
     ap.add_argument("--version", default="0.1.0")
     args = ap.parse_args()
 
-    pack = json.loads((Path(args.workdir) / "pack.json").read_text())
+    pack = json.loads((Path(args.workdir) / "pack.json").read_text(encoding="utf-8"))
     mods = {s: m for s, m in pack["mods"].items() if s not in catalog.EXCLUDE_CLIENT}
 
     by_cat, assigned = defaultdict(list), set()
@@ -61,7 +61,7 @@ def main():
                      f"{catalog.SERVER_PURPOSE.get(s, '')} |")
     lines.append("")
 
-    Path(args.out).write_text("\n".join(lines))
+    Path(args.out).write_text("\n".join(lines), encoding="utf-8")
     print(f"写出 {args.out}：{len(mods)} 个客户端模组")
 
 
