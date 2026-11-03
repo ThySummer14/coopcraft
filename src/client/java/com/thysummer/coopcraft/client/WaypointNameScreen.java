@@ -56,8 +56,8 @@ public class WaypointNameScreen extends Screen {
 
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-		renderBackground(graphics, mouseX, mouseY, partialTick);
-		graphics.drawCenteredString(font, title, width / 2, height / 2 - 50, 0xFFFFFF);
 		super.render(graphics, mouseX, mouseY, partialTick);
+		// super.render() 会再次执行背景模糊；标题必须画在它之后，否则会被模糊覆盖。
+		graphics.drawCenteredString(font, title, width / 2, height / 2 - 50, 0xFFFFFF);
 	}
 }
