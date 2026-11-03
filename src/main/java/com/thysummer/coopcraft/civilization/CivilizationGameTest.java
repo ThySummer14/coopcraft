@@ -188,7 +188,7 @@ public final class CivilizationGameTest implements FabricGameTest {
 		Villager villager,
 		Container stockpile
 	) {
-		ConstructionPlan plan = BlueprintManager.get(ConstructionSystem.STONE_COTTAGE);
+		ConstructionPlan plan = BlueprintManager.get(ConstructionPlanner.STONE_COTTAGE);
 		helper.assertTrue(plan != null, "The JSON cottage blueprint must be loaded");
 		for (Direction direction : new Direction[] {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
 			BlockPos cleanupOrigin = settlement.center().relative(direction, 6);

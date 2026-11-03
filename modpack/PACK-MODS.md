@@ -1,6 +1,6 @@
 # 客户端整合包模组清单
 
-> 2026-11-03：当前实际客户端为 **79 个第三方模组 + CoopCraft + DangoMusic（81 jar / 212 mods）**；Better Combat 与 playerAnimator 已移除并移到 `mods-disabled/vanilla-anim-20261103`，恢复原版攻击/砍树动作。下表是历史 122 全集，保留版本/许可证/链接参考。`dist/` 已重打为 **79 个第三方 + CoopCraft（180.3 MiB / 460 KiB）**。
+> 2026-11-03：当前实际客户端为 **79 个第三方模组 + CoopCraft + DangoMusic（81 jar / 212 mods）**；Better Combat 与 playerAnimator 已移除并移到 `mods-disabled/vanilla-anim-20261103`，恢复原版攻击/砍树动作。下表是历史 122 全集，保留版本/许可证/链接参考。`dist/` 已重打为 **79 个第三方 + CoopCraft（180.3 MiB / 463 KiB）**。
 
 对应 `modpack/dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`，版本与哈希以包内 `modrinth.index.json` 为准。
 

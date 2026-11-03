@@ -12,11 +12,14 @@ import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CampfireBlock;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConstructionPlanTest {
 	@BeforeAll
@@ -31,9 +34,9 @@ class ConstructionPlanTest {
 			"/data/coopcraft/civilization/blueprints/stone_cottage.json"
 		)) {
 			JsonObject json = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
-			ConstructionPlan plan = ConstructionPlan.fromJson(ConstructionSystem.STONE_COTTAGE, json);
+			ConstructionPlan plan = ConstructionPlan.fromJson(ConstructionPlanner.STONE_COTTAGE, json);
 
-			assertEquals(ConstructionSystem.STONE_COTTAGE, plan.id());
+			assertEquals(ConstructionPlanner.STONE_COTTAGE, plan.id());
 			assertEquals(85, plan.instructions().size());
 			assertEquals(85, plan.instructions().stream().map(ConstructionInstruction::offset).distinct().count());
 			assertEquals(Map.of(
@@ -53,6 +56,23 @@ class ConstructionPlanTest {
 				.filter(part -> part.item() == Items.OAK_DOOR || part.item() == Items.WHITE_BED)
 				.map(part -> plan.instructions().indexOf(part))
 				.toList());
+		}
+	}
+
+	@Test
+	void loadsCampfireHearthWithCobblestoneRing() throws Exception {
+		try (InputStream input = ConstructionPlanTest.class.getResourceAsStream(
+			"/data/coopcraft/civilization/blueprints/campfire_hearth.json"
+		)) {
+			JsonObject json = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
+			ConstructionPlan plan = ConstructionPlan.fromJson(ConstructionPlanner.CAMPFIRE_HEARTH, json);
+
+			assertEquals(ConstructionPlanner.CAMPFIRE_HEARTH, plan.id());
+			assertEquals(9, plan.instructions().size());
+			assertEquals(Map.of(Items.COBBLESTONE, 8, Items.CAMPFIRE, 1), plan.materials());
+			assertTrue(plan.instructions().stream().anyMatch(
+				part -> part.state().is(Blocks.CAMPFIRE) && part.state().getValue(CampfireBlock.LIT)
+			));
 		}
 	}
 }

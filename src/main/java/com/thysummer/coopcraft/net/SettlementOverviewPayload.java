@@ -20,6 +20,7 @@ public record SettlementOverviewPayload(
 	int totalResidents,
 	int registeredResidents,
 	int housingCapacity,
+	long hearth,
 	int communalFoodPoints,
 	int communalResourceCount,
 	SocialOrganization society,
@@ -51,6 +52,7 @@ public record SettlementOverviewPayload(
 		buf.writeVarInt(totalResidents);
 		buf.writeVarInt(registeredResidents);
 		buf.writeVarInt(housingCapacity);
+		buf.writeLong(hearth);
 		buf.writeVarInt(communalFoodPoints);
 		buf.writeVarInt(communalResourceCount);
 		buf.writeUtf(society.form().id());
@@ -97,6 +99,7 @@ public record SettlementOverviewPayload(
 		int totalResidents = buf.readVarInt();
 		int registeredResidents = buf.readVarInt();
 		int housingCapacity = buf.readVarInt();
+		long hearth = buf.readLong();
 		int communalFoodPoints = buf.readVarInt();
 		int communalResourceCount = buf.readVarInt();
 		SocialOrganization society = SocialOrganization.fromIds(buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf());
@@ -153,7 +156,7 @@ public record SettlementOverviewPayload(
 			simulationEvents.add(new SimulationEventInfo(day, eventType, resourceType, quantity, details));
 		}
 		return new SettlementOverviewPayload(
-			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity,
+			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
 			communalFoodPoints, communalResourceCount, society, residents, simulationEvents
 		);
 	}

@@ -22,7 +22,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 16;
+	private static final int DATA_VERSION = 17;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
@@ -34,6 +34,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<BlockPos, Settlement> settlements = new LinkedHashMap<>();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> stockpiles = new LinkedHashMap<>();
+	private final Map<UUID, BlockPos> hearths = new LinkedHashMap<>();
 	private final Map<UUID, Set<BlockPos>> resourceSites = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> craftingStations = new LinkedHashMap<>();
 	private final Map<UUID, ConstructionJob> constructionJobs = new LinkedHashMap<>();
@@ -237,6 +238,21 @@ public final class SettlementSavedData extends SavedData {
 		setDirty();
 	}
 
+	public Optional<BlockPos> getHearth(Settlement settlement) {
+		return Optional.ofNullable(hearths.get(settlement.id()));
+	}
+
+	public void setHearth(Settlement settlement, BlockPos pos) {
+		hearths.put(settlement.id(), pos.immutable());
+		setDirty();
+	}
+
+	public void clearHearth(Settlement settlement) {
+		if (hearths.remove(settlement.id()) != null) {
+			setDirty();
+		}
+	}
+
 	public boolean toggleResource(Settlement settlement, BlockPos pos) {
 		Set<BlockPos> sites = resourceSites.computeIfAbsent(settlement.id(), key -> new LinkedHashSet<>());
 		boolean added = sites.add(pos.immutable());
@@ -379,6 +395,15 @@ public final class SettlementSavedData extends SavedData {
 		}
 		tag.put("Stockpiles", stockpileList);
 
+		ListTag hearthList = new ListTag();
+		for (Map.Entry<UUID, BlockPos> entry : hearths.entrySet()) {
+			CompoundTag hearthTag = new CompoundTag();
+			hearthTag.putUUID("SettlementId", entry.getKey());
+			hearthTag.putLong("Position", entry.getValue().asLong());
+			hearthList.add(hearthTag);
+		}
+		tag.put("Hearths", hearthList);
+
 		ListTag resourceList = new ListTag();
 		for (Map.Entry<UUID, Set<BlockPos>> entry : resourceSites.entrySet()) {
 			for (BlockPos pos : entry.getValue()) {
@@ -477,6 +502,12 @@ public final class SettlementSavedData extends SavedData {
 		for (int i = 0; i < stockpileList.size(); i++) {
 			CompoundTag stockpileTag = stockpileList.getCompound(i);
 			data.stockpiles.put(stockpileTag.getUUID("SettlementId"), BlockPos.of(stockpileTag.getLong("Position")));
+		}
+
+		ListTag hearthList = tag.getList("Hearths", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < hearthList.size(); i++) {
+			CompoundTag hearthTag = hearthList.getCompound(i);
+			data.hearths.put(hearthTag.getUUID("SettlementId"), BlockPos.of(hearthTag.getLong("Position")));
 		}
 
 		ListTag resourceList = tag.getList("ResourceSites", ListTag.TAG_COMPOUND);
