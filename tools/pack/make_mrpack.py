@@ -26,7 +26,7 @@ def main():
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    pack = json.loads((Path(args.workdir) / "pack.json").read_text())
+    pack = json.loads((Path(args.workdir) / "pack.json").read_text(encoding="utf-8"))
     files = []
     for slug, m in pack["mods"].items():
         if slug in catalog.EXCLUDE_CLIENT:

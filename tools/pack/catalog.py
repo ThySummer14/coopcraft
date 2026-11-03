@@ -21,6 +21,33 @@ SEEDS = [
     "sodium-extra",
 ]
 
+YANGLAO_CONTENT = [
+    "advanced-netherite", "aether-villages", "amendments", "another-furniture",
+    "basicweapons", "better-archeology", "better-combat", "betternether",
+    "charm-of-undying", "ct-overhaul-village", "comforts", "deeperdarker",
+    "double-doors", "easy-anvils", "easy-magic", "elytra-slot", "ends-delight",
+    "farmers-delight-refabricated", "frights-delight", "geophilic", "handcrafted",
+    "hearths", "immersive-aircraft", "immersive-armors", "mes-moogs-end-structures",
+    "mss-moogs-soaring-structures", "naturalist", "natures-compass", "oceans-delight",
+    "philips-ruins", "polymorph", "regions-unexplored", "snowy-spirit", "spelunkery",
+    "storage-delight", "supplementaries", "tectonic", "terralith", "aether",
+    "tidal-towns", "towns-and-towers", "ubes-delight", "visual-workbench", "waystones",
+    "yungs-api", "yungs-better-desert-temples", "yungs-better-dungeons",
+    "yungs-better-end-island", "yungs-better-jungle-temples", "yungs-better-mineshafts",
+    "yungs-better-nether-fortresses", "yungs-better-ocean-monuments",
+    "yungs-better-strongholds", "yungs-better-witch-huts", "yungs-bridges",
+    "yungs-cave-biomes", "yungs-extras",
+]
+
+YANGLAO_DEPENDENCIES = [
+    "balm", "bclib", "collective", "cristel-lib", "forge-config-api-port", "geckolib",
+    "lithostitched", "moogs-structure-lib", "moonlight", "owo-lib", "playeranimator",
+    "puzzles-lib", "resourceful-config", "resourceful-lib", "terrablender", "trinkets",
+    "worldweaver",
+]
+
+SEEDS += YANGLAO_CONTENT + YANGLAO_DEPENDENCIES
+
 # 只在服务端用，不随客户端整合包下发
 EXCLUDE_CLIENT = {"chunky", "spark", "c2me-fabric", "noisium"}
 
@@ -50,6 +77,8 @@ CATEGORIES = {
               "detail-armor-bar", "morechathistory", "zoomify", "inventory-profiles-next"],
     "实用功能": ["rei", "i18nupdatemod", "lambdynamiclights", "not-enough-animations",
              "3dskinlayers"],
+    "养老内容": YANGLAO_CONTENT,
     "依赖库": ["fabric-api", "cloth-config", "yacl", "architectury-api", "libipn",
-            "searchables", "placeholder-api", "fabric-language-kotlin", "fzzy-config"],
+            "searchables", "placeholder-api", "fabric-language-kotlin", "fzzy-config"]
+            + YANGLAO_DEPENDENCIES,
 }

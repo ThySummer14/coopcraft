@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
-    "coopcraft:farm_station"
+    "coopcraft:farm_station",
+    "coopcraft:waystation_stone"
   ]
 }

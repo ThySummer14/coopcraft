@@ -2,6 +2,8 @@
 
 与 CoopCraft 分开的第三方客户端模组、整合包产物和参考清单。CoopCraft 本体从 `build/libs/` 构建，不在 `mods/` 里重复保存。
 
+> 2026-11-03 注意：当前实际客户端已精简为 **83 jar / 214 mods（81 第三方 + CoopCraft + DangoMusic）**；`dist/` 已重打为 **81 个第三方 + CoopCraft（181.4 MiB 下载 / 455 KiB 包体）**，DangoMusic 仍按手动安装。当前有效清单以实例 `coopcraft-client-mod-manifest.json` 和 [PACK-MODS.md](PACK-MODS.md) 顶部说明为准。
+
 ## 目录
 
 | 路径 | 内容 |
@@ -15,9 +17,11 @@
 
 ## 客户端整合包
 
-`dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`：48 个第三方模组 + CoopCraft 本体（在 `overrides/mods/` 里），45.7 MiB 下载量，346 KiB 的包文件。
+`dist/CoopCraft-1.21.1-Client-0.1.0.mrpack`：81 个第三方模组 + CoopCraft 本体（在 `overrides/mods/` 里），181.4 MiB 下载量，455 KiB 的包文件，SHA-256 `bcb7fb992cf21010591c912a71948ec87b688e6c4c467140a9b7fec0fdc96b49`。
 
-内容分三类：性能优化（Sodium、Lithium、ModernFix、FerriteCore、ImmediatelyFast、EntityCulling、Krypton、BadOptimizations 等）、界面提示（Jade、AppleSkin、Xaero 地图、Chat Heads、BetterF3）、实用功能（REI、LambdaDynamicLights、3D Skin Layers、I18NUpdateMod）。完整清单见 [PACK-MODS.md](PACK-MODS.md)。
+内容分四类：性能优化（Sodium、Lithium、ModernFix、FerriteCore、ImmediatelyFast、EntityCulling、Krypton、BadOptimizations 等）、界面提示（Jade、AppleSkin、Xaero 地图、Chat Heads、BetterF3）、实用功能（REI、LambdaDynamicLights、3D Skin Layers、I18NUpdateMod），以及从 GD656 养老包重新解析的 Fabric 1.21.1 内容（天境、BetterNether、农夫乐事、装饰、结构与驿站等）。BetterEnd 因与 Sodium 硬冲突而不包含。完整清单见 [PACK-MODS.md](PACK-MODS.md)。
+
+DangoMusic 按下文单独安装；光影和个人画质配置不随包下发，避免覆盖不同设备的设置。
 
 ### 安装到 PCL
 
@@ -43,7 +47,7 @@
 
 | 模组 | 版本 | 来源 | 许可证 |
 | --- | --- | --- | --- |
-| DangoMusic（CoopCraft 修订版） | 1.5.0-coopcraft.1+1.21.1-fabric | [上游仓库](https://github.com/Sorihiko/DangoMusic) · [官方 v1.5.0](https://github.com/Sorihiko/DangoMusic/releases/tag/v1.5.0) | GPL-3.0 |
+| DangoMusic（CoopCraft 修订版） | 1.5.0-coopcraft.2+1.21.1-fabric | [上游仓库](https://github.com/Sorihiko/DangoMusic) · [官方 v1.5.0](https://github.com/Sorihiko/DangoMusic/releases/tag/v1.5.0) | GPL-3.0 |
 
 官方原版 jar 的 SHA-256：
 
@@ -54,12 +58,12 @@ e6467cede5dabbeb228de5144c53b6ae80a21b990f3b273ffb189a994c6fbe11
 修订版 jar 的 SHA-256：
 
 ```text
-adf084e16297b7dae2d954b6f51c86cbd2939172323a49233470c3d6f786b3bd
+7e45a77d82e6bd42085d53ba4b40747240ab8c8f585eb3f7c895610dcbed0fde
 ```
 
-修订版基于官方 v1.5.0（提交 `da696d0871fa348323782d7d299ba10df46e07db`），将三个辉光着色器引用的缺失 `outline/base.vert` 改为已有的 `quad.vert`，接口保持为 `a_Pos`、`a_UV`。未修改播放器、账号、网络或音乐服务行为，也不表示上游作者为此修订版背书。
+修订版基于官方 v1.5.0（提交 `da696d0871fa348323782d7d299ba10df46e07db`），将三个辉光着色器引用的缺失 `outline/base.vert` 改为已有的 `quad.vert`，接口保持为 `a_Pos`、`a_UV`。`.2` 追加了 HUD 自定义：灵动岛和左上角 Now Playing 可在设置页调整 X/Y 偏移；新增默认 `H` 键的 Toggle HUD，可同时隐藏/显示灵动岛、Song card 和 Now Playing，快捷键可改。播放器、账号、网络和音乐服务行为未改，也不表示上游作者为此修订版背书。
 
-完整许可证见 `licenses/DangoMusic-GPL-3.0.txt`。修订版对应源码（含修改说明）在 [DangoMusic-1.5.0-coopcraft.1-src.zip](sources/DangoMusic-1.5.0-coopcraft.1-src.zip)，其 SHA-256 为 `17feb07663b168d87dc581c9ae4262af3142397d4d16339bfdea1463b2d2b681`。DangoMusic 与 CoopCraft 是独立模组，DangoMusic 的 GPL-3.0 不改变 CoopCraft 代码的 MIT 许可证；后续修改版仍须标明修改、采用 GPL-3.0 并提供对应源码。
+完整许可证见 `licenses/DangoMusic-GPL-3.0.txt`。修订版对应源码（含修改说明）在 [DangoMusic-1.5.0-coopcraft.2-src.zip](sources/DangoMusic-1.5.0-coopcraft.2-src.zip)，其 SHA-256 为 `01eb26561c064a0922c27bde1d4ba6f26f7ba34314103c07e34405a7b7c493d6`。DangoMusic 与 CoopCraft 是独立模组，DangoMusic 的 GPL-3.0 不改变 CoopCraft 代码的 MIT 许可证；后续修改版仍须标明修改、采用 GPL-3.0 并提供对应源码。
 
 装法：把 `mods/DangoMusic-*.jar` 放进实例 `mods/`，启动后按 `M` 打开，网易云扫码登录按上游界面提示进行。DangoMusic 只装客户端，不需要复制到专用服务器。
 
@@ -79,4 +83,4 @@ python3 tools/pack/gen_modlist.py   # 刷新 PACK-MODS.md
 
 ## 参考整合包
 
-GD656 系列（优化 / 生电 / 美化 / 养老）的模组清单在 [reference/](reference/README.md)，只做借鉴，不进整合包。
+GD656 系列（优化 / 生电 / 美化 / 养老）的模组清单在 [reference/](reference/README.md)。原始 Forge 包不直接导入，兼容的 Fabric 1.21.1 模组会重新解析版本、校验并登记后再纳入。

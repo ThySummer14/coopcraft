@@ -8,6 +8,7 @@ import com.thysummer.coopcraft.CoopCraft;
 import com.thysummer.coopcraft.net.WaypointAddPayload;
 import com.thysummer.coopcraft.net.WaypointListPayload;
 import com.thysummer.coopcraft.net.WaypointRemovePayload;
+import com.thysummer.coopcraft.waystation.Waystations;
 
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -80,6 +81,7 @@ public final class Waypoints {
 						})
 					)
 				)
+				.then(Waystations.command())
 			)
 		);
 	}

@@ -11,13 +11,14 @@
 | `meihua` | GD656极致美化 | 1.20.1 | Fabric | 176–182 | 光影、材质、动画、界面美化（Iris + 大量资源包） |
 | `yanglao` | GD656极致养老 | 1.20.1 | **Forge 47.4.0** | 313 | 大型整合（Create、天境、暮色、地形生成），内容向 |
 
-文件名格式：`<前缀>--<原包文件名>.json`。
+文件名格式：`<前缀>--<原包文件名>.json`。原包不直接导入；兼容模组经重新解析后可纳入我们的整合包。
 
 ## 借鉴结论
 
 - 1.21.1 没有任何一版 GD656，我们的客户端包是**按 1.21.1 重新解析版本**的，没有直接搬清单。
 - 抄得动的：Sodium / Lithium / ModernFix / FerriteCore / ImmediatelyFast / EntityCulling / MoreCulling / EBE / Continuity / Krypton / BadOptimizations / Dynamic FPS / Debugify 这一套优化组合，版本搭配在 1.21.4 和 1.21.5 版里验证过。
-- 没抄的：Carpet 技术向工具（投影、MiniHUD、ReplayMod）——我们的服是休闲联机，装上去容易和 CoopCraft 的交互打架；Forge 养老包的模组全部用不上。
+- 养老包已筛出 78 个 Fabric 1.21.1 内容/依赖模组；BetterEnd 因与 Sodium 硬冲突而排除，Forge 专用或没有对应版本的项目不直接搬运。
+- 没抄的：Carpet 技术向工具（投影、MiniHUD、ReplayMod）——我们的服是休闲联机，装上去容易和 CoopCraft 的交互打架。
 - 资源包/光影没打包，留成可选，避免把整合包做到几百 MB。
 
 ## 为什么不存原始压缩包
