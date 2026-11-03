@@ -31,6 +31,7 @@ class SettlementOverviewPayloadTest {
 			2,
 			2,
 			1,
+			center.offset(1, 0, 1).asLong(),
 			44,
 			17,
 			SocialOrganization.PRIMITIVE_COMMUNE,

@@ -2,11 +2,8 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.Optional;
 
-import com.thysummer.coopcraft.CoopCraft;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -19,7 +16,6 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.phys.AABB;
 
 public final class ConstructionSystem {
-	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
 	private static final int[] BUILD_DISTANCES = {6, 12, 18};
 
 	private ConstructionSystem() {
@@ -28,19 +24,24 @@ public final class ConstructionSystem {
 	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
 		if (job == null) {
-			if (!ConstructionPlanner.housingPlan(data, settlement).needsHousing()) {
+			clearStaleHearth(level, data, settlement);
+			Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
+			for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
+				ConstructionPlan candidate = BlueprintManager.get(project.blueprintId());
+				if (candidate == null || !hasAllMaterials(stockpile, candidate)) {
+					continue;
+				}
+				BlockPos origin = chooseOrigin(level, settlement, candidate);
+				if (origin == null) {
+					continue;
+				}
+				job = new ConstructionJob(candidate.id(), origin, 0);
+				data.setConstructionJob(settlement, job);
+				break;
+			}
+			if (job == null) {
 				return Optional.empty();
 			}
-			ConstructionPlan plan = BlueprintManager.get(STONE_COTTAGE);
-			if (plan == null || !hasAllMaterials(SettlementStockpile.getStockpile(level, data, settlement), plan)) {
-				return Optional.empty();
-			}
-			BlockPos origin = chooseOrigin(level, settlement, plan);
-			if (origin == null) {
-				return Optional.empty();
-			}
-			job = new ConstructionJob(plan.id(), origin, 0);
-			data.setConstructionJob(settlement, job);
 		}
 
 		ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
@@ -106,6 +107,14 @@ public final class ConstructionSystem {
 						data.addHousingBed(settlement, bed);
 					}
 				}
+				if (plan.id().equals(ConstructionPlanner.CAMPFIRE_HEARTH)) {
+					for (ConstructionInstruction part : plan.instructions()) {
+						if (part.state().is(Blocks.CAMPFIRE)) {
+							data.setHearth(settlement, current.origin().offset(part.offset()));
+							break;
+						}
+					}
+				}
 			}
 		} else {
 			data.advanceConstruction(settlement);
@@ -123,6 +132,13 @@ public final class ConstructionSystem {
 			}
 		}
 		return true;
+	}
+
+	private static void clearStaleHearth(ServerLevel level, SettlementSavedData data, Settlement settlement) {
+		BlockPos hearth = data.getHearth(settlement).orElse(null);
+		if (hearth != null && !level.getBlockState(hearth).is(Blocks.CAMPFIRE)) {
+			data.clearHearth(settlement);
+		}
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {

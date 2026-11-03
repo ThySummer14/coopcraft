@@ -111,6 +111,10 @@ public class SettlementScreen extends Screen {
 			"coopcraft.settlement.population", data.totalResidents(), data.registeredResidents()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.housing", data.housingCapacity()), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		Component hearth = data.hearth() < 0
+			? Component.translatable("coopcraft.settlement.hearth_none")
+			: Component.literal(BlockPos.of(data.hearth()).toShortString());
+		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.hearth", hearth), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.stockpile", data.communalFoodPoints(), data.communalResourceCount()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 10;

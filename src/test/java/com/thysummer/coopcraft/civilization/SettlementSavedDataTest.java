@@ -39,7 +39,21 @@ class SettlementSavedDataTest {
 		assertEquals(settlement, restored.find(center).orElseThrow());
 		assertEquals(SocialOrganization.PRIMITIVE_COMMUNE, restored.socialOrganizationOf(settlement));
 		assertTrue(restored.simulationOf(settlement).isEmpty());
-		assertEquals(16, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(17, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+	}
+
+	@Test
+	void migratesSettlementWithoutHearth() {
+		SettlementSavedData data = new SettlementSavedData();
+		BlockPos center = new BlockPos(10, 64, 10);
+		Settlement settlement = data.getOrCreate(center, "Testhaven", 4);
+		CompoundTag tag = data.save(new CompoundTag(), null);
+		tag.remove("Hearths");
+
+		SettlementSavedData restored = SettlementSavedData.load(tag, null);
+
+		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
+		assertEquals(17, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -185,7 +199,7 @@ class SettlementSavedDataTest {
 		SettlementSavedData data = new SettlementSavedData();
 		BlockPos center = new BlockPos(12, 65, -7);
 		Settlement settlement = data.getOrCreate(center, "Testhaven", 2);
-		ConstructionJob job = new ConstructionJob(ConstructionSystem.STONE_COTTAGE, center.north(6), 23);
+		ConstructionJob job = new ConstructionJob(ConstructionPlanner.STONE_COTTAGE, center.north(6), 23);
 		BlockPos bed = center.north(3);
 		BlockPos grindingStation = center.east(2);
 		data.setConstructionJob(settlement, job);
@@ -203,5 +217,20 @@ class SettlementSavedDataTest {
 		restored.completeConstruction(settlement);
 		assertTrue(restored.getConstructionJob(settlement).isEmpty());
 		assertEquals(1, restored.housingCapacity(settlement));
+	}
+
+	@Test
+	void preservesHearthThroughSaveRoundTrip() {
+		SettlementSavedData data = new SettlementSavedData();
+		BlockPos center = new BlockPos(12, 65, -7);
+		Settlement settlement = data.getOrCreate(center, "Testhaven", 2);
+		BlockPos hearth = center.offset(1, 0, 1);
+		data.setHearth(settlement, hearth);
+
+		SettlementSavedData restored = SettlementSavedData.load(data.save(new CompoundTag(), null), null);
+
+		assertEquals(hearth, restored.getHearth(restored.find(center).orElseThrow()).orElseThrow());
+		restored.clearHearth(restored.find(center).orElseThrow());
+		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
 	}
 }

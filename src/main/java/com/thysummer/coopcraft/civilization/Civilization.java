@@ -33,6 +33,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -72,6 +73,9 @@ public final class Civilization {
 		}
 		if (state.is(Blocks.STONECUTTER)) {
 			return onUseGrindingStation(player, level, hit);
+		}
+		if (state.getBlock() instanceof CampfireBlock) {
+			return onUseHearth(player, level, hit);
 		}
 		if (state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)) {
 			return onUseResource(player, level, hit);
@@ -126,6 +130,7 @@ public final class Civilization {
 			residents.size(),
 			data.registeredCount(settlement),
 			data.housingCapacity(settlement),
+			data.getHearth(settlement).map(BlockPos::asLong).orElse(-1L),
 			SettlementStockpile.communalFoodPoints(stockpile),
 			SettlementStockpile.communalResourceCount(stockpile),
 			data.socialOrganizationOf(settlement),
@@ -164,6 +169,29 @@ public final class Civilization {
 
 	private static InteractionResult onUseGrindingStation(Player player, Level level, BlockHitResult hit) {
 		return onUseStation(player, level, hit, true);
+	}
+
+	private static InteractionResult onUseHearth(Player player, Level level, BlockHitResult hit) {
+		if (!player.isShiftKeyDown() || !player.getMainHandItem().isEmpty()) {
+			return InteractionResult.PASS;
+		}
+		if (level.isClientSide) {
+			return InteractionResult.SUCCESS;
+		}
+		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
+			return InteractionResult.PASS;
+		}
+
+		SettlementSavedData data = SettlementSavedData.get(serverLevel);
+		Optional<Settlement> settlement = data.find(hit.getBlockPos());
+		if (settlement.isEmpty()) {
+			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.no_settlement"), true);
+			return InteractionResult.SUCCESS;
+		}
+
+		data.setHearth(settlement.get(), hit.getBlockPos());
+		serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.hearth_set", settlement.get().name()), true);
+		return InteractionResult.SUCCESS;
 	}
 
 	private static InteractionResult onUseStation(Player player, Level level, BlockHitResult hit, boolean grinding) {
