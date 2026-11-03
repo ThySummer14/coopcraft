@@ -214,7 +214,7 @@ public final class CivilizationGameTest implements FabricGameTest {
 			"The stonecutter must become the grinding station"
 		);
 		ConstructionSystem.BuildTarget firstTarget = ConstructionSystem.nextBuildTarget(
-			helper.getLevel(), data, settlement, villager
+			helper.getLevel(), data, settlement
 		).orElseThrow();
 		BlockPos origin = firstTarget.job().origin();
 		for (ConstructionInstruction instruction : plan.instructions()) {
@@ -235,7 +235,7 @@ public final class CivilizationGameTest implements FabricGameTest {
 					+ (job.nextIndex() < plan.instructions().size()
 						? ", next=" + plan.instructions().get(job.nextIndex()).item() : ""))
 				.orElse("not started");
-			String nextTargetState = ConstructionSystem.nextBuildTarget(helper.getLevel(), data, settlement, villager)
+			String nextTargetState = ConstructionSystem.nextBuildTarget(helper.getLevel(), data, settlement)
 				.map(target -> "present at " + target.position() + ", distance=" + villager.distanceToSqr(target.position().getCenter()))
 				.orElse("empty");
 			String workState = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()

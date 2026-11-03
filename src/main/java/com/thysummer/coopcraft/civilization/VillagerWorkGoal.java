@@ -80,7 +80,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action != Action.BUILD) {
 			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
-				(ServerLevel) villager.level(), settlementData(), settlement, villager
+				(ServerLevel) villager.level(), settlementData(), settlement
 			);
 			if (buildTarget.isPresent()) {
 				currentBuildTarget = buildTarget.get();
@@ -384,7 +384,7 @@ public class VillagerWorkGoal extends Goal {
 			return isGatherable(target);
 		}
 		if (action == Action.BUILD) {
-			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement, villager)
+			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
 		}
