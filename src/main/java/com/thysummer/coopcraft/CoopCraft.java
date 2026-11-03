@@ -5,6 +5,7 @@ import com.thysummer.coopcraft.civilization.Civilization;
 import com.thysummer.coopcraft.civilization.SettlementSavedData;
 import com.thysummer.coopcraft.net.CoopNetworking;
 import com.thysummer.coopcraft.waypoint.Waypoints;
+import com.thysummer.coopcraft.waystation.Waystations;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
@@ -27,6 +28,7 @@ public class CoopCraft implements ModInitializer {
 		Civilization.register();
 		CoopNetworking.registerPayloads();
 		Waypoints.register();
+		Waystations.register();
 
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
 			if (entity instanceof ServerPlayer player) {
