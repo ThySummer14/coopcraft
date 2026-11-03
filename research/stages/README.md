@@ -1,0 +1,18 @@
+# 社会形态研究单元导航
+
+阶段代码是研究分类，不是世界历史的固定升级步骤。允许不同地区同步存在不同技术/制度，允许停滞、混合、逆转和跨越。
+
+| ID | 主题 | 目前材料 | 后续动作 |
+|---|---|---|---|
+| S0 | 流动采集与早期共同体 | [阶段卡](S0-primitive/stage-card.md) · [研究与Fabric接入](S0-primitive/research-framework-v1.1.md) · [玩家体验](S0-primitive/player-participation-v0.1.md) | 继续L2，集中可玩闭环 |
+| S1 | 定居、园艺和农业共同体 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S2 | 早期国家、贡赋与奴役劳动 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S3 | 领主制、庄园和租佃 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S4 | 城镇、行会与商业资本 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S5 | 资本主义生产方式 | [阶段卡](S5-capitalism/stage-card.md) · [店铺与资本循环创意](S5-capitalism/shop-to-capital-circuit-v0.1.md) | 长期存档，不阻塞S0 |
+| S6 | 社会主义组织实验 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S7 | 高度社会化合作理论情境 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1，明确假设性质 |
+
+统一研究模板：[stage-card-template.md](../framework/stage-card-template.md)。
+
+开发 Agent 应以 [仓库现行工程文档](../../docs/civilization-design.md) 为主，研究单元不是立即开发指令。
