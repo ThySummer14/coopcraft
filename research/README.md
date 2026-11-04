@@ -14,8 +14,9 @@
 3. **[原始社会：玩家参与与制度涌现 v0.1](stages/S0-primitive/player-participation-v0.1.md)**：从研究走向 Minecraft 可玩的居民交互与社会反馈。
 4. **[S0 共同体需求与劳动协调 v0.1](stages/S0-primitive/needs-and-labor-coordination-v0.1.md)**：已核对 main 最新提交，研究多项生存需求竞争时的劳动调度、玩家参与和任务预留。
 5. **[S1 定居农业研究与 Fabric 实现规格 v0.1](stages/S1-early-agriculture/S1-integrated-gameplay-and-implementation-v0.1.md)** 与 **[土地投入/使用权/分配 v0.2](stages/S1-early-agriculture/land-investment-rights-and-surplus-v0.2.md)**：从真实播种/收获到长期权利、家庭领取和土地改良，按 P0/P1/P2 实现。
-6. **[资本主义：店铺经营与资本循环创意](stages/S5-capitalism/shop-to-capital-circuit-v0.1.md)**：远期研究提案，明确不要求当前立刻实现。
-7. **[研究工作流程](WORKFLOW.md)** 与 **[阶段卡模板](framework/stage-card-template.md)**：未来如何逐轮讨论、验证并归档。
+6. **[S2 早期国家阶段卡](stages/S2-early-state/stage-card.md)** 与 **[土地、继承、阶层、公共工程及贡赋的L2规格](stages/S2-early-state/S2-land-inheritance-public-works-v0.1.md)**：产权、实际工时、征纳与继承如何衔接现有 S0/S1；研究提案，未编码。
+7. **[资本主义：店铺经营与资本循环创意](stages/S5-capitalism/shop-to-capital-circuit-v0.1.md)**：远期研究提案，明确不要求当前立刻实现。
+8. **[研究工作流程](WORKFLOW.md)** 与 **[阶段卡模板](framework/stage-card-template.md)**：未来如何逐轮讨论、验证并归档。
 
 仓库内现行开发基线是 **[docs/civilization-design.md](../docs/civilization-design.md)**，请先检查最新代码、GameTest 与该文档，再决定哪条研究建议需要进入开发。研究资料不取代源码、测试或已确认的接口。
 
@@ -25,7 +26,7 @@
 |---|---|---|---|
 | S0 | 流动采集与早期共同体 | 采集、互助、公仓、探路、迁居、学习 | **L2研究设计 v1.0 已收束；软件仍待验收** |
 | S1 | 定居、园艺与农业共同体 | 真实耕地/播种/收获、留种与土地使用权 | **L1研究已覆盖，L2垂直切片规格待开发验证** |
-| S2 | 早期国家、贡赋与强制劳动 | 公共工程、贡赋、身份与抵抗 | L1：待系统整理 |
+| S2 | 早期国家、贡赋与强制劳动 | 公共工程、继承、劳役、阶层与制度改革 | **L1阶段卡已整理；L2规格 v0.1 待软件验证** |
 | S3 | 领主制与租佃 | 庄园、地租、劳役与公地 | L1：待系统整理 |
 | S4 | 城镇、行会与商业网络 | 商铺、商队、远距离交易 | L1：待系统整理 |
 | S5 | 资本主义生产方式 | 店铺→雇佣生产→资本循环 | 创意已归档，待L1 |
