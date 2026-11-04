@@ -285,3 +285,33 @@ M0-M2 是第一批可交给编码 Agent 的最小合同。M3-M7 不应阻断其�
 - 合并后开发 Agent 应优先完成 P0-A；任何变更导致旧 primitive tests 守恒失败，都须阻断合并。
 
 **验收总则：真实资源守恒、货币账本有来源、债权债务对称、因果可追踪、制度可并存、玩家可观察、服务器可承受。**
+
+
+## 20. 与现有研究 Issue #36 对齐：跨真实聚落的世界级协调器（必须先解决）
+
+**这是现有代码中的硬阻塞，不是可选优化。** 当前 SettlementSimulationState.create(settlement) 为每个真实聚落分别建立一个 SimulationWorld。独立核心的 TradeSystem 可以在**同一个抽象 SimulationWorld** 中操作多个 camp，但它不等于真实 Minecraft 世界里两个聚落 SavedData 间已经可以原子交易。已在 [S4 研究 Issue #36](https://github.com/ThySummer14/coopcraft/issues/36) 指明该边界。
+
+因此修正第 3 节实施先后关系：
+
+- **S4-R0（在真实游戏跨聚落交易前必须完成）**：明确世界级 TradeCoordinatorSavedData 与各聚落 SettlementSimulationState 的资产归属/外部交接合同；设计持久化状态机、故障恢复、NBT 迁移和 GameTest。
+- **M0 / P0-A**：先仅在独立 Java SimulationWorld 中做多 camp、部分批次易货与守恒，不宣称能跨真实聚落。
+- **M1 / M2**：仍是独立核心的价格、货币、有效需求；与真实 Minecraft 的跨聚落交易集成必须受 R0 阶段门约束。
+- **真实聚落适配**：不能把两个 SettlementSimulationState.world() 直接拼为一个可随意写的全局世界；要用显式交接、唯一身份和跨世界事务日志。
+
+建议世界级持久化交易状态（TradeCoordinatorSavedData）：
+  OFFERED → RESERVED → DISPATCHED → IN_TRANSIT → DELIVERED → SETTLED。
+  异常可进入 CANCELLED/COMPENSATING，但不得从 SETTLED 返回未结算并再次付款。
+
+每笔交易保留 tradeId、源/目的 settlementId、原批次 ID 与来源事件链、权利人、货物清单、资产冻结标记、支付预留、步骤编号、创建/过期时间、当前状态、最后成功写入游标。
+
+必须遵守：
+1. 真实货物在买方确认入库前只能由卖方（尚未出库）**或**世界级 in-transit/escrow（已经出库）**其中一方**权威持有；不能同时出现在两个聚落抽象库存或实体箱子中。
+2. 卖方出库使用已有 SimulationWorld 的显式 external export，目的地通过有来源的 external import 导入；世界级桥接账本按 tradeId 把双方事件关联。对全世界总量只计一次转移，不误将交易计作新资源生产。
+3. 真实存档分属不同 SavedData 时，不可假设单次函数调用天然跨文件原子持久化。必须定义 durable intent/pending 状态，写前检查、可恢复事务日志，分阶段只执行一次的 side effect；恢复时根据凭证重放未完成步骤或执行补偿，不通过“再发一份货”解决异常。
+4. 未加载聚落仅参与可验证的汇总/在途状态更新；不强制加载远地区块。远方报价是带时间戳的报告，不是直接全知读真实箱子。
+5. 已有 SettlementStage.PRIMITIVE/AGRICULTURAL/TOWN 是当前生产与聚落进展轴，SocialOrganization 也另有有限状态；不可用 Stage.TOWN 或 enum ordinal 直接定义 S4 生产关系。
+6. 一张经济订单由世界级协调器持有跨聚落状态，聚落本地库存账本保留其资源权威；所有玩家指令由服务端校验。
+
+新增强制 GameTest：发货前、冻结后、出库后、到达前、付款后分别模拟中断及两次重载；进行仓库满、接收者迁移/死亡、重复网络请求、两个玩家同时购买同一批次；这些失败路径都必须满足：没有重复的真实商品、货币不重复支付、合约有终态、库存来源可追溯。真实游戏功能未通过这些测试前，只能作为纯模拟实验推出。
+
+本节与 Issue #36 是同一条研究主线，避免平行新增一个矛盾的跨聚落设计。
