@@ -206,7 +206,7 @@ public final class VillagerInteraction {
 
 	private static Component nameOf(Villager villager) {
 		return villager.getCustomName() == null
-			? Component.translatable("entity.minecraft.villager") : villager.getCustomName();
+			? Component.literal(VillagerNames.fullName(villager.getUUID())) : villager.getCustomName();
 	}
 
 	private static Component reason(String reason) {

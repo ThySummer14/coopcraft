@@ -632,6 +632,14 @@ public final class SimulationWorld {
 		donor.adjustTrust(requesterId, 1);
 	}
 
+	public long recordStageAdvanced(String campId, String stageId) {
+		camp(campId);
+		if (stageId.isBlank()) {
+			throw new IllegalArgumentException("Stage ID cannot be blank");
+		}
+		return recordSocialEvent(EventType.STAGE_ADVANCED, List.of(), Map.of("stage", stageId), List.of());
+	}
+
 	public long recordGiftInteraction(
 		String villagerPersonId,
 		String playerActorId,
