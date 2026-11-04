@@ -39,6 +39,8 @@ jobs:
         run: ./gradlew -p tools/probe build
       - name: probe card runner syntax
         run: python3 -m py_compile tools/probe/run_cards.py
+      - name: performance collector unit tests
+        run: python3 -m unittest discover -s tools/probe/tests -p 'test_*.py'
       - name: capture build artifacts
         uses: actions/upload-artifact@v7
         with:
