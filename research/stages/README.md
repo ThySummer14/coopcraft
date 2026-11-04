@@ -4,7 +4,7 @@
 
 | ID | 主题 | 目前材料 | 后续动作 |
 |---|---|---|---|
-| S0 | 流动采集与早期共同体 | [阶段卡](S0-primitive/stage-card.md) · [研究与Fabric接入](S0-primitive/research-framework-v1.1.md) · [玩家体验](S0-primitive/player-participation-v0.1.md) | 继续L2，集中可玩闭环 |
+| S0 | 流动采集与早期共同体 | [阶段卡](S0-primitive/stage-card.md) · [研究与Fabric接入](S0-primitive/research-framework-v1.1.md) · [玩家体验](S0-primitive/player-participation-v0.1.md) · [需求与劳动协调](S0-primitive/needs-and-labor-coordination-v0.1.md) | 继续L2，集中可玩闭环 |
 | S1 | 定居、园艺和农业共同体 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
 | S2 | 早期国家、贡赋与奴役劳动 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
 | S3 | 领主制、庄园和租佃 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
