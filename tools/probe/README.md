@@ -56,6 +56,8 @@ tools/probe/prepare_dev_run.sh
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/status` | 屏幕/标题/玩家/FPS（客户端）；tick/玩家数（服务端） |
+| GET | `/perf/frame` | 客户端最近 4096 帧间隔统计和累计长帧次数（仅世界渲染时） |
+| POST | `/perf/reset` | 清空客户端帧间隔采样和累计计数 |
 | GET | `/ui/snapshot` | 当前 Screen、控件树、容器槽位、最近一帧绘制文字 |
 | POST | `/ui/click` | `{slot}` 或 `{x,y,button,shift}` |
 | POST | `/ui/close` | 关闭当前界面 |
@@ -105,6 +107,23 @@ python tools/probe/run_cards.py --card tools/cards/settlement_roster.yml --dry-r
 - `container_slot.yml`：打开箱子、读取槽位、点击槽位并断言物品消失。
 
 本地实测：`client_smoke.yml`、`waypoint_screen.yml`、`settlement_roster.yml`、`settlement_stage.yml`、`container_slot.yml` 均 `PASS`；截图保存在对应 run 目录的 `screenshots/`。
+
+## 联机掉帧诊断（dev-only）
+
+此功能只在开发客户端探针生效，不修改正式模组或 Mac mini。进入真实游戏世界后采集（主菜单没有 WorldRenderEvents.END 帧间隔）：
+
+```sh
+python3 tools/probe/collect_perf.py --duration 90 --interval 1 --with-server \
+  --scenario idle-empty-hand --output build/perf/idle-empty-hand.json
+```
+
+只保存 FPS、帧间隔统计、服务器 tick 和本地探针响应耗时，不保存 IP、玩家名和令牌。生成文件放在被 Git 忽略的 build/ 中。离线测试命令：
+
+```sh
+python3 -m unittest discover -s tools/probe/tests -p 'test_*.py'
+```
+
+帧间隔不等于纯渲染 CPU/GPU 耗时；localhost 探针耗时不等于玩家的网络 RTT；tick 差分不等于服务端 MSPT。完整实验矩阵参见 [双人联机掉帧排查](../../docs/client-stutter-triage.md)。
 
 ## 后续
 
