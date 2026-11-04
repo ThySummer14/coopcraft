@@ -16,7 +16,7 @@ public final class ConstructionPlanner {
 
 	public static List<Project> projects(SettlementSavedData data, Settlement settlement) {
 		List<Project> projects = new ArrayList<>(2);
-		if (data.getHearth(settlement).isEmpty()) {
+		if (data.stageOf(settlement) == SettlementStage.PRIMITIVE && data.getHearth(settlement).isEmpty()) {
 			projects.add(new Project(CAMPFIRE_HEARTH));
 		}
 		if (housingPlan(data, settlement).needsHousing()) {

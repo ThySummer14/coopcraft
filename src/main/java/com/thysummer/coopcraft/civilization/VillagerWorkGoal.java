@@ -158,6 +158,59 @@ public class VillagerWorkGoal extends Goal {
 			+ ", pathTarget=" + (villager.getNavigation().getPath() == null ? null : villager.getNavigation().getPath().getTarget());
 	}
 
+	public static WorkStatus statusOf(Villager villager) {
+		for (var wrapped : ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals()) {
+			if (wrapped.getGoal() instanceof VillagerWorkGoal goal) {
+				return goal.status();
+			}
+		}
+		return new WorkStatus("idle", null, "not_installed");
+	}
+
+	public WorkStatus status() {
+		if (action != null) {
+			if (action == Action.EAT && !hasFoodAvailable()) {
+				return new WorkStatus("idle", null, "hungry_no_food");
+			}
+			return new WorkStatus(action.id(), target, travelTicks >= 100 ? "path_blocked" : null);
+		}
+		if (!(villager.level() instanceof ServerLevel level)) {
+			return new WorkStatus("idle", null, "unknown");
+		}
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Optional<Settlement> workSettlement = data.findSettlementForVillager(villager.getUUID())
+			.filter(candidate -> data.getStockpile(candidate).isPresent());
+		if (workSettlement.isEmpty()) {
+			return new WorkStatus("idle", null, "no_stockpile");
+		}
+		Settlement current = workSettlement.get();
+		if (villager.isBaby()) {
+			return new WorkStatus("idle", null, "child");
+		}
+		int satiety = data.needsOf(current, villager.getUUID()).satiety();
+		boolean foodAvailable = SettlementSimulationService.isSurvivalEnabled(data, current)
+			? SettlementSimulationService.hasFoodFor(data, current, villager.getUUID())
+			: SettlementNeeds.hasFood(villager.getInventory(), SettlementStockpile.getStockpile(level, data, current));
+		if (satiety <= SettlementNeeds.HUNGRY_AT && !foodAvailable) {
+			return new WorkStatus("idle", null, "hungry_no_food");
+		}
+		if (data.getConstructionJob(current).isPresent()) {
+			return new WorkStatus("idle", null, "construction_blocked");
+		}
+		if (data.resourcesOf(current).isEmpty()) {
+			return new WorkStatus("idle", null, "no_resources");
+		}
+		return new WorkStatus("idle", null, null);
+	}
+
+	public record WorkStatus(String action, BlockPos target, String blocker) {
+		public WorkStatus {
+			if (action == null || action.isBlank()) {
+				throw new IllegalArgumentException("Work action cannot be blank");
+			}
+		}
+	}
+
 	@Override
 	public boolean requiresUpdateEveryTick() {
 		return true;
@@ -790,13 +843,23 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private enum Action {
-		GATHER,
-		FORAGE,
-		CRAFT_PICKAXE,
-		CRAFT_STICKS,
-		BUILD,
-		POLISH_PICKAXE,
-		GRIND_SMOOTH_STONE,
-		EAT
+		GATHER("gather"),
+		FORAGE("forage"),
+		CRAFT_PICKAXE("craft"),
+		CRAFT_STICKS("craft"),
+		BUILD("build"),
+		POLISH_PICKAXE("polish"),
+		GRIND_SMOOTH_STONE("grind"),
+		EAT("eat");
+
+		private final String id;
+
+		Action(String id) {
+			this.id = id;
+		}
+
+		String id() {
+			return id;
+		}
 	}
 }

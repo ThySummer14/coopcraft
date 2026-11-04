@@ -1,0 +1,51 @@
+id: settlement-stage
+description: Found a settlement inside a built village, verify the detected civilization stage and generated resident names.
+setup:
+  server_commands:
+    - "forceload add 9998 9998 10014 10014"
+    - "fill 9998 -61 9998 10014 -61 10014 minecraft:stone"
+    - "fill 9998 -60 9998 10014 -58 10014 minecraft:air"
+    - "tp @p 10005 -60 10004 180 0"
+    - "setblock 10000 -60 10002 minecraft:bell"
+    - "setblock 10000 -60 10000 minecraft:red_bed[part=foot,facing=south]"
+    - "setblock 10000 -60 10001 minecraft:red_bed[part=head,facing=south]"
+    - "setblock 10002 -60 10000 minecraft:blue_bed[part=foot,facing=south]"
+    - "setblock 10002 -60 10001 minecraft:blue_bed[part=head,facing=south]"
+    - "setblock 10004 -60 10000 minecraft:green_bed[part=foot,facing=south]"
+    - "setblock 10004 -60 10001 minecraft:green_bed[part=head,facing=south]"
+    - "setblock 10006 -60 10000 minecraft:yellow_bed[part=foot,facing=south]"
+    - "setblock 10006 -60 10001 minecraft:yellow_bed[part=head,facing=south]"
+    - "setblock 10008 -60 10000 minecraft:white_bed[part=foot,facing=south]"
+    - "setblock 10008 -60 10001 minecraft:white_bed[part=head,facing=south]"
+    - "setblock 10010 -60 10000 minecraft:orange_bed[part=foot,facing=south]"
+    - "setblock 10010 -60 10001 minecraft:orange_bed[part=head,facing=south]"
+    - "setblock 10012 -60 10000 minecraft:magenta_bed[part=foot,facing=south]"
+    - "setblock 10012 -60 10001 minecraft:magenta_bed[part=head,facing=south]"
+    - "setblock 10014 -60 10000 minecraft:light_blue_bed[part=foot,facing=south]"
+    - "setblock 10014 -60 10001 minecraft:light_blue_bed[part=head,facing=south]"
+    - "setblock 10000 -60 10004 minecraft:crafting_table"
+    - "setblock 10002 -60 10004 minecraft:furnace"
+    - "setblock 10004 -60 10004 minecraft:blast_furnace"
+    - "setblock 10006 -60 10004 minecraft:smoker"
+    - "setblock 10008 -60 10004 minecraft:smithing_table"
+    - "setblock 10010 -60 10004 minecraft:composter"
+    - "setblock 10012 -60 10004 minecraft:stonecutter"
+    - "fill 10000 -60 10006 10003 -60 10009 minecraft:farmland"
+    - "summon minecraft:villager 10000 -60 10003"
+    - "summon minecraft:villager 10001 -60 10003"
+    - "summon minecraft:villager 10002 -60 10003"
+    - "summon minecraft:villager 10003 -60 10003"
+    - "summon minecraft:villager 10004 -60 10003"
+    - "summon minecraft:villager 10005 -60 10003"
+steps:
+  - wait: 500
+  - player_use: {x: 10000, y: -60, z: 10002, face: up}
+  - wait: 1000
+  - assert_ui: {screen_contains: "SettlementScreen"}
+  - assert_ui: {text_contains_any: ["文明阶段", "Civilization stage"]}
+  - assert_ui: {text_contains_any: ["城镇手工业", "Town crafts"]}
+  - click_text: ["居民", "Residents"]
+  - wait: 300
+  - assert_ui: {text_contains_any: ["分工：", "Role:"]}
+  - assert_ui: {text_not_contains: ["Villager", "村民"]}
+  - screenshot: "settlement-stage"

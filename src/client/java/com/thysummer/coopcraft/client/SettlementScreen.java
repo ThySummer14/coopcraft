@@ -111,6 +111,9 @@ public class SettlementScreen extends Screen {
 			"coopcraft.settlement.population", data.totalResidents(), data.registeredResidents()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.housing", data.housingCapacity()), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.stage", Component.translatable(data.stage().translationKey())
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		Component hearth = data.hearth() < 0
 			? Component.translatable("coopcraft.settlement.hearth_none")
 			: Component.literal(BlockPos.of(data.hearth()).toShortString());
@@ -158,6 +161,8 @@ public class SettlementScreen extends Screen {
 		y = drawWrapped(graphics, summary, x, y, textWidth, maxY, PRIMARY_TEXT) + 10;
 		for (SettlementOverviewPayload.SimulationEventDetail detail : event.details()) {
 			Component value = detail.value().startsWith("coopcraft.")
+				|| detail.value().startsWith("item.")
+				|| detail.value().startsWith("block.")
 				? Component.translatable(detail.value()) : Component.literal(detail.value());
 			y = drawWrapped(graphics, Component.translatable(detail.label(), value), x, y, textWidth, maxY, SECONDARY_TEXT) + 5;
 			if (y >= maxY) {
@@ -180,7 +185,7 @@ public class SettlementScreen extends Screen {
 		Component name = resident.customName().isEmpty()
 			? Component.translatable("entity.minecraft.villager")
 			: Component.literal(resident.customName());
-		Component profession = Component.translatable("entity.minecraft.villager.profession." + resident.profession());
+		Component profession = Component.translatable("entity.minecraft.villager." + resident.profession());
 		if (resident.child()) {
 			profession = Component.translatable("coopcraft.settlement.child", profession);
 		}
