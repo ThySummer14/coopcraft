@@ -8,7 +8,7 @@
 | S1 | 定居、园艺和农业共同体 | **[S1研究规格](S1-early-agriculture/S1-integrated-gameplay-and-implementation-v0.1.md)** · [土地投入与权利v0.2](S1-early-agriculture/land-investment-rights-and-surplus-v0.2.md) · [阶段卡](S1-early-agriculture/stage-card.md) | L1已覆盖，P0先做物资映射与真实种植 |
 | S2 | 早期国家、贡赋与非自由劳动 | **[阶段卡](S2-early-state/stage-card.md)** · [土地/继承/劳动/财政 L2 规格 v0.1](S2-early-state/S2-land-inheritance-public-works-v0.1.md) | L1已归档；按依赖验证 L2 代表玩法 |
 | S3 | 领主制、庄园和租佃 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
-| S4 | 城镇、行会与商业资本 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
+| S4 | 城镇、行会与商业资本 | **[综合研究与实施规格 v0.2](S4-commercial-towns/S4-integrated-research-and-gameplay-v0.2.md)** · [阶段卡](S4-commercial-towns/stage-card.md) · [Issue #36](https://github.com/ThySummer14/coopcraft/issues/36) | L1研究定稿；L2切片待开发验证 |
 | S5 | 资本主义生产方式 | **[S5机制与实现规格v0.2](S5-capitalism/S5-integrated-mechanics-and-implementation-v0.2.md)** · [阶段卡](S5-capitalism/stage-card.md) · [店铺与资本循环创意](S5-capitalism/shop-to-capital-circuit-v0.1.md) | L2设计候选、12项验收实验；未来按P0/P1分片，不阻塞S0 |
 | S6 | 社会主义组织实验 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1 |
 | S7 | 高度社会化合作理论情境 | [总纲概览](../framework/cross-era-master-v0.1.md) | 编写L1，明确假设性质 |
