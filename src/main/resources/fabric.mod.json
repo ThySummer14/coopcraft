@@ -31,7 +31,8 @@
 			"com.thysummer.coopcraft.civilization.SettlementGrowthGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementDistributionGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementNormGameTest",
-			"com.thysummer.coopcraft.civilization.SettlementKinshipGameTest"
+			"com.thysummer.coopcraft.civilization.SettlementKinshipGameTest",
+			"com.thysummer.coopcraft.civilization.VillagerInteractionGameTest"
 		]
 	},
 	"mixins": [

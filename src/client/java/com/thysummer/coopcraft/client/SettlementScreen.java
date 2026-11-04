@@ -158,6 +158,8 @@ public class SettlementScreen extends Screen {
 		y = drawWrapped(graphics, summary, x, y, textWidth, maxY, PRIMARY_TEXT) + 10;
 		for (SettlementOverviewPayload.SimulationEventDetail detail : event.details()) {
 			Component value = detail.value().startsWith("coopcraft.")
+				|| detail.value().startsWith("item.")
+				|| detail.value().startsWith("block.")
 				? Component.translatable(detail.value()) : Component.literal(detail.value());
 			y = drawWrapped(graphics, Component.translatable(detail.label(), value), x, y, textWidth, maxY, SECONDARY_TEXT) + 5;
 			if (y >= maxY) {
