@@ -5,8 +5,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"GameRendererMixin",
-		"GuiMixin",
-		"ItemInHandRendererMixin"
+		"GuiMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
