@@ -5,6 +5,9 @@
 - 状态：**L1十二维已建立 + L2马铃薯首测/小麦扩展可供开发评审；尚未实机完成**
 - 技术环境：CoopCraft / Fabric / Minecraft Java 1.21.1；`main@17296af`
 - 首要全文：[S1综合玩法与实现规格 v0.1](S1-integrated-gameplay-and-implementation-v0.1.md)
+- **长期土地投入与制度深化**：[土地、使用权、剩余分配 v0.2](land-investment-rights-and-surplus-v0.2.md)；新增现实改良、权利束、家庭领取权和分化实验，交付4个小PR。
+- 已查明工程边界：真实 `MinecraftStockpileAdapter` 当前只支持营地保管者；家庭真实箱子属于P2，不可假装P1已实现。
+
 - 上游：[S0研究收束](../S0-primitive/S0-integrated-design-and-freeze-v1.0.md)、[跨时代12维总纲](../../framework/cross-era-master-v0.1.md)
 
 ## 核心问题
