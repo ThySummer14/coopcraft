@@ -209,6 +209,9 @@ class CardRunner:
             any(str(expected) in text for text in texts) for expected in spec["text_contains_any"]
         ):
             raise CardError(f"none of the expected UI texts found: {spec['text_contains_any']!r}")
+        for forbidden in spec.get("text_not_contains", []):
+            if any(str(forbidden) in text for text in texts):
+                raise CardError(f"forbidden UI text found: {forbidden!r}")
         if "screen_contains" in spec and str(spec["screen_contains"]) not in str(data.get("screen", "")):
             raise CardError(f"screen class mismatch: expected {spec['screen_contains']!r}, actual={data.get('screen')!r}")
 

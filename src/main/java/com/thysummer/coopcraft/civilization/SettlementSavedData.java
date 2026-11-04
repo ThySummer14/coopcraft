@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -22,7 +23,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 17;
+	private static final int DATA_VERSION = 18;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
@@ -41,6 +42,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, Set<BlockPos>> housingBeds = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> grindingStations = new LinkedHashMap<>();
 	private final Map<UUID, SocialOrganization> socialOrganizations = new LinkedHashMap<>();
+	private final Map<UUID, SettlementStage> stages = new LinkedHashMap<>();
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
 	private final Map<UUID, SettlementSimulationState> simulations = new LinkedHashMap<>();
@@ -91,6 +93,17 @@ public final class SettlementSavedData extends SavedData {
 		return socialOrganizations.getOrDefault(settlement.id(), SocialOrganization.PRIMITIVE_COMMUNE);
 	}
 
+	public SettlementStage stageOf(Settlement settlement) {
+		return stages.getOrDefault(settlement.id(), SettlementStage.PRIMITIVE);
+	}
+
+	void setStage(Settlement settlement, SettlementStage stage) {
+		Objects.requireNonNull(stage, "stage");
+		if (stages.put(settlement.id(), stage) != stage) {
+			setDirty();
+		}
+	}
+
 	public void registerLoadedResidents(ServerLevel level, Settlement settlement, List<Villager> villagers) {
 		long day = level.getDayTime() / Level.TICKS_PER_DAY;
 		boolean changed = false;
@@ -128,6 +141,7 @@ public final class SettlementSavedData extends SavedData {
 			changed |= simulation.mapResident(
 				villager.getUUID(), villager.isBaby(), needsOf(settlement, villager.getUUID()).satiety()
 			);
+			VillagerNames.assignIfAbsent(this, settlement, villager);
 		}
 		if (changed) {
 			setDirty();
@@ -363,6 +377,15 @@ public final class SettlementSavedData extends SavedData {
 		}
 		tag.put("SocialOrganizations", socialList);
 
+		ListTag stageList = new ListTag();
+		for (Settlement settlement : settlements.values()) {
+			CompoundTag stageTag = new CompoundTag();
+			stageTag.putUUID("SettlementId", settlement.id());
+			stageTag.putString("Stage", stageOf(settlement).id());
+			stageList.add(stageTag);
+		}
+		tag.put("Stages", stageList);
+
 		ListTag memberList = new ListTag();
 		for (SettlementMember member : members.values()) {
 			memberList.add(member.save());
@@ -478,6 +501,12 @@ public final class SettlementSavedData extends SavedData {
 		}
 		for (Settlement settlement : data.settlements.values()) {
 			data.socialOrganizations.putIfAbsent(settlement.id(), SocialOrganization.PRIMITIVE_COMMUNE);
+		}
+
+		ListTag stageList = tag.getList("Stages", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < stageList.size(); i++) {
+			CompoundTag stageTag = stageList.getCompound(i);
+			data.stages.put(stageTag.getUUID("SettlementId"), SettlementStage.byId(stageTag.getString("Stage")));
 		}
 
 		ListTag memberList = tag.getList("Members", ListTag.TAG_COMPOUND);

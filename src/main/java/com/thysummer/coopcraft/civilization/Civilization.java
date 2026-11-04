@@ -99,6 +99,7 @@ public final class Civilization {
 
 		SettlementSavedData data = SettlementSavedData.get(serverLevel);
 		Optional<Settlement> existing = data.find(pos);
+		boolean created = existing.isEmpty();
 		Settlement settlement;
 		if (existing.isPresent()) {
 			settlement = existing.get();
@@ -108,11 +109,16 @@ public final class Civilization {
 				return InteractionResult.SUCCESS;
 			}
 			settlement = data.getOrCreate(serverLevel, pos);
-			serverPlayer.sendSystemMessage(Component.translatable("coopcraft.settlement.created", settlement.name()));
 		}
 
 		List<Villager> residents = findResidents(serverLevel, settlement.center(), RESIDENT_RADIUS);
 		data.registerLoadedResidents(serverLevel, settlement, residents);
+		SettlementStage stage = SettlementStages.initialize(serverLevel, data, settlement, residents);
+		if (created) {
+			serverPlayer.sendSystemMessage(Component.translatable(
+				"coopcraft.settlement.created_stage", settlement.name(), Component.translatable(stage.translationKey())
+			));
+		}
 		if (!ServerPlayNetworking.canSend(serverPlayer, SettlementOverviewPayload.TYPE)) {
 			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.client_required"), true);
 			return InteractionResult.SUCCESS;
@@ -136,6 +142,7 @@ public final class Civilization {
 			SettlementStockpile.communalFoodPoints(stockpile),
 			SettlementStockpile.communalResourceCount(stockpile),
 			data.socialOrganizationOf(settlement),
+			stage,
 			summaries,
 			simulationEvents(serverLevel, data, settlement)
 		));
@@ -147,7 +154,7 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 		if (level.isClientSide) {
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
 			return InteractionResult.PASS;
@@ -156,8 +163,7 @@ public final class Civilization {
 		SettlementSavedData data = SettlementSavedData.get(serverLevel);
 		Optional<Settlement> settlement = data.find(hit.getBlockPos());
 		if (settlement.isEmpty()) {
-			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.no_settlement"), true);
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 
 		data.setStockpile(settlement.get(), hit.getBlockPos());
@@ -178,7 +184,7 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 		if (level.isClientSide) {
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
 			return InteractionResult.PASS;
@@ -187,8 +193,7 @@ public final class Civilization {
 		SettlementSavedData data = SettlementSavedData.get(serverLevel);
 		Optional<Settlement> settlement = data.find(hit.getBlockPos());
 		if (settlement.isEmpty()) {
-			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.no_settlement"), true);
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 
 		data.setHearth(settlement.get(), hit.getBlockPos());
@@ -201,7 +206,7 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 		if (level.isClientSide) {
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
 			return InteractionResult.PASS;
@@ -210,8 +215,7 @@ public final class Civilization {
 		SettlementSavedData data = SettlementSavedData.get(serverLevel);
 		Optional<Settlement> settlement = data.find(hit.getBlockPos());
 		if (settlement.isEmpty()) {
-			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.no_settlement"), true);
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 
 		if (grinding) {
@@ -230,7 +234,7 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 		if (level.isClientSide) {
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
 			return InteractionResult.PASS;
@@ -239,8 +243,7 @@ public final class Civilization {
 		SettlementSavedData data = SettlementSavedData.get(serverLevel);
 		Optional<Settlement> settlement = data.find(hit.getBlockPos());
 		if (settlement.isEmpty()) {
-			serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.no_settlement"), true);
-			return InteractionResult.SUCCESS;
+			return InteractionResult.PASS;
 		}
 
 		boolean added = data.toggleResource(settlement.get(), hit.getBlockPos());
@@ -255,6 +258,7 @@ public final class Civilization {
 				SettlementSimulationService.tick(level, data, settlement);
 				SettlementNeeds.tick(level, data, settlement, level.getGameTime());
 				SettlementStockpile.tick(level, data, settlement, level.getGameTime());
+				SettlementStages.tick(level, data, settlement, level.getGameTime());
 			}
 		}
 	}
@@ -338,6 +342,9 @@ public final class Civilization {
 				addDetail(details, "opponents", residentNames(level, value.opponents()));
 			});
 		}
+		if (event.context().containsKey("stage")) {
+			addDetail(details, "stage", "coopcraft.stage." + event.context().get("stage"));
+		}
 		addDetail(details, "reason", event.context().containsKey("reason")
 			? "coopcraft.simulation.reason." + event.context().get("reason") : null);
 		return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType, quantity, details);
@@ -363,10 +370,11 @@ public final class Civilization {
 		if (personId.startsWith("minecraft-person:")) {
 			try {
 				java.util.UUID villagerId = java.util.UUID.fromString(personId.substring("minecraft-person:".length()));
-				if (level != null && level.getEntity(villagerId) instanceof Villager villager) {
-					return villager.getCustomName() == null
-						? villager.getType().getDescription().getString() : villager.getCustomName().getString();
+				if (level != null && level.getEntity(villagerId) instanceof Villager villager
+					&& villager.getCustomName() != null) {
+					return villager.getCustomName().getString();
 				}
+				return VillagerNames.fullName(villagerId);
 			} catch (IllegalArgumentException ignored) {
 				return personId;
 			}
@@ -395,7 +403,9 @@ public final class Civilization {
 		java.util.UUID leaderId,
 		Villager villager
 	) {
-		String customName = villager.getCustomName() == null ? "" : villager.getCustomName().getString();
+		String customName = villager.getCustomName() == null
+			? VillagerNames.nameFor(data, settlement, villager.getUUID())
+			: villager.getCustomName().getString();
 		VillagerPersonality personality = data.personalityOf(settlement, villager.getUUID());
 		return new SettlementOverviewPayload.ResidentInfo(
 			customName,

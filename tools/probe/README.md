@@ -101,9 +101,10 @@ python tools/probe/run_cards.py --card tools/cards/settlement_roster.yml --dry-r
 - `client_smoke.yml`：标题界面连通性 + 截图。
 - `waypoint_screen.yml`：按 N 打开路径点命名界面并检查标题。
 - `settlement_roster.yml`：固定测试平台上放钟/村民/箱子，右键钟开后查看名册和居民分工。会修改世界，**只在一次性 dev 世界跑**。
+- `settlement_stage.yml`：搭建带床/农田/工作站的村庄，右键钟后断言自动识别的文明阶段，并检查居民页不再显示原始 `Villager` 名称。会修改世界。
 - `container_slot.yml`：打开箱子、读取槽位、点击槽位并断言物品消失。
 
-本地实测：`client_smoke.yml`、`waypoint_screen.yml`、`settlement_roster.yml`、`container_slot.yml` 均 `PASS`；截图保存在对应 run 目录的 `screenshots/`。
+本地实测：`client_smoke.yml`、`waypoint_screen.yml`、`settlement_roster.yml`、`settlement_stage.yml`、`container_slot.yml` 均 `PASS`；截图保存在对应 run 目录的 `screenshots/`。
 
 ## 后续
 
