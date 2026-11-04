@@ -1,0 +1,26 @@
+{
+	"schemaVersion": 1,
+	"id": "coopcraft_probe",
+	"version": "${version}",
+	"name": "CoopCraft Probe",
+	"description": "Dev-only in-game HTTP probe for agent-driven Minecraft testing.",
+	"authors": ["CoopCraft"],
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"client": ["com.thysummer.coopcraft.probe.ProbeClient"],
+		"server": ["com.thysummer.coopcraft.probe.ProbeServerInit"]
+	},
+	"mixins": [
+		{
+			"config": "coopcraft_probe.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "1.21.1",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
