@@ -25,6 +25,16 @@ loom {
 			vmArg "-Dfabric-api.gametest.report-file=${project.buildDir}/test-results/gametest/junit.xml"
 			runDir "build/gametest"
 		}
+		probeServer {
+			inherit server
+			name "Probe Server"
+			runDir "build/probe-server"
+		}
+		probeClient {
+			inherit client
+			name "Probe Client"
+			runDir "build/probe-client"
+		}
 	}
 
 	mods {

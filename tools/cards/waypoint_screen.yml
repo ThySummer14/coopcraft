@@ -1,0 +1,9 @@
+id: waypoint-screen
+description: Press the CoopCraft waypoint key and verify the waypoint name screen opens.
+steps:
+  - ui_close: true
+  - wait: 300
+  - key: "key.coopcraft.add_waypoint"
+  - wait: 500
+  - assert_ui: {title_contains_any: ["路径点", "waypoint"]}
+  - screenshot: "waypoint-screen"

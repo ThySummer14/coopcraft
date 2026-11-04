@@ -1,0 +1,23 @@
+id: settlement-roster
+description: Found a settlement from a bell, open the roster, and verify the residents tab and labor roles.
+setup:
+  server_commands:
+    - "forceload add 9998 9998 10005 10005"
+    - "fill 9998 -61 9998 10003 -61 10005 minecraft:stone"
+    - "fill 9998 -60 9998 10003 -58 10005 minecraft:air"
+    - "tp @p 10000 -60 10005 180 0"
+    - "summon minecraft:villager 10000 -60 10000"
+    - "summon minecraft:villager 10001 -60 10000"
+    - "summon minecraft:villager 10002 -60 10000"
+    - "setblock 10000 -60 10002 minecraft:bell"
+    - "setblock 10000 -60 10003 minecraft:chest"
+steps:
+  - wait: 500
+  - player_use: {x: 10000, y: -60, z: 10002, face: up}
+  - wait: 1000
+  - assert_ui: {screen_contains: "SettlementScreen"}
+  - assert_ui: {text_contains_any: ["公共住宅床位", "Communal housing beds"]}
+  - click_text: ["居民", "Residents"]
+  - wait: 300
+  - assert_ui: {text_contains_any: ["分工：", "Role:"]}
+  - screenshot: "settlement-roster"

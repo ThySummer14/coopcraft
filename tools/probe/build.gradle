@@ -1,0 +1,54 @@
+plugins {
+	id 'net.fabricmc.fabric-loom-remap' version '1.18.4'
+}
+
+version = '0.1.0'
+group = 'com.thysummer.coopcraft.probe'
+base {
+	archivesName = 'coopcraft-probe'
+}
+
+repositories {
+	maven {
+		name = 'Fabric'
+		url = 'https://maven.fabricmc.net/'
+	}
+}
+
+loom {
+	runs {
+		client {
+			client()
+			runDir 'run-client'
+		}
+		server {
+			server()
+			runDir 'run-server'
+		}
+	}
+}
+
+dependencies {
+	minecraft 'com.mojang:minecraft:1.21.1'
+	mappings loom.officialMojangMappings()
+	modImplementation 'net.fabricmc:fabric-loader:0.20.1'
+	modImplementation 'net.fabricmc.fabric-api:fabric-api:0.116.17+1.21.1'
+}
+
+processResources {
+	def version = project.version
+	inputs.property 'version', version
+	filesMatching('fabric.mod.json') {
+		expand 'version': version
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.release = 21
+}
+
+java {
+	withSourcesJar()
+	sourceCompatibility = JavaVersion.VERSION_21
+	targetCompatibility = JavaVersion.VERSION_21
+}

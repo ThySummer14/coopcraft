@@ -1,0 +1,20 @@
+id: container-slot
+description: Open a chest through the client probe and verify slot snapshot/click.
+setup:
+  server_commands:
+    - "tp @p 10000 -60 10005 180 0"
+steps:
+  - ui_close: true
+  - wait: 500
+  - server_command: "setblock 10000 -60 10003 minecraft:air"
+  - server_command: "setblock 10000 -60 10003 minecraft:chest"
+  - server_command: "item replace block 10000 -60 10003 container.0 with minecraft:bread 3"
+  - wait: 1000
+  - player_use: {x: 10000, y: -60, z: 10003, face: up}
+  - wait: 500
+  - assert_ui: {title_contains_any: ["Chest", "箱子"]}
+  - assert_json: {side: client, endpoint: ui, path: "data.slots.0.item", op: eq, value: "minecraft:bread"}
+  - ui_click: {slot: 0}
+  - wait: 300
+  - assert_json: {side: client, endpoint: ui, path: "data.slots.0.count", op: eq, value: 0}
+  - screenshot: "container-slot"

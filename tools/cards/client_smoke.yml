@@ -1,0 +1,6 @@
+id: client-smoke
+description: Check the dev client probe is reachable and can capture the title screen.
+steps:
+  - assert_json: {side: client, path: "data.ready", op: eq, value: true}
+  - assert_json: {side: client, path: "data.screen", op: contains, value: "TitleScreen"}
+  - screenshot: "client-smoke"

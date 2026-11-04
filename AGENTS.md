@@ -41,6 +41,8 @@ export GRADLE_USER_HOME=/Users/filisi/工作/会话/.gradle
 | `./gradlew build` | 构建，产物 `build/libs/coopcraft-0.1.0.jar` |
 | `./gradlew runGameTest` | 跑 Fabric GameTest（服务端逻辑） |
 | `./gradlew runClient` / `runServer` | 本地起客户端 / 服务端 |
+| `tools/probe/prepare_dev_run.sh` + `./gradlew runProbeServer` / `runProbeClient` | 启动带 dev 探针的本地测试服/客户端 |
+| `python tools/probe/run_cards.py --card tools/cards/...` | 跑真实游戏 YAML 场景卡 |
 | `./gradlew build runGameTest` | 提交前的标准检查 |
 
 服务端安装：`JAVA_HOME=<jdk21> ./setup.sh <jar>`（`server/README.md` 有完整流程）。
@@ -51,6 +53,7 @@ export GRADLE_USER_HOME=/Users/filisi/工作/会话/.gradle
 - 新增网络包：在 `src/main/java/com/thysummer/coopcraft/net/CoopNetworking.java` 注册 `PayloadTypeRegistry`，S2C/C2C 分清楚。
 - 资源放 `src/main/resources/assets/coopcraft/`，语言文件 `lang/zh_cn.json` + `lang/en_us.json` 同时加。
 - 用官方映射的类名和参数顺序；网上 Yarn 教程的写法对不上，照抄前核对。
+- `tools/probe` 是 dev-only 探针，只用于本地测试服/客户端；不要放进发布 jar、PCL 正式实例或 Mac 测试服。
 - 新增依赖必须在 PR 里说明理由。
 
 ## 6. 测试与合并
