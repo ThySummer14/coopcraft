@@ -35,6 +35,7 @@ class SettlementOverviewPayloadTest {
 			44,
 			17,
 			SocialOrganization.PRIMITIVE_COMMUNE,
+			SettlementStage.PRIMITIVE,
 			List.of(
 				new SettlementOverviewPayload.ResidentInfo(
 					"", "farmer", "forager", false, -8, 64, 20, 72, 35, 81, 66, "ambitious", List.of("greedy", "fast"), true
@@ -58,6 +59,36 @@ class SettlementOverviewPayloadTest {
 		} finally {
 			buf.release();
 		}
+	}
+
+	@Test
+	void birthEventUsesGeneratedNamesWithoutLoadedEntities() {
+		SettlementSavedData data = new SettlementSavedData();
+		Settlement settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Testhaven", 0);
+		UUID firstParent = UUID.randomUUID();
+		UUID secondParent = UUID.randomUUID();
+		UUID child = UUID.randomUUID();
+		SimulationEvent birth = new SimulationEvent(
+			1, 0, EventType.BIRTH,
+			List.of(
+				"minecraft-person:" + firstParent,
+				"minecraft-person:" + secondParent,
+				"minecraft-person:" + child
+			),
+			List.of(), List.of(), Map.of("source", "test"), List.of()
+		);
+
+		SettlementOverviewPayload.SimulationEventInfo info = Civilization.toSimulationEventInfo(null, data, settlement, birth);
+
+		assertEquals(List.of(
+			new SettlementOverviewPayload.SimulationEventDetail(
+				"coopcraft.simulation.detail.parents",
+				VillagerNames.fullName(firstParent) + ", " + VillagerNames.fullName(secondParent)
+			),
+			new SettlementOverviewPayload.SimulationEventDetail(
+				"coopcraft.simulation.detail.child", VillagerNames.fullName(child)
+			)
+		), info.details());
 	}
 
 	@Test
@@ -91,13 +122,19 @@ class SettlementOverviewPayloadTest {
 		SettlementOverviewPayload.SimulationEventInfo info = Civilization.toSimulationEventInfo(null, data, settlement, event);
 
 		assertEquals(List.of(
-			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.proposer", firstPerson),
+			new SettlementOverviewPayload.SimulationEventDetail(
+				"coopcraft.simulation.detail.proposer", VillagerNames.fullName(first)
+			),
 			new SettlementOverviewPayload.SimulationEventDetail(
 				"coopcraft.simulation.detail.rule", "coopcraft.simulation.norm.need-first-common-store"
 			),
 			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.cap", "3 → 2"),
-			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.supporters", firstPerson),
-			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.opponents", secondPerson)
+			new SettlementOverviewPayload.SimulationEventDetail(
+				"coopcraft.simulation.detail.supporters", VillagerNames.fullName(first)
+			),
+			new SettlementOverviewPayload.SimulationEventDetail(
+				"coopcraft.simulation.detail.opponents", VillagerNames.fullName(second)
+			)
 		), info.details());
 	}
 

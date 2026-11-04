@@ -39,7 +39,7 @@ class SettlementSavedDataTest {
 		assertEquals(settlement, restored.find(center).orElseThrow());
 		assertEquals(SocialOrganization.PRIMITIVE_COMMUNE, restored.socialOrganizationOf(settlement));
 		assertTrue(restored.simulationOf(settlement).isEmpty());
-		assertEquals(17, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(18, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -53,7 +53,7 @@ class SettlementSavedDataTest {
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
 
 		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
-		assertEquals(17, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(18, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -217,6 +217,22 @@ class SettlementSavedDataTest {
 		restored.completeConstruction(settlement);
 		assertTrue(restored.getConstructionJob(settlement).isEmpty());
 		assertEquals(1, restored.housingCapacity(settlement));
+	}
+
+	@Test
+	void preservesStageAndDefaultsMissingStageToPrimitive() {
+		SettlementSavedData data = new SettlementSavedData();
+		BlockPos center = new BlockPos(10, 64, 10);
+		Settlement settlement = data.getOrCreate(center, "Testhaven", 4);
+		data.setStage(settlement, SettlementStage.TOWN);
+
+		SettlementSavedData restored = SettlementSavedData.load(data.save(new CompoundTag(), null), null);
+		assertEquals(SettlementStage.TOWN, restored.stageOf(restored.find(center).orElseThrow()));
+
+		CompoundTag oldTag = data.save(new CompoundTag(), null);
+		oldTag.remove("Stages");
+		SettlementSavedData old = SettlementSavedData.load(oldTag, null);
+		assertEquals(SettlementStage.PRIMITIVE, old.stageOf(old.find(center).orElseThrow()));
 	}
 
 	@Test

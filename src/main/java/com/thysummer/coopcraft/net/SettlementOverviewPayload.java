@@ -6,6 +6,7 @@ import java.util.Objects;
 
 import com.thysummer.coopcraft.CoopCraft;
 import com.thysummer.coopcraft.civilization.PersonalityArchetype;
+import com.thysummer.coopcraft.civilization.SettlementStage;
 import com.thysummer.coopcraft.civilization.SocialOrganization;
 import com.thysummer.coopcraft.civilization.VillagerTrait;
 import com.thysummer.coopcraft.civilization.WorkRole;
@@ -25,6 +26,7 @@ public record SettlementOverviewPayload(
 	int communalFoodPoints,
 	int communalResourceCount,
 	SocialOrganization society,
+	SettlementStage stage,
 	List<ResidentInfo> residents,
 	List<SimulationEventInfo> simulationEvents
 ) implements CustomPacketPayload {
@@ -39,6 +41,7 @@ public record SettlementOverviewPayload(
 
 	public SettlementOverviewPayload {
 		Objects.requireNonNull(society, "society");
+		Objects.requireNonNull(stage, "stage");
 		residents = List.copyOf(residents);
 		simulationEvents = List.copyOf(simulationEvents);
 		if (simulationEvents.size() > MAX_SIMULATION_EVENTS) {
@@ -60,6 +63,7 @@ public record SettlementOverviewPayload(
 		buf.writeUtf(society.ownership().id());
 		buf.writeUtf(society.labor().id());
 		buf.writeUtf(society.distribution().id());
+		buf.writeUtf(stage.id());
 		buf.writeVarInt(residents.size());
 		for (ResidentInfo resident : residents) {
 			buf.writeUtf(resident.customName());
@@ -105,6 +109,7 @@ public record SettlementOverviewPayload(
 		int communalFoodPoints = buf.readVarInt();
 		int communalResourceCount = buf.readVarInt();
 		SocialOrganization society = SocialOrganization.fromIds(buf.readUtf(), buf.readUtf(), buf.readUtf(), buf.readUtf());
+		SettlementStage stage = SettlementStage.byId(buf.readUtf());
 		int count = buf.readVarInt();
 		if (count < 0 || count > MAX_RESIDENTS || totalResidents < count || registeredResidents < 0 || housingCapacity < 0
 			|| communalFoodPoints < 0 || communalResourceCount < 0) {
@@ -160,7 +165,7 @@ public record SettlementOverviewPayload(
 		}
 		return new SettlementOverviewPayload(
 			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
-			communalFoodPoints, communalResourceCount, society, residents, simulationEvents
+			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents
 		);
 	}
 

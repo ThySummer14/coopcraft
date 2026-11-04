@@ -54,6 +54,19 @@ class ConstructionPlannerTest {
 	}
 
 	@Test
+	void agriculturalSettlementSkipsPrimitiveHearth() {
+		SettlementSavedData data = new SettlementSavedData();
+		Settlement settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Testhaven", 0);
+		data.registerMember(settlement, UUID.randomUUID(), 0);
+		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+
+		assertEquals(
+			List.of(ConstructionPlanner.STONE_COTTAGE),
+			ConstructionPlanner.projects(data, settlement).stream().map(ConstructionPlanner.Project::blueprintId).toList()
+		);
+	}
+
+	@Test
 	void builtHearthAndEnoughBedsLeaveNoProjects() {
 		SettlementSavedData data = new SettlementSavedData();
 		Settlement settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Testhaven", 0);
