@@ -16,6 +16,7 @@ import com.thysummer.coopcraft.net.SettlementOverviewPayload;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.minecraft.core.BlockPos;
@@ -49,6 +50,7 @@ public final class Civilization {
 	public static void register() {
 		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new BlueprintManager());
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
+		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
 		ServerTickEvents.END_SERVER_TICK.register(Civilization::tick);
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
 			if (entity instanceof Villager villager) {
@@ -306,6 +308,8 @@ public final class Civilization {
 			addDetail(details, "rule", "coopcraft.simulation.norm." + event.context().get("normId"));
 		}
 		addDetail(details, "recipe", event.context().get("recipe"));
+		addDetail(details, "item", event.context().get("item"));
+		addDetail(details, "player", event.context().get("player"));
 		addDetail(details, "work_type", event.context().containsKey("workType")
 			? "coopcraft.simulation.worktype." + event.context().get("workType") : null);
 		if (event.context().containsKey("skillBefore") && event.context().containsKey("skillAfter")) {

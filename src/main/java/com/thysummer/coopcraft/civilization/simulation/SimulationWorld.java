@@ -632,6 +632,33 @@ public final class SimulationWorld {
 		donor.adjustTrust(requesterId, 1);
 	}
 
+	public long recordGiftInteraction(
+		String villagerPersonId,
+		String playerActorId,
+		boolean accepted,
+		String itemName,
+		String playerName,
+		String reason,
+		int trustAfter
+	) {
+		person(villagerPersonId);
+		if (playerActorId.isBlank() || itemName.isBlank() || playerName.isBlank() || reason.isBlank()
+			|| trustAfter < 0 || trustAfter > 100) {
+			throw new IllegalArgumentException("Invalid gift interaction");
+		}
+		Map<String, String> context = new LinkedHashMap<>();
+		context.put("item", itemName);
+		context.put("player", playerName);
+		context.put("reason", reason);
+		context.put("trustAfter", Integer.toString(trustAfter));
+		return recordSocialEvent(
+			accepted ? EventType.GIFT_RECEIVED : EventType.GIFT_REFUSED,
+			List.of(villagerPersonId, playerActorId),
+			context,
+			List.of()
+		);
+	}
+
 	public int spoilExpired() {
 		int spoiledBatches = 0;
 		for (ResourceBatch batch : batches()) {
