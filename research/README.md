@@ -9,8 +9,9 @@
 1. **[跨时代研究总纲 v0.1](framework/cross-era-master-v0.1.md)**：统一12个研究维度（D01–D12）、S0–S7研究单元、研究完成标准、资本主义经营玩法构想。
 2. **[原始社会研究体系与 Fabric 工程对接 v1.1](stages/S0-primitive/research-framework-v1.1.md)**：统一因果模型、研究依赖和原始社会阶段的工程接入策略。
 3. **[原始社会：玩家参与与制度涌现 v0.1](stages/S0-primitive/player-participation-v0.1.md)**：从研究走向 Minecraft 可玩的居民交互与社会反馈。
-4. **[资本主义：店铺经营与资本循环创意](stages/S5-capitalism/shop-to-capital-circuit-v0.1.md)**：远期研究提案，明确不要求当前立刻实现。
-5. **[研究工作流程](WORKFLOW.md)** 与 **[阶段卡模板](framework/stage-card-template.md)**：未来如何逐轮讨论、验证并归档。
+4. **[S0 共同体需求与劳动协调 v0.1](stages/S0-primitive/needs-and-labor-coordination-v0.1.md)**：已核对 main 最新提交，研究多项生存需求竞争时的劳动调度、玩家参与和任务预留。
+5. **[资本主义：店铺经营与资本循环创意](stages/S5-capitalism/shop-to-capital-circuit-v0.1.md)**：远期研究提案，明确不要求当前立刻实现。
+6. **[研究工作流程](WORKFLOW.md)** 与 **[阶段卡模板](framework/stage-card-template.md)**：未来如何逐轮讨论、验证并归档。
 
 仓库内现行开发基线是 **[docs/civilization-design.md](../docs/civilization-design.md)**，请先检查最新代码、GameTest 与该文档，再决定哪条研究建议需要进入开发。研究资料不取代源码、测试或已确认的接口。
 
