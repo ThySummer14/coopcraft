@@ -25,6 +25,7 @@ import net.minecraft.client.multiplayer.resolver.ServerAddress;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.ClickType;
@@ -55,6 +56,7 @@ public final class ProbeClientApi {
 			Map.entry("/command", body -> onClient(() -> command(body))),
 			Map.entry("/connect", body -> onClient(() -> connect(body))),
 			Map.entry("/player/use", body -> onClient(() -> playerUse(body))),
+			Map.entry("/player/use-entity", body -> onClientAsync(future -> playerUseEntity(body, future))),
 			Map.entry("/screenshot", body -> onClient(() -> screenshot(body))),
 			Map.entry("/quit", body -> {
 				Minecraft client = Minecraft.getInstance();
@@ -75,6 +77,22 @@ public final class ProbeClientApi {
 		client.execute(() -> {
 			try {
 				future.complete(action.get());
+			} catch (Throwable error) {
+				future.completeExceptionally(error);
+			}
+		});
+		return future.get(5, TimeUnit.SECONDS);
+	}
+
+	private static JsonObject onClientAsync(java.util.function.Consumer<CompletableFuture<JsonObject>> action) throws Exception {
+		Minecraft client = Minecraft.getInstance();
+		if (client == null) {
+			return ProbeJson.error("client not initialized");
+		}
+		CompletableFuture<JsonObject> future = new CompletableFuture<>();
+		client.execute(() -> {
+			try {
+				action.accept(future);
 			} catch (Throwable error) {
 				future.completeExceptionally(error);
 			}
@@ -237,7 +255,8 @@ public final class ProbeClientApi {
 		return json;
 	}
 
-	private static JsonObject playerUse(JsonObject body) {		Minecraft client = Minecraft.getInstance();
+	private static JsonObject playerUse(JsonObject body) {
+		Minecraft client = Minecraft.getInstance();
 		if (client.player == null || client.gameMode == null) {
 			return ProbeJson.error("player not ready");
 		}
@@ -250,10 +269,108 @@ public final class ProbeClientApi {
 			return ProbeJson.error("invalid face");
 		}
 		BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), face, pos, false);
-		InteractionResult result = client.gameMode.useItemOn(client.player, InteractionHand.MAIN_HAND, hit);
+		boolean shift = body.has("shift") && body.get("shift").getAsBoolean();
+		InteractionResult result = interactWithShift(client, shift,
+			() -> client.gameMode.useItemOn(client.player, InteractionHand.MAIN_HAND, hit));
 		JsonObject json = ProbeJson.ok();
 		json.addProperty("result", result.toString());
 		return json;
+	}
+
+	private static void playerUseEntity(JsonObject body, CompletableFuture<JsonObject> future) {
+		Minecraft client = Minecraft.getInstance();
+		if (client.player == null || client.gameMode == null || client.level == null) {
+			future.complete(ProbeJson.error("player not ready"));
+			return;
+		}
+		String requestedId = body.has("uuid") ? body.get("uuid").getAsString() : "";
+		java.util.UUID entityId;
+		try {
+			entityId = java.util.UUID.fromString(requestedId);
+		} catch (IllegalArgumentException error) {
+			future.complete(ProbeJson.error("player/use-entity requires a valid uuid"));
+			return;
+		}
+		net.minecraft.world.entity.Entity target = null;
+		for (net.minecraft.world.entity.Entity entity : client.level.entitiesForRendering()) {
+			if (entity.getUUID().equals(entityId)) {
+				target = entity;
+				break;
+			}
+		}
+		if (target == null) {
+			future.complete(ProbeJson.error("entity is not loaded on the client: " + entityId));
+			return;
+		}
+		net.minecraft.world.entity.Entity interacted = target;
+		boolean shift = body.has("shift") && body.get("shift").getAsBoolean();
+		boolean previousShift = client.player.isShiftKeyDown();
+		if (shift != previousShift) {
+			client.player.setShiftKeyDown(shift);
+			if (client.getConnection() != null) {
+				client.getConnection().send(new ServerboundPlayerCommandPacket(client.player,
+					shift ? ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY : ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY));
+			}
+		}
+		client.execute(() -> {
+			try {
+				if (client.player == null || client.gameMode == null || client.getConnection() == null) {
+					future.complete(ProbeJson.error("player disconnected before entity interaction"));
+					return;
+				}
+				client.player.setShiftKeyDown(shift);
+				client.getConnection().send(net.minecraft.network.protocol.game.ServerboundInteractPacket.createInteractionPacket(
+					interacted, shift, InteractionHand.MAIN_HAND
+				));
+				JsonObject json = ProbeJson.ok();
+				json.addProperty("result", InteractionResult.SUCCESS.toString());
+				json.addProperty("uuid", entityId.toString());
+				future.complete(json);
+			} catch (Throwable error) {
+				future.completeExceptionally(error);
+			} finally {
+				if (shift != previousShift) {
+					client.execute(() -> {
+						if (client.player == null) {
+							return;
+						}
+						client.player.setShiftKeyDown(previousShift);
+						if (client.getConnection() != null) {
+							client.getConnection().send(new ServerboundPlayerCommandPacket(client.player,
+								previousShift ? ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY
+									: ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY));
+						}
+					});
+				}
+			}
+		});
+	}
+
+	private static InteractionResult interactWithShift(Minecraft client, boolean shift, Supplier<InteractionResult> interaction) {
+		boolean previousShift = client.player.isShiftKeyDown();
+		if (shift == previousShift) {
+			return interaction.get();
+		}
+		client.player.setShiftKeyDown(shift);
+		if (client.getConnection() != null) {
+			client.getConnection().send(new ServerboundPlayerCommandPacket(client.player,
+				shift ? ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY : ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY));
+		}
+		try {
+			return interaction.get();
+		} finally {
+			client.execute(() -> {
+				if (client.player == null) {
+					return;
+				}
+				client.player.setShiftKeyDown(previousShift);
+				if (client.getConnection() != null) {
+					client.getConnection().send(new ServerboundPlayerCommandPacket(client.player,
+						previousShift ? ServerboundPlayerCommandPacket.Action.PRESS_SHIFT_KEY
+							: ServerboundPlayerCommandPacket.Action.RELEASE_SHIFT_KEY));
+				}
+			});
+		}
 	}
 
 	private static JsonObject screenshot(JsonObject body) {

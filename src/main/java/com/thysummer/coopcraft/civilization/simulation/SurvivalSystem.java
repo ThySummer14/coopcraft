@@ -1,6 +1,7 @@
 package com.thysummer.coopcraft.civilization.simulation;
 
 import java.util.Collection;
+import java.util.List;
 
 public final class SurvivalSystem {
 	private static final int TARGET_HUNGER = 5;
@@ -32,11 +33,21 @@ public final class SurvivalSystem {
 	}
 
 	public MealResult eatFromCommon(Person person, int maximumUnits) {
+		return eatFromCommon(person, maximumUnits, 0);
+	}
+
+	public MealResult eatFromCommon(Person person, int maximumUnits, long existingRequestEventId) {
 		if (!person.isAlive() || !world.allPeople().contains(person)) {
 			throw new IllegalArgumentException("Only living registered residents can eat");
 		}
 		if (maximumUnits <= 0) {
 			throw new IllegalArgumentException("Meal unit limit must be positive");
+		}
+		if (existingRequestEventId > 0) {
+			SimulationEvent request = world.ledger().event(existingRequestEventId)
+				.filter(event -> event.type() == EventType.SHARE_REQUEST)
+				.filter(event -> event.actors().equals(List.of(person.id(), person.campId())))
+				.orElseThrow(() -> new IllegalArgumentException("Meal request does not match the resident and camp"));
 		}
 		long consumed = 0;
 		int units = 0;
@@ -53,7 +64,8 @@ public final class SurvivalSystem {
 			int quantity = (int) Math.min(
 				maximumUnits - units, Math.min(batch.quantity(), unitsFor(shortfall, batch.nutritionPerUnit()))
 			);
-			lastRequestEventId = world.recordShareRequest(person.id(), person.campId(), shortfall);
+			lastRequestEventId = existingRequestEventId > 0
+				? existingRequestEventId : world.recordShareRequest(person.id(), person.campId(), shortfall);
 			SimulationWorld.TransferResult allocation = world.allocateCommon(
 				person.campId(), person.id(), batch.batchId(), quantity, lastRequestEventId
 			);

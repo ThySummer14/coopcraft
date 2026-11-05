@@ -28,8 +28,8 @@ public final class SettlementForaging {
 			|| SettlementSimulationService.isProductionEnabled(data, settlement);
 	}
 
-	static boolean needsForage(boolean hasFood, long gameTime, long cooldownUntil) {
-		return !hasFood && gameTime >= cooldownUntil;
+	static boolean needsForage(boolean required, long gameTime, long cooldownUntil) {
+		return required && gameTime >= cooldownUntil;
 	}
 
 	static boolean isRipe(BlockState state) {
@@ -93,6 +93,9 @@ public final class SettlementForaging {
 			}
 		}
 		depositForagedFood(level, data, settlement, villager);
+		if (harvested > 0) {
+			SettlementCoordination.requestReplan(data, settlement);
+		}
 		return harvested;
 	}
 

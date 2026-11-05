@@ -478,6 +478,10 @@ public final class SettlementSimulationService {
 	}
 
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId) {
+		return eat(data, settlement, villagerId, 0);
+	}
+
+	static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, long existingRequestEventId) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled()) {
 			return 0;
@@ -492,7 +496,7 @@ public final class SettlementSimulationService {
 			recordFoodRefusal(data, state, person);
 			return 0;
 		}
-		SurvivalSystem.MealResult meal = survival(state).eatFromCommon(person, remainingUnits);
+		SurvivalSystem.MealResult meal = survival(state).eatFromCommon(person, remainingUnits, existingRequestEventId);
 		if (meal.units() > 0) {
 			state.recordFoodAllocation(personId, meal.units());
 			if (state.normsEnabled()) {

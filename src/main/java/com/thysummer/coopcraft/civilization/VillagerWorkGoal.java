@@ -45,6 +45,7 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private Settlement settlement;
+	private WorkReservation workReservation;
 	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
 	private int searchCooldown;
@@ -73,12 +74,84 @@ public class VillagerWorkGoal extends Goal {
 			return true;
 		}
 		if (shouldEat()) {
+			pauseWorkReservation("personal_hunger");
 			action = Action.EAT;
 			target = settlementData().getStockpile(settlement).orElse(null);
 			progress = 0;
 			return target != null;
 		}
 		if (villager.isBaby()) {
+			pauseWorkReservation("not_available");
+			action = null;
+			target = null;
+			return false;
+		}
+		Optional<CareAssignment> care = activeCare();
+		if (care.isPresent()) {
+			pauseWorkReservation("care_commitment");
+			action = Action.CARE;
+			target = careDependent(care.get()).blockPosition();
+			progress = 0;
+			return true;
+		}
+		if (action == Action.BUILD && starvingWithoutFood()) {
+			pauseWorkReservation("personal_hunger");
+			action = null;
+			target = null;
+			currentBuildTarget = null;
+		}
+		ServerLevel level = (ServerLevel) villager.level();
+		Optional<WorkReservation> offered = SettlementCoordination.availableFor(
+			level, settlementData(), settlement, villager.getUUID()
+		);
+		if (offered.filter(reservation -> reservation.task() == WorkReservation.Task.BUILD).isPresent()
+			&& starvingWithoutFood()) {
+			pauseWorkReservation("personal_hunger");
+			SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "personal_hunger");
+			offered = Optional.empty();
+		}
+		if (offered.filter(reservation -> reservation.task() == WorkReservation.Task.FORAGE).isPresent()
+			&& villager.level().getGameTime() < forageCooldownUntil) {
+			offered = Optional.empty();
+		}
+		if (workReservation != null && (action == Action.BUILD || action == Action.FORAGE)
+			&& (offered.isEmpty() || !offered.get().id().equals(workReservation.id()))) {
+			action = null;
+			target = null;
+			forageTarget = null;
+			currentBuildTarget = null;
+			workReservation = null;
+		}
+		if (offered.isPresent() && (action == null || action == Action.BUILD || action == Action.FORAGE)) {
+			WorkReservation candidate = offered.get();
+			if (candidate.task() == WorkReservation.Task.FORAGE && (action != Action.FORAGE || workReservation == null)) {
+				BlockPos bush = findFoodSource();
+				if (bush != null) {
+					action = Action.FORAGE;
+					forageTarget = bush;
+					target = bush;
+					workReservation = SettlementCoordination.begin(level, settlementData(), settlement, villager.getUUID());
+					progress = 0;
+					return true;
+				}
+				forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
+				SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "forage_unavailable");
+			} else if (candidate.task() == WorkReservation.Task.BUILD && (action != Action.BUILD || workReservation == null)) {
+				Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
+					level, settlementData(), settlement
+				);
+				if (buildTarget.isPresent()) {
+					currentBuildTarget = buildTarget.get();
+					action = Action.BUILD;
+					target = currentBuildTarget.position();
+					workReservation = SettlementCoordination.begin(level, settlementData(), settlement, villager.getUUID());
+					progress = 0;
+					return true;
+				}
+				SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "construction_blocked");
+			}
+		}
+		if (settlementData().getStockpile(settlement).isEmpty()) {
 			action = null;
 			target = null;
 			return false;
@@ -88,7 +161,7 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		if (shouldForage()) {
-			BlockPos bush = findRipeBerryBush();
+			BlockPos bush = findFoodSource();
 			if (bush != null) {
 				action = Action.FORAGE;
 				forageTarget = bush;
@@ -97,18 +170,6 @@ public class VillagerWorkGoal extends Goal {
 				return true;
 			}
 			forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
-		}
-		if (action != Action.BUILD) {
-			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
-				(ServerLevel) villager.level(), settlementData(), settlement
-			);
-			if (buildTarget.isPresent()) {
-				currentBuildTarget = buildTarget.get();
-				action = Action.BUILD;
-				target = currentBuildTarget.position();
-				progress = 0;
-				return true;
-			}
 		}
 		if (action != null && isTargetValid()) {
 			return true;
@@ -123,18 +184,45 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public boolean canContinueToUse() {
-		return action != null && isTargetValid() && findWorkSettlement().isPresent();
+		if (action == null || findWorkSettlement().isEmpty()) {
+			return false;
+		}
+		if (action != Action.EAT && shouldEat() || action == Action.BUILD && starvingWithoutFood()) {
+			return false;
+		}
+		if (workReservation != null && (action == Action.BUILD || action == Action.FORAGE)
+			&& SettlementCoordination.availableFor(
+				(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+			).filter(reservation -> reservation.id().equals(workReservation.id())).isEmpty()) {
+			return false;
+		}
+		return (action != Action.CARE || !shouldEat()) && isTargetValid();
 	}
 
 	@Override
 	public void start() {
 		progress = 0;
 		travelTicks = 0;
+		if (workReservation != null) {
+			workReservation = SettlementCoordination.begin(
+				(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+			);
+		}
 		navigateToTarget();
 	}
 
 	@Override
 	public void stop() {
+		if (workReservation != null && settlement != null) {
+			if (action == Action.BUILD && starvingWithoutFood()) {
+				SettlementCoordination.pause(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID(), "personal_hunger"
+				);
+			} else {
+				SettlementCoordination.rest((ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID());
+			}
+		}
+		workReservation = null;
 		action = null;
 		target = null;
 		forageTarget = null;
@@ -149,7 +237,11 @@ public class VillagerWorkGoal extends Goal {
 	String debugState() {
 		boolean running = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()
 			.anyMatch(goal -> goal.getGoal() == this && goal.isRunning());
-		return "action=" + action + ", target=" + target + ", progress=" + progress + ", running=" + running
+		String reservation = findWorkSettlement()
+			.flatMap(current -> settlementData().simulationOf(current))
+			.flatMap(state -> state.coordinationPlan().reservationFor(villager.getUUID()))
+			.map(Object::toString).orElse("none");
+		return "reservation=" + reservation + ", action=" + action + ", target=" + target + ", progress=" + progress + ", running=" + running
 			+ ", canContinue=" + canContinueToUse() + ", alive=" + villager.isAlive() + ", villagerTick=" + villager.tickCount
 			+ ", gameTime=" + villager.level().getGameTime()
 			+ ", entityTicking=" + ((ServerLevel) villager.level()).isPositionEntityTicking(villager.blockPosition())
@@ -178,14 +270,28 @@ public class VillagerWorkGoal extends Goal {
 			return new WorkStatus("idle", null, "unknown");
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
-		Optional<Settlement> workSettlement = data.findSettlementForVillager(villager.getUUID())
-			.filter(candidate -> data.getStockpile(candidate).isPresent());
+		Optional<Settlement> workSettlement = data.findSettlementForVillager(villager.getUUID());
 		if (workSettlement.isEmpty()) {
 			return new WorkStatus("idle", null, "no_stockpile");
 		}
 		Settlement current = workSettlement.get();
+		Optional<CareAssignment> receivingCare = SettlementCareService.activeForDependent(
+			level, data, current, villager.getUUID()
+		);
+		if (receivingCare.isPresent()
+			&& level.getEntity(receivingCare.get().caregiverId()) instanceof Villager caregiver) {
+			return new WorkStatus("receiving_care", caregiver.blockPosition(), null);
+		}
 		if (villager.isBaby()) {
 			return new WorkStatus("idle", null, "child");
+		}
+		Optional<String> paused = SettlementCoordination.pausedCause(level, data, current, villager.getUUID());
+		if (paused.isPresent()) {
+			BlockPos project = data.getConstructionJob(current).map(ConstructionJob::origin).orElse(null);
+			return new WorkStatus("idle", project, paused.get());
+		}
+		if (data.getStockpile(current).isEmpty()) {
+			return new WorkStatus("idle", null, "no_stockpile");
 		}
 		int satiety = data.needsOf(current, villager.getUUID()).satiety();
 		boolean foodAvailable = SettlementSimulationService.isSurvivalEnabled(data, current)
@@ -218,6 +324,20 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void tick() {
+		if (action == Action.CARE) {
+			Optional<CareAssignment> care = activeCare();
+			if (care.isEmpty()) {
+				stop();
+				return;
+			}
+			target = careDependent(care.get()).blockPosition();
+			if (navigateToTarget() && SettlementCareService.progressCare(
+				(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+			)) {
+				stop();
+			}
+			return;
+		}
 		if (!navigateToTarget()) {
 			return;
 		}
@@ -254,9 +374,15 @@ public class VillagerWorkGoal extends Goal {
 			case FORAGE -> forage();
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
-			case BUILD -> ConstructionSystem.buildNext(
-				(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
-			);
+			case BUILD -> {
+				if (ConstructionSystem.buildNext(
+					(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
+				) && settlementData().getConstructionJob(settlement).isEmpty()) {
+					SettlementCoordination.complete(
+						(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+					);
+				}
+			}
 			case POLISH_PICKAXE -> craftPolishedPickaxe();
 			case GRIND_SMOOTH_STONE -> grindSmoothStone();
 			case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
@@ -493,11 +619,23 @@ public class VillagerWorkGoal extends Goal {
 				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
 				&& hasFoodAvailable();
 		}
+		if (action == Action.CARE) {
+			return activeCare().isPresent();
+		}
 		if (action == Action.GATHER) {
 			return isGatherable(target);
 		}
 		if (action == Action.FORAGE) {
-			return SettlementForaging.isRipe(level.getBlockState(target));
+			BlockState state = level.getBlockState(target);
+			if (SettlementForaging.isRipe(state)) {
+				return true;
+			}
+			if (!SettlementFarming.canFarm(level, settlementData(), settlement)) {
+				return false;
+			}
+			return SettlementFarming.isMature(state)
+				|| availableItems(Items.POTATO) > 0
+				&& SettlementFarming.isPlantingSite(state, level.getBlockState(target.above()));
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
@@ -519,7 +657,7 @@ public class VillagerWorkGoal extends Goal {
 		if (!SettlementForaging.canForage(settlementData(), settlement)) {
 			return false;
 		}
-		boolean missingFood = !hasFoodAvailable();
+		boolean missingFood = starvingWithoutFood();
 		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
 		return SettlementForaging.needsForage(
 			missingFood || reserveLow, villager.level().getGameTime(), forageCooldownUntil
@@ -534,18 +672,41 @@ public class VillagerWorkGoal extends Goal {
 			< settlementData().registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
 	}
 
-	private BlockPos findRipeBerryBush() {
+	private BlockPos findFoodSource() {
 		if (!(villager.level() instanceof ServerLevel level)) {
 			return null;
 		}
-		return SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
+		boolean canFarm = SettlementFarming.canFarm(level, settlementData(), settlement);
+		if (canFarm) {
+			Optional<BlockPos> crop = SettlementFarming.findMatureCrop(level, villager.blockPosition());
+			if (crop.isPresent()) {
+				return crop.get();
+			}
+		}
+		BlockPos bush = SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
+		if (bush != null) {
+			return bush;
+		}
+		if (canFarm && availableItems(Items.POTATO) > 0) {
+			return SettlementFarming.findPlantingSite(level, settlementData(), settlement, villager.blockPosition()).orElse(null);
+		}
+		return null;
 	}
 
 	private void forage() {
 		if (target == null || !(villager.level() instanceof ServerLevel level)) {
 			return;
 		}
-		SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+		BlockState state = level.getBlockState(target);
+		if (SettlementFarming.isMature(state)) {
+			SettlementFarming.harvest(level, settlementData(), settlement, villager, target);
+		} else if (SettlementForaging.isRipe(state)) {
+			SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+		} else if (availableItems(Items.POTATO) > 0 && withdrawItems(Items.POTATO, 1)
+			&& removeItems(villager.getInventory(), Items.POTATO, 1) == 1
+			&& !SettlementFarming.plantPotato(level, settlementData(), settlement, villager, target)) {
+			SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.POTATO));
+		}
 	}
 
 	private boolean hasFoodAvailable() {
@@ -683,6 +844,7 @@ public class VillagerWorkGoal extends Goal {
 			case CRAFT_STICKS -> "sticks";
 			case POLISH_PICKAXE -> "polished_stone_pickaxe";
 			case GRIND_SMOOTH_STONE -> "smooth_stone";
+			case FORAGE -> "plant_potato";
 			default -> "other";
 		};
 	}
@@ -810,9 +972,30 @@ public class VillagerWorkGoal extends Goal {
 		if (!(villager.level() instanceof ServerLevel level)) {
 			return Optional.empty();
 		}
-		SettlementSavedData data = SettlementSavedData.get(level);
-		return data.findSettlementForVillager(villager.getUUID())
-			.filter(settlement -> data.getStockpile(settlement).isPresent());
+		return SettlementSavedData.get(level).findSettlementForVillager(villager.getUUID());
+	}
+
+	private void pauseWorkReservation(String cause) {
+		if (workReservation != null && settlement != null && villager.level() instanceof ServerLevel level) {
+			SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), cause);
+		}
+		workReservation = null;
+	}
+
+	private boolean starvingWithoutFood() {
+		return settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
+			&& !hasFoodAvailable();
+	}
+
+	private Optional<CareAssignment> activeCare() {
+		if (settlement == null || villager.isBaby() || !(villager.level() instanceof ServerLevel level)) {
+			return Optional.empty();
+		}
+		return SettlementCareService.activeForCaregiver(level, settlementData(), settlement, villager.getUUID());
+	}
+
+	private Villager careDependent(CareAssignment assignment) {
+		return (Villager) ((ServerLevel) villager.level()).getEntity(assignment.dependentId());
 	}
 
 	private SettlementSavedData settlementData() {
@@ -850,7 +1033,8 @@ public class VillagerWorkGoal extends Goal {
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),
-		EAT("eat");
+		EAT("eat"),
+		CARE("care");
 
 		private final String id;
 

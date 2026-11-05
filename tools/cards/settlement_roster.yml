@@ -12,12 +12,20 @@ setup:
     - "setblock 10000 -60 10002 minecraft:bell"
     - "setblock 10000 -60 10003 minecraft:chest"
 steps:
+  - ui_close: {}
+  - wait: 1500
+  - player_use: {x: 10000, y: -60, z: 10002, face: up}
   - wait: 500
   - player_use: {x: 10000, y: -60, z: 10002, face: up}
   - wait: 1000
-  - assert_ui: {screen_contains: "SettlementScreen"}
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 10000}
   - assert_ui: {text_contains_any: ["公共住宅床位", "Communal housing beds"]}
   - click_text: ["居民", "Residents"]
   - wait: 300
   - assert_ui: {text_contains_any: ["分工：", "Role:"]}
+  - click_text: ["生活", "Household"]
+  - wait: 300
+  - assert_ui: {text_contains_any: ["共同生活：", "Living with:", "Living group:"]}
+  - assert_ui: {text_contains_any: ["今日照料：", "Care today:"]}
+  - assert_ui: {text_contains_any: ["今日供养：", "Provisioning today:"]}
   - screenshot: "settlement-roster"

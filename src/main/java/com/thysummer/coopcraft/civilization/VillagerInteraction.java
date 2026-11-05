@@ -86,6 +86,10 @@ public final class VillagerInteraction {
 			data.setDirty();
 		}
 		Person person = state.world().person(personId);
+		long careRequestId = state.careFoodRequest(villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY).orElse(0L);
+		Map<String, String> giftContext = careRequestId > 0
+			? Map.of("careRequestId", Long.toString(careRequestId)) : Map.of();
+		List<Long> careCauses = careRequestId > 0 ? List.of(careRequestId) : List.of();
 		boolean survival = state.survivalEnabled();
 		boolean supportedFood = isSupportedFood(held, survival);
 		Container stockpile = survival ? null : SettlementStockpile.getStockpile(level, data, settlement);
@@ -106,30 +110,35 @@ public final class VillagerInteraction {
 		);
 		if (!decision.accepted()) {
 			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), decision.reason(), trust
+				personId, playerActor, false, itemName, player.getScoreboardName(), decision.reason(), trust,
+				giftContext, careCauses
 			);
 			data.setDirty();
 			return refuse(player, villager, decision.reason());
 		}
 
 		int moved;
+		long requestId = careRequestId;
+		long importEventId = 0;
 		if (survival) {
 			ResourceType resourceType = MinecraftStockpileAdapter.resourceType(held).orElseThrow();
-			long requestId = state.world().recordShareRequest(personId, playerActor, Math.max(1, person.hunger()));
+			if (requestId == 0) {
+				requestId = state.world().recordShareRequest(personId, playerActor, Math.max(1, person.hunger()));
+			}
+			Map<String, String> transferContext = new java.util.LinkedHashMap<>();
+			transferContext.put("activity", careRequestId > 0 ? "care_food_gift" : "player_gift");
+			transferContext.put("playerName", player.getScoreboardName());
+			transferContext.put("villagerId", villager.getUUID().toString());
+			if (careRequestId > 0) {
+				transferContext.put("careRequestId", Long.toString(careRequestId));
+			}
 			moved = MinecraftStockpileAdapter.importToSimulation(
-				player.getInventory(),
-				state.world(),
-				state.campOwner(),
-				resourceType,
-				1,
-				List.of(personId, playerActor),
-				Map.of(
-					"activity", "player_gift",
-					"playerName", player.getScoreboardName(),
-					"villagerId", villager.getUUID().toString()
-				),
-				List.of(requestId)
+				player.getInventory(), state.world(), state.campOwner(), resourceType, 1,
+				List.of(personId, playerActor), transferContext, List.of(requestId)
 			);
+			if (moved > 0) {
+				importEventId = state.world().ledger().events().getLast().eventId();
+			}
 		} else {
 			ItemStack removed = removeOneFood(player.getInventory(), held.getItem());
 			if (removed.isEmpty()) {
@@ -143,15 +152,18 @@ public final class VillagerInteraction {
 		}
 		if (moved == 0) {
 			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), "transfer_failed", trust
+				personId, playerActor, false, itemName, player.getScoreboardName(), "transfer_failed", trust,
+				giftContext, giftCauses(requestId, importEventId)
 			);
 			data.setDirty();
 			return refuse(player, villager, "transfer_failed");
 		}
 
 		person.recordAidFrom(playerActor);
+		SettlementCoordination.requestReplan(data, settlement);
 		state.world().recordGiftInteraction(
-			personId, playerActor, true, itemName, player.getScoreboardName(), decision.reason(), person.trustIn(playerActor)
+			personId, playerActor, true, itemName, player.getScoreboardName(), decision.reason(), person.trustIn(playerActor),
+			giftContext, giftCauses(requestId, importEventId)
 		);
 		data.setDirty();
 		player.displayClientMessage(Component.translatable(
@@ -192,6 +204,16 @@ public final class VillagerInteraction {
 			communalFoodUnits(state, stockpile),
 			(long) Math.max(1, data.registeredCount(settlement)) * VillagerInteractionDecision.FOOD_RESERVE_UNITS_PER_MEMBER
 		));
+		if (state != null) {
+			long day = level.getDayTime() / Level.TICKS_PER_DAY;
+			boolean careRequest = state.careFoodRequest(villager.getUUID(), day).isPresent();
+			boolean foodAvailable = state.survivalEnabled()
+				? SettlementSimulationService.hasFood(data, settlement)
+				: SettlementNeeds.hasFood(villager.getInventory(), stockpile);
+			if (careRequest && !foodAvailable) {
+				player.sendSystemMessage(Component.translatable("coopcraft.interaction.care_food_request", name));
+			}
+		}
 		if (isFood(player.getMainHandItem())) {
 			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_hint"));
 		}
@@ -202,6 +224,17 @@ public final class VillagerInteraction {
 			"coopcraft.interaction.refused", nameOf(villager), reason(reason)
 		), false);
 		return new OfferResult(false, reason, 0);
+	}
+
+	private static List<Long> giftCauses(long requestEventId, long importEventId) {
+		List<Long> causes = new java.util.ArrayList<>();
+		if (requestEventId > 0) {
+			causes.add(requestEventId);
+		}
+		if (importEventId > 0 && importEventId != requestEventId) {
+			causes.add(importEventId);
+		}
+		return causes;
 	}
 
 	private static Component nameOf(Villager villager) {

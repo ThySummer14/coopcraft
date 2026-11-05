@@ -20,11 +20,11 @@ class SettlementForagingTest {
 	}
 
 	@Test
-	void foragesOnlyWithoutFoodAndAfterCooldown() {
-		assertFalse(SettlementForaging.needsForage(true, 0, 0));
-		assertTrue(SettlementForaging.needsForage(false, 0, 0));
-		assertFalse(SettlementForaging.needsForage(false, 199, 200));
-		assertTrue(SettlementForaging.needsForage(false, 200, 200));
+	void foragesOnlyWhenRequiredAndAfterCooldown() {
+		assertFalse(SettlementForaging.needsForage(false, 0, 0));
+		assertTrue(SettlementForaging.needsForage(true, 0, 0));
+		assertFalse(SettlementForaging.needsForage(true, 199, 200));
+		assertTrue(SettlementForaging.needsForage(true, 200, 200));
 	}
 
 	@Test

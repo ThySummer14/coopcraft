@@ -23,7 +23,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 18;
+	private static final int DATA_VERSION = 21;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(

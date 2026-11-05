@@ -1,0 +1,49 @@
+id: settlement-care-food
+description: Answer a dependent's real food request, complete care, and trace the meal through the saved event ledger.
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "gamemode survival @p"
+    - "time set day"
+    - "forceload add 12296 12296 12312 12312"
+    - "fill 12296 -61 12296 12312 -61 12312 minecraft:stone"
+    - "fill 12296 -60 12296 12312 -58 12312 minecraft:air"
+    - "fill 12296 -60 12296 12312 -58 12296 minecraft:barrier"
+    - "fill 12296 -60 12312 12312 -58 12312 minecraft:barrier"
+    - "fill 12296 -60 12296 12296 -58 12312 minecraft:barrier"
+    - "fill 12312 -60 12296 12312 -58 12312 minecraft:barrier"
+    - "kill @e[type=minecraft:villager,x=12296,y=-60,z=12296,dx=16,dy=4,dz=16]"
+    - "tp @p 12303 -60 12305 180 0"
+    - "setblock 12303 -60 12302 minecraft:bell"
+    - "setblock 12303 -60 12303 minecraft:chest"
+    - "summon minecraft:villager 12303 -60 12300 {UUID:[I;0,0,0,33],PersistenceRequired:1b}"
+    - "summon minecraft:villager 12304 -60 12300 {UUID:[I;0,0,0,30],Age:-24000,PersistenceRequired:1b}"
+    - "clear @p minecraft:bread"
+    - "give @p minecraft:bread 2"
+steps:
+  - ui_close: {}
+  - wait: 3000
+  - player_use_until: {x: 12303, y: -60, z: 12302, face: up, screen_contains: "SettlementScreen", timeout_ms: 20000}
+  - ui_close: {}
+  - player_use: {x: 12303, y: -60, z: 12303, face: up, shift: true}
+  - server_command: "tp @p 12303.5 -60 12301.5 180 0"
+  - wait: 1500
+  - player_use_entity: {uuid: "00000000-0000-0000-0000-00000000001e", shift: false}
+  - player_use_entity: {uuid: "00000000-0000-0000-0000-00000000001e", shift: true}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: contains, value: "GIFT_RECEIVED", timeout_ms: 5000}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Context.*.Value", op: contains, value: "00000000-0000-0000-0000-00000000001e"}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: contains, value: "CARE_PROVIDED", timeout_ms: 35000}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Context.*.Value", op: contains, value: "item.minecraft.bread"}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Context.*.Value", op: contains_any, value: ["public_stockpile", "caregiver_inventory", "resident_inventory"]}
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 12303, y: -60, z: 12303}, path: "blockEntity.Items", op: eq, value: []}
+  - player_use: {x: 12303, y: -60, z: 12302, face: up}
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 5000}
+  - wait: 500
+  - click_text: ["事件", "Events"]
+  - wait: 500
+  - click_text_until: {text_any: ["提供照料", "Care provided"], button: ["下一页", "Next"], max_clicks: 6, interval_ms: 300}
+  - assert_ui: {text_contains_any: ["提供照料", "Care provided"], timeout_ms: 5000}
+  - assert_ui: {text_contains_any: ["照料营养", "Care nutrition"], timeout_ms: 5000}
+  - assert_ui: {text_contains_any: ["公共仓库", "照料者背包", "居民背包", "Public stockpile", "Caregiver inventory", "Resident inventory"], timeout_ms: 5000}
+  - screenshot: "settlement-care-food-complete"

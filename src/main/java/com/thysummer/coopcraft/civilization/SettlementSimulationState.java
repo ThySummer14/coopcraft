@@ -45,6 +45,12 @@ public final class SettlementSimulationState {
 	private boolean normsEnabled;
 	private long lastSurvivalDay = Long.MIN_VALUE;
 	private long foodAllocationDay = Long.MIN_VALUE;
+	private final Map<UUID, CareAssignment> careAssignments = new LinkedHashMap<>();
+	private long carePlanDay = Long.MIN_VALUE;
+	private final Map<UUID, Long> careFoodRequests = new LinkedHashMap<>();
+	private long careFoodRequestDay = Long.MIN_VALUE;
+	private CoordinationPlan coordinationPlan = CoordinationPlan.empty(-1);
+	private boolean coordinationDirty = true;
 
 	private SettlementSimulationState(Settlement settlement, SimulationWorld world) {
 		this.settlement = settlement;
@@ -223,6 +229,135 @@ public final class SettlementSimulationState {
 		return List.copyOf(events.subList(fromIndex, events.size()));
 	}
 
+	public List<CareAssignment> careAssignments() {
+		return careAssignments.values().stream()
+			.sorted(Comparator.comparing(assignment -> assignment.dependentId().toString()))
+			.toList();
+	}
+
+	public Optional<CareAssignment> careForCaregiver(UUID caregiverId) {
+		return careAssignments.values().stream().filter(assignment -> assignment.caregiverId().equals(caregiverId)).findFirst();
+	}
+
+	public Optional<CareAssignment> careForDependent(UUID dependentId) {
+		return Optional.ofNullable(careAssignments.get(dependentId));
+	}
+
+	public long carePlanDay() {
+		return carePlanDay;
+	}
+
+	public Optional<Long> careFoodRequest(UUID dependentId, long currentDay) {
+		if (careFoodRequestDay != currentDay) {
+			return Optional.empty();
+		}
+		return Optional.ofNullable(careFoodRequests.get(dependentId));
+	}
+
+	long ensureCareFoodRequest(UUID dependentId, long currentDay, long neededNutrition) {
+		if (currentDay < 0 || neededNutrition <= 0) {
+			throw new IllegalArgumentException("Care food request needs a valid day and nutrition need");
+		}
+		String dependentPerson = residentId(dependentId)
+			.orElseThrow(() -> new IllegalArgumentException("Care food request requires a mapped dependent"));
+		if (careFoodRequestDay != currentDay) {
+			careFoodRequests.clear();
+			careFoodRequestDay = currentDay;
+		}
+		Long existing = careFoodRequests.get(dependentId);
+		if (existing != null) {
+			return existing;
+		}
+		long request = world.recordShareRequest(
+			dependentPerson, campOwner().id(), neededNutrition,
+			Map.of(
+				"reason", "care_food",
+				"minecraftDay", Long.toString(currentDay),
+				"villagerId", dependentId.toString()
+			)
+		);
+		careFoodRequests.put(dependentId, request);
+		return request;
+	}
+
+	void replaceCareAssignments(long day, List<CareAssignment> assignments) {
+		if (day < 0) {
+			throw new IllegalArgumentException("Care plan day cannot be negative");
+		}
+		java.util.Set<UUID> caregivers = new java.util.HashSet<>();
+		for (CareAssignment assignment : assignments) {
+			if (assignment.day() != day || !caregivers.add(assignment.caregiverId())) {
+				throw new IllegalArgumentException("Invalid care plan");
+			}
+		}
+		careAssignments.clear();
+		carePlanDay = day;
+		for (CareAssignment assignment : assignments) {
+			if (careAssignments.putIfAbsent(assignment.dependentId(), assignment) != null) {
+				throw new IllegalArgumentException("A dependent cannot have two caregivers");
+			}
+		}
+	}
+
+	void updateCareAssignment(CareAssignment assignment) {
+		CareAssignment previous = careAssignments.get(assignment.dependentId());
+		if (previous == null || previous.completed() || !previous.caregiverId().equals(assignment.caregiverId())
+			|| previous.day() != assignment.day() || assignment.day() != carePlanDay
+			|| assignment.elapsedTicks() != previous.elapsedTicks() + 1) {
+			throw new IllegalArgumentException("Care progress must advance exactly once");
+		}
+		careAssignments.put(assignment.dependentId(), assignment);
+	}
+
+	void resetCareHours() {
+		for (String personId : residentIds.values()) {
+			world.person(personId).resetCareHours();
+		}
+	}
+
+	public CoordinationPlan coordinationPlan() {
+		return coordinationPlan;
+	}
+
+	public boolean coordinationDirty() {
+		return coordinationDirty;
+	}
+
+	public void requestCoordinationReplan() {
+		coordinationDirty = true;
+	}
+
+	public void clearCoordinationDirty() {
+		coordinationDirty = false;
+	}
+
+	void replaceCoordinationPlan(CoordinationPlan plan) {
+		if (plan.day() < 0) {
+			throw new IllegalArgumentException("Coordination plan day cannot be negative");
+		}
+		for (WorkReservation reservation : plan.reservations()) {
+			if (!residentIds.containsKey(reservation.actorId())) {
+				throw new IllegalArgumentException("A reservation requires a mapped resident");
+			}
+		}
+		coordinationPlan = plan;
+		coordinationDirty = false;
+	}
+
+	void updateWorkReservation(WorkReservation reservation) {
+		WorkReservation previous = coordinationPlan.reservationFor(reservation.actorId()).orElse(null);
+		if (previous == null || previous.day() != coordinationPlan.day()
+			|| !previous.id().equals(reservation.id()) || !previous.needId().equals(reservation.needId())
+			|| previous.task() != reservation.task()) {
+			throw new IllegalArgumentException("Work reservation identity cannot change");
+		}
+		List<WorkReservation> updated = new ArrayList<>();
+		for (WorkReservation current : coordinationPlan.reservations()) {
+			updated.add(current.actorId().equals(reservation.actorId()) ? reservation : current);
+		}
+		coordinationPlan = new CoordinationPlan(coordinationPlan.day(), coordinationPlan.signals(), updated);
+	}
+
 	CompoundTag save() {
 		CompoundTag tag = new CompoundTag();
 		tag.putLong("Day", world.day());
@@ -243,6 +378,33 @@ public final class SettlementSimulationState {
 			allocations.add(allocation);
 		}
 		tag.put("FoodAllocations", allocations);
+		tag.putLong("CarePlanDay", carePlanDay);
+		ListTag careList = new ListTag();
+		for (CareAssignment assignment : careAssignments()) {
+			careList.add(assignment.save());
+		}
+		tag.put("CareAssignments", careList);
+		tag.putLong("CareFoodRequestDay", careFoodRequestDay);
+		ListTag careFoodRequests = new ListTag();
+		for (Map.Entry<UUID, Long> entry : this.careFoodRequests.entrySet().stream()
+			.sorted(Map.Entry.comparingByKey(Comparator.comparing(UUID::toString))).toList()) {
+			CompoundTag request = new CompoundTag();
+			request.putUUID("VillagerId", entry.getKey());
+			request.putLong("EventId", entry.getValue());
+			careFoodRequests.add(request);
+		}
+		tag.put("CareFoodRequests", careFoodRequests);
+		tag.putLong("CoordinationDay", coordinationPlan.day());
+		ListTag needs = new ListTag();
+		for (NeedSignal signal : coordinationPlan.signals()) {
+			needs.add(signal.save());
+		}
+		tag.put("NeedSignals", needs);
+		ListTag work = new ListTag();
+		for (WorkReservation reservation : coordinationPlan.orderedReservations()) {
+			work.add(reservation.save());
+		}
+		tag.put("WorkReservations", work);
 		ListTag residents = new ListTag();
 		for (Map.Entry<UUID, String> entry : residentIds.entrySet().stream()
 			.sorted(Map.Entry.comparingByKey(Comparator.comparing(UUID::toString)))
@@ -369,6 +531,41 @@ public final class SettlementSimulationState {
 			}
 			state.foodAllocations.put(allocation.getString("PersonId"), units);
 		}
+		state.carePlanDay = tag.contains("CarePlanDay") ? tag.getLong("CarePlanDay") : Long.MIN_VALUE;
+		ListTag careList = tag.getList("CareAssignments", ListTag.TAG_COMPOUND);
+		List<CareAssignment> restoredCare = new ArrayList<>();
+		for (int i = 0; i < careList.size(); i++) {
+			restoredCare.add(CareAssignment.load(careList.getCompound(i)));
+		}
+		if (!restoredCare.isEmpty()) {
+			state.replaceCareAssignments(state.carePlanDay, restoredCare);
+		}
+		state.careFoodRequestDay = tag.contains("CareFoodRequestDay") ? tag.getLong("CareFoodRequestDay") : Long.MIN_VALUE;
+		ListTag careFoodRequests = tag.getList("CareFoodRequests", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < careFoodRequests.size(); i++) {
+			CompoundTag request = careFoodRequests.getCompound(i);
+			UUID dependentId = request.getUUID("VillagerId");
+			String dependentPerson = state.residentId(dependentId)
+				.orElseThrow(() -> new IllegalArgumentException("Care food request requires a mapped dependent"));
+			long eventId = request.getLong("EventId");
+			state.world.ledger().event(eventId)
+				.filter(event -> event.type() == EventType.SHARE_REQUEST)
+				.filter(event -> event.actors().equals(List.of(dependentPerson, state.campOwner().id())))
+				.orElseThrow(() -> new IllegalArgumentException("Invalid care food request event"));
+			state.careFoodRequests.put(dependentId, eventId);
+		}
+		long coordinationDay = tag.contains("CoordinationDay") ? tag.getLong("CoordinationDay") : -1;
+		List<NeedSignal> needs = new ArrayList<>();
+		for (int i = 0; i < tag.getList("NeedSignals", ListTag.TAG_COMPOUND).size(); i++) {
+			needs.add(NeedSignal.load(tag.getList("NeedSignals", ListTag.TAG_COMPOUND).getCompound(i)));
+		}
+		List<WorkReservation> work = new ArrayList<>();
+		for (int i = 0; i < tag.getList("WorkReservations", ListTag.TAG_COMPOUND).size(); i++) {
+			work.add(WorkReservation.load(tag.getList("WorkReservations", ListTag.TAG_COMPOUND).getCompound(i)));
+		}
+		if (coordinationDay >= 0) {
+			state.replaceCoordinationPlan(new CoordinationPlan(coordinationDay, needs, work));
+		}
 		return state;
 	}
 
@@ -377,6 +574,7 @@ public final class SettlementSimulationState {
 		tag.putInt("Grievance", person.grievance());
 		tag.putInt("SocialHours", person.socialHours());
 		tag.putInt("PreviousSocialHours", person.previousSocialHours());
+		tag.putInt("CareHours", person.careHours());
 		ListTag trust = new ListTag();
 		for (Map.Entry<String, Integer> entry : person.trustedPeople().entrySet().stream()
 			.sorted(Map.Entry.comparingByKey()).toList()) {
@@ -397,6 +595,7 @@ public final class SettlementSimulationState {
 
 	private static void loadSocial(Person person, CompoundTag tag) {
 		person.restoreSocialState(tag.getInt("Grievance"), tag.getInt("SocialHours"), tag.getInt("PreviousSocialHours"));
+		person.restoreCareHours(tag.contains("CareHours") ? tag.getInt("CareHours") : 0);
 		ListTag trust = tag.getList("Trust", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < trust.size(); i++) {
 			CompoundTag relationship = trust.getCompound(i);
