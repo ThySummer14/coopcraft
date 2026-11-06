@@ -11,6 +11,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
@@ -35,7 +36,7 @@ public final class SettlementFarming {
 	}
 
 	static boolean isMature(BlockState state) {
-		return (state.is(Blocks.CARROTS) || state.is(Blocks.POTATOES) || state.is(Blocks.BEETROOTS))
+		return (state.is(Blocks.WHEAT) || state.is(Blocks.CARROTS) || state.is(Blocks.POTATOES) || state.is(Blocks.BEETROOTS))
 			&& CropHarvest.isMature(state);
 	}
 
@@ -88,18 +89,31 @@ public final class SettlementFarming {
 		return Optional.ofNullable(best);
 	}
 
-	public static boolean plantPotato(
+	public static boolean plant(
 		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement,
 		Villager villager,
-		BlockPos position
+		BlockPos position,
+		Item item
 	) {
 		if (!canFarm(level, data, settlement)
 			|| !isPlantingSite(level.getBlockState(position), level.getBlockState(position.above()))) {
 			return false;
 		}
-		if (!level.setBlock(position.above(), Blocks.POTATOES.defaultBlockState(), Block.UPDATE_ALL)) {
+		BlockState crop;
+		if (item == Items.POTATO) {
+			crop = Blocks.POTATOES.defaultBlockState();
+		} else if (item == Items.WHEAT_SEEDS) {
+			crop = Blocks.WHEAT.defaultBlockState();
+		} else if (item == Items.CARROT) {
+			crop = Blocks.CARROTS.defaultBlockState();
+		} else if (item == Items.BEETROOT_SEEDS) {
+			crop = Blocks.BEETROOTS.defaultBlockState();
+		} else {
+			throw new IllegalArgumentException("Unsupported crop item: " + item);
+		}
+		if (!level.setBlock(position.above(), crop, Block.UPDATE_ALL)) {
 			return false;
 		}
 		villager.swing(InteractionHand.MAIN_HAND);
@@ -158,7 +172,7 @@ public final class SettlementFarming {
 		if (stockpile == null) {
 			return;
 		}
-		for (var item : List.of(Items.CARROT, Items.POTATO, Items.BEETROOT)) {
+		for (var item : List.of(Items.CARROT, Items.POTATO, Items.BEETROOT, Items.WHEAT, Items.WHEAT_SEEDS, Items.BEETROOT_SEEDS)) {
 			SettlementStockpile.depositItem(stockpile, villager.getInventory(), item);
 		}
 	}

@@ -14,6 +14,7 @@ import com.thysummer.coopcraft.civilization.WorkRole;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
 public record SettlementOverviewPayload(
 	String name,
@@ -30,7 +31,10 @@ public record SettlementOverviewPayload(
 	List<ResidentInfo> residents,
 	List<SimulationEventInfo> simulationEvents,
 	List<String> publicAffairs,
-	String nextStep
+	String nextStep,
+	ResourceLocation era,
+	String nextEraMilestone,
+	String origin
 ) implements CustomPacketPayload {
 	public static final int MAX_RESIDENTS = 12;
 	public static final int MAX_SIMULATION_EVENTS = 3;
@@ -44,52 +48,12 @@ public record SettlementOverviewPayload(
 		SettlementOverviewPayload::read
 	);
 
-	public SettlementOverviewPayload(
-		String name,
-		long center,
-		long foundedDay,
-		int totalResidents,
-		int registeredResidents,
-		int housingCapacity,
-		long hearth,
-		int communalFoodPoints,
-		int communalResourceCount,
-		SocialOrganization society,
-		SettlementStage stage,
-		List<ResidentInfo> residents,
-		List<SimulationEventInfo> simulationEvents
-	) {
-		this(
-			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
-			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents, List.of(), "observe"
-		);
-	}
-
-	public SettlementOverviewPayload(
-		String name,
-		long center,
-		long foundedDay,
-		int totalResidents,
-		int registeredResidents,
-		int housingCapacity,
-		long hearth,
-		int communalFoodPoints,
-		int communalResourceCount,
-		SocialOrganization society,
-		SettlementStage stage,
-		List<ResidentInfo> residents,
-		List<SimulationEventInfo> simulationEvents,
-		List<String> publicAffairs
-	) {
-		this(
-			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
-			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents, publicAffairs, "observe"
-		);
-	}
-
 	public SettlementOverviewPayload {
 		Objects.requireNonNull(society, "society");
 		Objects.requireNonNull(stage, "stage");
+		Objects.requireNonNull(era, "era");
+		Objects.requireNonNull(nextEraMilestone, "nextEraMilestone");
+		Objects.requireNonNull(origin, "origin");
 		residents = List.copyOf(residents);
 		simulationEvents = List.copyOf(simulationEvents);
 		publicAffairs = List.copyOf(publicAffairs);
@@ -160,6 +124,9 @@ public record SettlementOverviewPayload(
 			buf.writeUtf(affair);
 		}
 		buf.writeUtf(nextStep);
+		buf.writeUtf(era.toString());
+		buf.writeUtf(nextEraMilestone);
+		buf.writeUtf(origin);
 	}
 
 	private static void writeResidentObservation(RegistryFriendlyByteBuf buf, ResidentObservation observation) {
@@ -292,9 +259,13 @@ public record SettlementOverviewPayload(
 			publicAffairs.add(buf.readUtf());
 		}
 		String nextStep = buf.readUtf();
+		ResourceLocation era = ResourceLocation.parse(buf.readUtf());
+		String nextEraMilestone = buf.readUtf();
+		String origin = buf.readUtf();
 		return new SettlementOverviewPayload(
 			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
-			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents, publicAffairs, nextStep
+			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents, publicAffairs, nextStep,
+			era, nextEraMilestone, origin
 		);
 	}
 

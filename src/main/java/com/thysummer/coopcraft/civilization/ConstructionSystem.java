@@ -107,6 +107,9 @@ public final class ConstructionSystem {
 						data.addHousingBed(settlement, bed);
 					}
 				}
+				if (plan.id().equals(ConstructionPlanner.STONE_COTTAGE)) {
+					data.completeEraMilestone(settlement, CivilizationEras.HOUSING_COMPLETE);
+				}
 				if (plan.id().equals(ConstructionPlanner.CAMPFIRE_HEARTH)) {
 					for (ConstructionInstruction part : plan.instructions()) {
 						if (part.state().is(Blocks.CAMPFIRE)) {

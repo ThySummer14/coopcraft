@@ -36,7 +36,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
 		BlockPos stone = helper.absolutePos(STONE);
-		Settlement settlement = data.getOrCreate(bell, "Production Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Production Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
@@ -111,7 +111,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementStockpile.insert(chest, new ItemStack(Items.COBBLESTONE, 3));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Crafting Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Crafting Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);

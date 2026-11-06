@@ -17,7 +17,11 @@ public final class SettlementStockpile {
 	private static final long WORK_INTERVAL_TICKS = 40;
 	private static final int BASIC_FOOD_POINTS = 12;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
-	private static final Set<Item> COMMUNAL_RESOURCES = Set.of(Items.COBBLESTONE, Items.STICK, Items.SMOOTH_STONE);
+	private static final Set<Item> COMMUNAL_RESOURCES = Set.of(
+		Items.COBBLESTONE, Items.STICK, Items.SMOOTH_STONE, Items.RAW_IRON, Items.COAL, Items.IRON_INGOT,
+		Items.OAK_PLANKS, Items.OAK_DOOR, Items.WHITE_BED, Items.TORCH, Items.WHITE_WOOL,
+		Items.WHEAT, Items.WHEAT_SEEDS, Items.CARROT, Items.BEETROOT, Items.BEETROOT_SEEDS
+	);
 
 	private SettlementStockpile() {
 	}

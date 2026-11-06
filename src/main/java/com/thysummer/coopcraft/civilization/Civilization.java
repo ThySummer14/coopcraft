@@ -52,6 +52,7 @@ public final class Civilization {
 	}
 
 	public static void register() {
+		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new CivilizationEras.ReloadListener());
 		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new BlueprintManager());
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
@@ -80,10 +81,14 @@ public final class Civilization {
 		if (state.is(Blocks.STONECUTTER)) {
 			return onUseGrindingStation(player, level, hit);
 		}
+		if (SettlementMetallurgy.isSmeltingStation(state)) {
+			return onUseSmeltingStation(player, level, hit);
+		}
 		if (state.getBlock() instanceof CampfireBlock) {
 			return onUseHearth(player, level, hit);
 		}
-		if (state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)) {
+		if (state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)
+			|| SettlementMetallurgy.isOre(state)) {
 			return onUseResource(player, level, hit);
 		}
 		return InteractionResult.PASS;
@@ -118,6 +123,7 @@ public final class Civilization {
 		List<Villager> residents = findResidents(serverLevel, settlement.center(), RESIDENT_RADIUS);
 		data.registerLoadedResidents(serverLevel, settlement, residents);
 		SettlementStage stage = SettlementStages.initialize(serverLevel, data, settlement, residents);
+		CivilizationEras.refresh(serverLevel, data, settlement);
 		if (created) {
 			serverPlayer.sendSystemMessage(Component.translatable(
 				"coopcraft.settlement.created_stage", settlement.name(), Component.translatable(stage.translationKey())
@@ -160,7 +166,10 @@ public final class Civilization {
 				stockpile != null, publicAffairs, stage, data.getHearth(settlement).isPresent(),
 				data.housingCapacity(settlement), data.registeredCount(settlement),
 				data.getCraftingStation(settlement).isPresent(), communalResourceCount
-			)
+			),
+			data.eraOf(settlement).id(),
+			CivilizationEras.nextMilestoneTranslationKey(data, settlement),
+			data.originOf(settlement).id()
 		));
 		return InteractionResult.SUCCESS;
 	}
@@ -219,11 +228,15 @@ public final class Civilization {
 	}
 
 	private static InteractionResult onUseCraftingStation(Player player, Level level, BlockHitResult hit) {
-		return onUseStation(player, level, hit, false);
+		return onUseStation(player, level, hit, "crafting");
 	}
 
 	private static InteractionResult onUseGrindingStation(Player player, Level level, BlockHitResult hit) {
-		return onUseStation(player, level, hit, true);
+		return onUseStation(player, level, hit, "grinding");
+	}
+
+	private static InteractionResult onUseSmeltingStation(Player player, Level level, BlockHitResult hit) {
+		return onUseStation(player, level, hit, "smelting");
 	}
 
 	private static InteractionResult onUseHearth(Player player, Level level, BlockHitResult hit) {
@@ -248,7 +261,7 @@ public final class Civilization {
 		return InteractionResult.SUCCESS;
 	}
 
-	private static InteractionResult onUseStation(Player player, Level level, BlockHitResult hit, boolean grinding) {
+	private static InteractionResult onUseStation(Player player, Level level, BlockHitResult hit, String type) {
 		if (!player.isShiftKeyDown()) {
 			return InteractionResult.PASS;
 		}
@@ -265,13 +278,14 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 
-		if (grinding) {
-			data.setGrindingStation(settlement.get(), hit.getBlockPos());
-		} else {
-			data.setCraftingStation(settlement.get(), hit.getBlockPos());
+		switch (type) {
+			case "crafting" -> data.setCraftingStation(settlement.get(), hit.getBlockPos());
+			case "grinding" -> data.setGrindingStation(settlement.get(), hit.getBlockPos());
+			case "smelting" -> data.setSmeltingStation(settlement.get(), hit.getBlockPos());
+			default -> throw new IllegalArgumentException("Unknown station type: " + type);
 		}
 		serverPlayer.displayClientMessage(Component.translatable(
-			grinding ? "coopcraft.grinding_station.set" : "coopcraft.crafting_station.set", settlement.get().name()
+			"coopcraft." + type + "_station.set", settlement.get().name()
 		), true);
 		return InteractionResult.SUCCESS;
 	}
@@ -308,6 +322,8 @@ public final class Civilization {
 				SettlementNeeds.tick(level, data, settlement, level.getGameTime());
 				SettlementStockpile.tick(level, data, settlement, level.getGameTime());
 				SettlementStages.tick(level, data, settlement, level.getGameTime());
+				CivilizationEras.tick(level, data, settlement, level.getGameTime());
+				SettlementIntelligence.tick(level, data, settlement);
 			}
 		}
 	}
@@ -350,12 +366,12 @@ public final class Civilization {
 		Optional<NormProposal> proposal = state == null || !event.context().containsKey("proposalId")
 			? Optional.empty() : state.world().proposal(event.context().get("proposalId"));
 		if (event.type() == EventType.BIRTH && event.actors().size() == 3) {
-			addDetail(details, "parents", residentNames(level, event.actors().subList(0, 2)));
-			addDetail(details, "child", residentName(level, event.actors().get(2)));
+			addDetail(details, "parents", residentNames(level, data, settlement, event.actors().subList(0, 2)));
+			addDetail(details, "child", residentName(level, data, settlement, event.actors().get(2)));
 		} else if (proposal.isPresent()) {
-			addDetail(details, "proposer", residentName(level, proposal.get().proposerId()));
+			addDetail(details, "proposer", residentName(level, data, settlement, proposal.get().proposerId()));
 		} else if (!event.actors().isEmpty()) {
-			addDetail(details, "actor", residentName(level, event.actors().getFirst()));
+			addDetail(details, "actor", residentName(level, data, settlement, event.actors().getFirst()));
 		}
 		if (event.context().containsKey("normId")) {
 			addDetail(details, "rule", "coopcraft.simulation.norm." + event.context().get("normId"));
@@ -389,19 +405,22 @@ public final class Civilization {
 		addDetail(details, "participants", event.context().get("participants"));
 		if (event.type() == EventType.NORM_DELIBERATED || event.type() == EventType.NORM_REJECTED) {
 			proposal.ifPresent(value -> {
-				addDetail(details, "supporters", residentNames(level, positions(value, NormProposal.Position.SUPPORT)));
-				addDetail(details, "opponents", residentNames(level, positions(value, NormProposal.Position.OPPOSE)));
+				addDetail(details, "supporters", residentNames(level, data, settlement, positions(value, NormProposal.Position.SUPPORT)));
+				addDetail(details, "opponents", residentNames(level, data, settlement, positions(value, NormProposal.Position.OPPOSE)));
 			});
 		} else if (event.type() == EventType.NORM_ADOPTED || event.type() == EventType.NORM_REVISED
 			|| event.type() == EventType.NORM_ENFORCED) {
 			Optional<Norm> norm = state == null ? Optional.empty() : state.world().norm(campId, event.context().get("normId"));
 			norm.ifPresent(value -> {
-				addDetail(details, "supporters", residentNames(level, value.supporters()));
-				addDetail(details, "opponents", residentNames(level, value.opponents()));
+				addDetail(details, "supporters", residentNames(level, data, settlement, value.supporters()));
+				addDetail(details, "opponents", residentNames(level, data, settlement, value.opponents()));
 			});
 		}
 		if (event.context().containsKey("stage")) {
 			addDetail(details, "stage", "coopcraft.stage." + event.context().get("stage"));
+		}
+		if (event.context().containsKey("era")) {
+			addDetail(details, "era", CivilizationEra.translationKey(net.minecraft.resources.ResourceLocation.parse(event.context().get("era"))));
 		}
 		addDetail(details, "reason", event.context().containsKey("reason")
 			? "coopcraft.simulation.reason." + event.context().get("reason") : null);
@@ -416,15 +435,20 @@ public final class Civilization {
 			.toList();
 	}
 
-	private static String residentNames(ServerLevel level, Iterable<String> personIds) {
+	private static String residentNames(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		Iterable<String> personIds
+	) {
 		List<String> names = new ArrayList<>();
 		for (String personId : personIds) {
-			names.add(residentName(level, personId));
+			names.add(residentName(level, data, settlement, personId));
 		}
 		return abbreviate(String.join(", ", names));
 	}
 
-	private static String residentName(ServerLevel level, String personId) {
+	private static String residentName(ServerLevel level, SettlementSavedData data, Settlement settlement, String personId) {
 		if (personId.startsWith("minecraft-person:")) {
 			try {
 				java.util.UUID villagerId = java.util.UUID.fromString(personId.substring("minecraft-person:".length()));
@@ -432,7 +456,7 @@ public final class Civilization {
 					&& villager.getCustomName() != null) {
 					return villager.getCustomName().getString();
 				}
-				return VillagerNames.fullName(villagerId);
+				return VillagerNames.nameFor(data, settlement, villagerId);
 			} catch (IllegalArgumentException ignored) {
 				return personId;
 			}

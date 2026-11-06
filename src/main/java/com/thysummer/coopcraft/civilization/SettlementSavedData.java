@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.Level;
@@ -23,7 +24,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 21;
+	private static final int DATA_VERSION = 26;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
@@ -41,8 +42,17 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, ConstructionJob> constructionJobs = new LinkedHashMap<>();
 	private final Map<UUID, Set<BlockPos>> housingBeds = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> grindingStations = new LinkedHashMap<>();
+	private final Map<UUID, BlockPos> smeltingStations = new LinkedHashMap<>();
+	private final Map<UUID, Map<BlockPos, BlockPos>> poweredProducers = new LinkedHashMap<>();
+	private final Map<UUID, Set<BlockPos>> archiveStations = new LinkedHashMap<>();
+	private final Map<UUID, Set<BlockPos>> planningCores = new LinkedHashMap<>();
+	private final Map<UUID, SettlementPlan> plans = new LinkedHashMap<>();
+	private final Map<UUID, Map<String, ProductionStats>> productionStatistics = new LinkedHashMap<>();
 	private final Map<UUID, SocialOrganization> socialOrganizations = new LinkedHashMap<>();
 	private final Map<UUID, SettlementStage> stages = new LinkedHashMap<>();
+	private final Map<UUID, ResourceLocation> eras = new LinkedHashMap<>();
+	private final Map<UUID, SettlementOrigin> origins = new LinkedHashMap<>();
+	private final Map<UUID, Set<ResourceLocation>> eraMilestones = new LinkedHashMap<>();
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
 	private final Map<UUID, SettlementSimulationState> simulations = new LinkedHashMap<>();
@@ -93,6 +103,21 @@ public final class SettlementSavedData extends SavedData {
 		return socialOrganizations.getOrDefault(settlement.id(), SocialOrganization.PRIMITIVE_COMMUNE);
 	}
 
+	public boolean hasOrigin(Settlement settlement) {
+		return origins.containsKey(settlement.id());
+	}
+
+	public SettlementOrigin originOf(Settlement settlement) {
+		return origins.getOrDefault(settlement.id(), SettlementOrigin.NEW_CAMP);
+	}
+
+	void setOrigin(Settlement settlement, SettlementOrigin origin) {
+		Objects.requireNonNull(origin, "origin");
+		if (origins.put(settlement.id(), origin) != origin) {
+			setDirty();
+		}
+	}
+
 	public SettlementStage stageOf(Settlement settlement) {
 		return stages.getOrDefault(settlement.id(), SettlementStage.PRIMITIVE);
 	}
@@ -100,6 +125,31 @@ public final class SettlementSavedData extends SavedData {
 	void setStage(Settlement settlement, SettlementStage stage) {
 		Objects.requireNonNull(stage, "stage");
 		if (stages.put(settlement.id(), stage) != stage) {
+			setDirty();
+		}
+	}
+
+	public CivilizationEra eraOf(Settlement settlement) {
+		return CivilizationEras.byId(eras.getOrDefault(settlement.id(), CivilizationEras.PRIMITIVE));
+	}
+
+	void setEra(Settlement settlement, CivilizationEra era) {
+		Objects.requireNonNull(era, "era");
+		if (eras.put(settlement.id(), era.id()) != era.id()) {
+			setDirty();
+		}
+	}
+
+	public Set<ResourceLocation> eraMilestonesOf(Settlement settlement) {
+		return Set.copyOf(eraMilestones.getOrDefault(settlement.id(), Set.of()));
+	}
+
+	public void completeEraMilestone(Settlement settlement, ResourceLocation milestone) {
+		Objects.requireNonNull(milestone, "milestone");
+		if (!CivilizationEras.isMilestone(milestone)) {
+			throw new IllegalArgumentException("Unknown civilization milestone: " + milestone);
+		}
+		if (eraMilestones.computeIfAbsent(settlement.id(), key -> new LinkedHashSet<>()).add(milestone)) {
 			setDirty();
 		}
 	}
@@ -141,7 +191,7 @@ public final class SettlementSavedData extends SavedData {
 			changed |= simulation.mapResident(
 				villager.getUUID(), villager.isBaby(), needsOf(settlement, villager.getUUID()).satiety()
 			);
-			VillagerNames.assignIfAbsent(this, settlement, villager);
+			VillagerNames.assignOrMigrate(this, settlement, villager);
 		}
 		if (changed) {
 			setDirty();
@@ -355,6 +405,131 @@ public final class SettlementSavedData extends SavedData {
 		setDirty();
 	}
 
+	public Optional<BlockPos> getSmeltingStation(Settlement settlement) {
+		return Optional.ofNullable(smeltingStations.get(settlement.id()));
+	}
+
+	public void setSmeltingStation(Settlement settlement, BlockPos pos) {
+		smeltingStations.put(settlement.id(), pos.immutable());
+		setDirty();
+	}
+
+	public void recordPoweredProducer(Settlement settlement, BlockPos machine, BlockPos source) {
+		Map<BlockPos, BlockPos> producers = poweredProducers.computeIfAbsent(settlement.id(), key -> new LinkedHashMap<>());
+		producers.put(machine.immutable(), source.immutable());
+		boolean shared = Set.copyOf(producers.values()).size() < producers.size();
+		if (shared) {
+			completeEraMilestone(settlement, CivilizationEras.AUTOMATED_PRODUCTION);
+		}
+		setDirty();
+	}
+
+	public Set<BlockPos> archiveStationsOf(Settlement settlement) {
+		return Set.copyOf(archiveStations.getOrDefault(settlement.id(), Set.of()));
+	}
+
+	public void registerArchive(Settlement settlement, BlockPos pos) {
+		if (archiveStations.computeIfAbsent(settlement.id(), key -> new LinkedHashSet<>()).add(pos.immutable())) {
+			setDirty();
+		}
+	}
+
+	public void unregisterArchive(Settlement settlement, BlockPos pos) {
+		Set<BlockPos> stations = archiveStations.get(settlement.id());
+		if (stations != null && stations.remove(pos)) {
+			if (stations.isEmpty()) {
+				archiveStations.remove(settlement.id());
+			}
+			setDirty();
+		}
+	}
+
+	public Set<BlockPos> planningCoresOf(Settlement settlement) {
+		return Set.copyOf(planningCores.getOrDefault(settlement.id(), Set.of()));
+	}
+
+	public void registerPlanningCore(Settlement settlement, BlockPos pos) {
+		if (planningCores.computeIfAbsent(settlement.id(), key -> new LinkedHashSet<>()).add(pos.immutable())) {
+			setDirty();
+		}
+	}
+
+	public void unregisterPlanningCore(Settlement settlement, BlockPos pos) {
+		Set<BlockPos> cores = planningCores.get(settlement.id());
+		if (cores != null && cores.remove(pos)) {
+			if (cores.isEmpty()) {
+				planningCores.remove(settlement.id());
+			}
+			setDirty();
+		}
+	}
+
+	public Optional<SettlementPlan> activePlanOf(Settlement settlement) {
+		return latestPlanOf(settlement).filter(plan -> plan.status() == SettlementPlan.Status.ACTIVE);
+	}
+
+	public Optional<SettlementPlan> latestPlanOf(Settlement settlement) {
+		return Optional.ofNullable(plans.get(settlement.id()));
+	}
+
+	public Optional<SettlementPlan> activePlanForWorker(Settlement settlement, UUID workerId) {
+		return activePlanOf(settlement).filter(plan -> plan.workerId().equals(workerId));
+	}
+
+	public boolean startPlan(Settlement settlement, SettlementPlan.Kind kind, UUID workerId, long day) {
+		if (activePlanOf(settlement).isPresent()) {
+			return false;
+		}
+		plans.put(settlement.id(), SettlementPlan.create(kind, workerId, day));
+		setDirty();
+		return true;
+	}
+
+	public boolean recordPlanOutput(Settlement settlement, UUID workerId, String item, int amount, long day) {
+		SettlementPlan plan = activePlanForWorker(settlement, workerId).orElse(null);
+		if (plan == null || !plan.kind().outputItem().equals(item)) {
+			return false;
+		}
+		SettlementPlan updated = plan.advance(amount, day);
+		plans.put(settlement.id(), updated);
+		if (updated.status() == SettlementPlan.Status.COMPLETED) {
+			completeEraMilestone(settlement, CivilizationEras.AUTONOMOUS_PLANNING);
+		}
+		setDirty();
+		return true;
+	}
+
+	public ProductionStats productionStatsOf(Settlement settlement, String recipe) {
+		return productionStatistics.getOrDefault(settlement.id(), Map.of()).getOrDefault(recipe, ProductionStats.initial());
+	}
+
+	public int productionIntervalOf(Settlement settlement, String recipe) {
+		return usesIntelligence(settlement) ? productionStatsOf(settlement, recipe).recommendedIntervalTicks() : ProductionStats.DEFAULT_INTERVAL;
+	}
+
+	public ProductionStats recordProductionCycle(Settlement settlement, String recipe, long gameTime) {
+		ProductionStats current = productionStatsOf(settlement, recipe);
+		if (!usesIntelligence(settlement)) {
+			return current;
+		}
+		ProductionStats updated = current.observe(gameTime);
+		productionStatistics.computeIfAbsent(settlement.id(), key -> new LinkedHashMap<>()).put(recipe, updated);
+		if (updated.adaptiveLearned()) {
+			completeEraMilestone(settlement, CivilizationEras.ADAPTIVE_LEARNING);
+		}
+		if (updated.selfImproved()
+			&& eraMilestonesOf(settlement).contains(CivilizationEras.AUTONOMOUS_PLANNING)
+			&& eraMilestonesOf(settlement).contains(CivilizationEras.ADAPTIVE_LEARNING)) {
+			completeEraMilestone(settlement, CivilizationEras.SELF_IMPROVING_PRODUCTION);
+		}
+		setDirty();
+		return updated;
+	}
+
+	private boolean usesIntelligence(Settlement settlement) {
+		return eraOf(settlement).id().equals(CivilizationEras.INFORMATION) || eraOf(settlement).id().equals(CivilizationEras.INTELLIGENT);
+	}
+
 	int size() {
 		return settlements.size();
 	}
@@ -385,6 +560,35 @@ public final class SettlementSavedData extends SavedData {
 			stageList.add(stageTag);
 		}
 		tag.put("Stages", stageList);
+
+		ListTag eraList = new ListTag();
+		for (Settlement settlement : settlements.values()) {
+			CompoundTag eraTag = new CompoundTag();
+			eraTag.putUUID("SettlementId", settlement.id());
+			eraTag.putString("Era", eraOf(settlement).id().toString());
+			eraList.add(eraTag);
+		}
+		tag.put("Eras", eraList);
+
+		ListTag originList = new ListTag();
+		for (Map.Entry<UUID, SettlementOrigin> entry : origins.entrySet()) {
+			CompoundTag originTag = new CompoundTag();
+			originTag.putUUID("SettlementId", entry.getKey());
+			originTag.putString("Origin", entry.getValue().id());
+			originList.add(originTag);
+		}
+		tag.put("Origins", originList);
+
+		ListTag eraMilestoneList = new ListTag();
+		for (Map.Entry<UUID, Set<ResourceLocation>> entry : eraMilestones.entrySet()) {
+			for (ResourceLocation milestone : entry.getValue()) {
+				CompoundTag milestoneTag = new CompoundTag();
+				milestoneTag.putUUID("SettlementId", entry.getKey());
+				milestoneTag.putString("Milestone", milestone.toString());
+				eraMilestoneList.add(milestoneTag);
+			}
+		}
+		tag.put("EraMilestones", eraMilestoneList);
 
 		ListTag memberList = new ListTag();
 		for (SettlementMember member : members.values()) {
@@ -475,6 +679,69 @@ public final class SettlementSavedData extends SavedData {
 		}
 		tag.put("GrindingStations", grindingList);
 
+		ListTag smeltingList = new ListTag();
+		for (Map.Entry<UUID, BlockPos> entry : smeltingStations.entrySet()) {
+			CompoundTag smeltingTag = new CompoundTag();
+			smeltingTag.putUUID("SettlementId", entry.getKey());
+			smeltingTag.putLong("Position", entry.getValue().asLong());
+			smeltingList.add(smeltingTag);
+		}
+		tag.put("SmeltingStations", smeltingList);
+
+		ListTag producerList = new ListTag();
+		for (Map.Entry<UUID, Map<BlockPos, BlockPos>> entry : poweredProducers.entrySet()) {
+			for (Map.Entry<BlockPos, BlockPos> producer : entry.getValue().entrySet()) {
+				CompoundTag producerTag = new CompoundTag();
+				producerTag.putUUID("SettlementId", entry.getKey());
+				producerTag.putLong("Machine", producer.getKey().asLong());
+				producerTag.putLong("Source", producer.getValue().asLong());
+				producerList.add(producerTag);
+			}
+		}
+		tag.put("PoweredProducers", producerList);
+
+		ListTag archiveList = new ListTag();
+		for (Map.Entry<UUID, Set<BlockPos>> entry : archiveStations.entrySet()) {
+			for (BlockPos pos : entry.getValue()) {
+				CompoundTag archiveTag = new CompoundTag();
+				archiveTag.putUUID("SettlementId", entry.getKey());
+				archiveTag.putLong("Position", pos.asLong());
+				archiveList.add(archiveTag);
+			}
+		}
+		tag.put("ArchiveStations", archiveList);
+
+		ListTag coreList = new ListTag();
+		for (Map.Entry<UUID, Set<BlockPos>> entry : planningCores.entrySet()) {
+			for (BlockPos pos : entry.getValue()) {
+				CompoundTag coreTag = new CompoundTag();
+				coreTag.putUUID("SettlementId", entry.getKey());
+				coreTag.putLong("Position", pos.asLong());
+				coreList.add(coreTag);
+			}
+		}
+		tag.put("PlanningCores", coreList);
+
+		ListTag planList = new ListTag();
+		for (Map.Entry<UUID, SettlementPlan> entry : plans.entrySet()) {
+			CompoundTag planTag = entry.getValue().save();
+			planTag.putUUID("SettlementId", entry.getKey());
+			planList.add(planTag);
+		}
+		tag.put("Plans", planList);
+
+		ListTag statisticsList = new ListTag();
+		for (Map.Entry<UUID, Map<String, ProductionStats>> entry : productionStatistics.entrySet()) {
+			for (Map.Entry<String, ProductionStats> statistic : entry.getValue().entrySet()) {
+				CompoundTag statisticTag = new CompoundTag();
+				statisticTag.putUUID("SettlementId", entry.getKey());
+				statisticTag.putString("Recipe", statistic.getKey());
+				statisticTag.put("Statistics", statistic.getValue().save());
+				statisticsList.add(statisticTag);
+			}
+		}
+		tag.put("ProductionStatistics", statisticsList);
+
 		ListTag simulationList = new ListTag();
 		for (Map.Entry<UUID, SettlementSimulationState> entry : simulations.entrySet()) {
 			CompoundTag simulationTag = entry.getValue().save();
@@ -507,6 +774,25 @@ public final class SettlementSavedData extends SavedData {
 		for (int i = 0; i < stageList.size(); i++) {
 			CompoundTag stageTag = stageList.getCompound(i);
 			data.stages.put(stageTag.getUUID("SettlementId"), SettlementStage.byId(stageTag.getString("Stage")));
+		}
+
+		ListTag eraList = tag.getList("Eras", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < eraList.size(); i++) {
+			CompoundTag eraTag = eraList.getCompound(i);
+			data.eras.put(eraTag.getUUID("SettlementId"), ResourceLocation.parse(eraTag.getString("Era")));
+		}
+
+		ListTag originList = tag.getList("Origins", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < originList.size(); i++) {
+			CompoundTag originTag = originList.getCompound(i);
+			data.origins.put(originTag.getUUID("SettlementId"), SettlementOrigin.byId(originTag.getString("Origin")));
+		}
+
+		ListTag eraMilestoneList = tag.getList("EraMilestones", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < eraMilestoneList.size(); i++) {
+			CompoundTag milestoneTag = eraMilestoneList.getCompound(i);
+			data.eraMilestones.computeIfAbsent(milestoneTag.getUUID("SettlementId"), key -> new LinkedHashSet<>())
+				.add(ResourceLocation.parse(milestoneTag.getString("Milestone")));
 		}
 
 		ListTag memberList = tag.getList("Members", ListTag.TAG_COMPOUND);
@@ -572,6 +858,46 @@ public final class SettlementSavedData extends SavedData {
 		for (int i = 0; i < grindingList.size(); i++) {
 			CompoundTag grindingTag = grindingList.getCompound(i);
 			data.grindingStations.put(grindingTag.getUUID("SettlementId"), BlockPos.of(grindingTag.getLong("Position")));
+		}
+
+		ListTag smeltingList = tag.getList("SmeltingStations", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < smeltingList.size(); i++) {
+			CompoundTag smeltingTag = smeltingList.getCompound(i);
+			data.smeltingStations.put(smeltingTag.getUUID("SettlementId"), BlockPos.of(smeltingTag.getLong("Position")));
+		}
+
+		ListTag producerList = tag.getList("PoweredProducers", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < producerList.size(); i++) {
+			CompoundTag producerTag = producerList.getCompound(i);
+			data.poweredProducers.computeIfAbsent(producerTag.getUUID("SettlementId"), key -> new LinkedHashMap<>())
+				.put(BlockPos.of(producerTag.getLong("Machine")), BlockPos.of(producerTag.getLong("Source")));
+		}
+
+		ListTag archiveList = tag.getList("ArchiveStations", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < archiveList.size(); i++) {
+			CompoundTag archiveTag = archiveList.getCompound(i);
+			data.archiveStations.computeIfAbsent(archiveTag.getUUID("SettlementId"), key -> new LinkedHashSet<>())
+				.add(BlockPos.of(archiveTag.getLong("Position")));
+		}
+
+		ListTag coreList = tag.getList("PlanningCores", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < coreList.size(); i++) {
+			CompoundTag coreTag = coreList.getCompound(i);
+			data.planningCores.computeIfAbsent(coreTag.getUUID("SettlementId"), key -> new LinkedHashSet<>())
+				.add(BlockPos.of(coreTag.getLong("Position")));
+		}
+
+		ListTag planList = tag.getList("Plans", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < planList.size(); i++) {
+			CompoundTag planTag = planList.getCompound(i);
+			data.plans.put(planTag.getUUID("SettlementId"), SettlementPlan.load(planTag));
+		}
+
+		ListTag statisticsList = tag.getList("ProductionStatistics", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < statisticsList.size(); i++) {
+			CompoundTag statisticTag = statisticsList.getCompound(i);
+			data.productionStatistics.computeIfAbsent(statisticTag.getUUID("SettlementId"), key -> new LinkedHashMap<>())
+				.put(statisticTag.getString("Recipe"), ProductionStats.load(statisticTag.getCompound("Statistics")));
 		}
 
 		ListTag simulationList = tag.getList("Simulations", ListTag.TAG_COMPOUND);

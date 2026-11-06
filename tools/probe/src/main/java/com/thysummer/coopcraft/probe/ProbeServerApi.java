@@ -41,6 +41,7 @@ public final class ProbeServerApi {
 			"/command", body -> onServer(server, () -> command(server, body)),
 			"/world/block", body -> onServer(server, () -> block(server, body)),
 			"/world/settlement-data", body -> onServer(server, () -> settlementData(server)),
+			"/world/settlement-survey", body -> onServer(server, () -> settlementSurvey(server, body)),
 			"/world/resident-goal", body -> onServer(server, () -> residentGoal(server, body)),
 			"/world/blueprints", body -> onServer(server, ProbeServerApi::blueprints),
 			"/log/tail", body -> onServer(server, () -> logTail(body))
@@ -57,6 +58,34 @@ public final class ProbeServerApi {
 			}
 		});
 		return future.get(20, TimeUnit.SECONDS);
+	}
+
+	private static JsonObject settlementSurvey(MinecraftServer server, JsonObject body) {
+		if (!body.has("x") || !body.has("y") || !body.has("z")) {
+			return ProbeJson.error("world/settlement-survey requires x/y/z");
+		}
+		ServerLevel level = server.overworld();
+		BlockPos center = new BlockPos(body.get("x").getAsInt(), body.get("y").getAsInt(), body.get("z").getAsInt());
+		try {
+			Class<?> stages = Class.forName("com.thysummer.coopcraft.civilization.SettlementStages");
+			var survey = stages.getDeclaredMethod("survey", ServerLevel.class, BlockPos.class, int.class, int.class);
+			survey.setAccessible(true);
+			Object result = survey.invoke(null, level, center, 0, 32);
+			JsonObject json = ProbeJson.ok();
+			for (String field : List.of("beds", "farmland", "plantedCrops", "wheatCrops", "workstationTypes", "villageStructure", "smithy")) {
+				var accessor = result.getClass().getDeclaredMethod(field);
+				accessor.setAccessible(true);
+				Object value = accessor.invoke(result);
+				if (value instanceof Number number) {
+					json.addProperty(field, number);
+				} else if (value instanceof Boolean bool) {
+					json.addProperty(field, bool);
+				}
+			}
+			return json;
+		} catch (ReflectiveOperationException error) {
+			return ProbeJson.error("Settlement survey unavailable: " + error);
+		}
 	}
 
 	private static JsonObject settlementData(MinecraftServer server) {

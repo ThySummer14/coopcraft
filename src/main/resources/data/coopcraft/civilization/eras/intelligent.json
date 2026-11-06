@@ -1,0 +1,8 @@
+{
+  "order": 40,
+  "milestones": [
+    "coopcraft:autonomous_planning",
+    "coopcraft:adaptive_learning",
+    "coopcraft:self_improving_production"
+  ]
+}

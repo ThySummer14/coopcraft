@@ -180,7 +180,8 @@ public final class SettlementSimulationService {
 			return false;
 		}
 		data.registerMember(settlement, child.getUUID(), currentDay(level));
-		VillagerNames.assignIfAbsent(data, settlement, child);
+		data.completeEraMilestone(settlement, CivilizationEras.POPULATION_GROWTH);
+		VillagerNames.assignOrMigrate(data, settlement, child);
 		data.setDirty();
 		return true;
 	}

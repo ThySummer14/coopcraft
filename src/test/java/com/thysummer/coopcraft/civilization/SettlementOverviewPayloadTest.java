@@ -57,7 +57,10 @@ class SettlementOverviewPayloadTest {
 				new SettlementOverviewPayload.SimulationEventInfo(0, "EXTERNAL_EXPORT", "TUBERS", 2, List.of())
 			),
 			List.of("common_food_shortage", "construction_paused_food"),
-			"food"
+			"food",
+			CivilizationEras.PRIMITIVE,
+			"coopcraft.milestone.common_stockpile",
+			"new_camp"
 		);
 		RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
 		try {
@@ -75,6 +78,10 @@ class SettlementOverviewPayloadTest {
 		UUID firstParent = UUID.randomUUID();
 		UUID secondParent = UUID.randomUUID();
 		UUID child = UUID.randomUUID();
+		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
+		state.mapResident(firstParent, false, 80);
+		state.mapResident(secondParent, false, 80);
+		state.mapResidentWithParents(child, 80, firstParent, secondParent);
 		SimulationEvent birth = new SimulationEvent(
 			1, 0, EventType.BIRTH,
 			List.of(
@@ -93,7 +100,7 @@ class SettlementOverviewPayloadTest {
 				VillagerNames.fullName(firstParent) + ", " + VillagerNames.fullName(secondParent)
 			),
 			new SettlementOverviewPayload.SimulationEventDetail(
-				"coopcraft.simulation.detail.child", VillagerNames.fullName(child)
+				"coopcraft.simulation.detail.child", VillagerNames.nameFor(data, settlement, child)
 			)
 		), info.details());
 	}

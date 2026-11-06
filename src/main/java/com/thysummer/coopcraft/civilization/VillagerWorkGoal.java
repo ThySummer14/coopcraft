@@ -10,12 +10,17 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -32,6 +37,7 @@ public class VillagerWorkGoal extends Goal {
 	private static final double BUILD_INTERACTION_DISTANCE_SQUARED = 36.0;
 	private static final int HAND_GATHER_TICKS = 60;
 	private static final int TOOL_GATHER_TICKS = 30;
+	private static final int IRON_TOOL_GATHER_TICKS = 20;
 	private static final int CRAFT_TICKS = 60;
 	private static final int BUILD_TICKS = 20;
 	private static final int EAT_TICKS = 40;
@@ -44,6 +50,8 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos target;
 	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
+	private HousingRecipes.Recipe currentHousingRecipe;
+	private java.util.UUID sheepId;
 	private Settlement settlement;
 	private WorkReservation workReservation;
 	private WorkRole role = WorkRole.GENERALIST;
@@ -156,6 +164,13 @@ public class VillagerWorkGoal extends Goal {
 			target = null;
 			return false;
 		}
+		if (settlementData().activePlanForWorker(settlement, villager.getUUID())
+			.filter(plan -> plan.kind() == SettlementPlan.Kind.BAKE_BREAD).isPresent() && canBakeBread()) {
+			action = Action.BAKE_BREAD;
+			target = settlementData().getCraftingStation(settlement).orElse(null);
+			progress = 0;
+			return target != null;
+		}
 		if (searchCooldown > 0) {
 			searchCooldown--;
 			return false;
@@ -227,6 +242,8 @@ public class VillagerWorkGoal extends Goal {
 		target = null;
 		forageTarget = null;
 		currentBuildTarget = null;
+		currentHousingRecipe = null;
+		sheepId = null;
 		settlement = null;
 		progress = 0;
 		searchCooldown = 0;
@@ -338,19 +355,25 @@ public class VillagerWorkGoal extends Goal {
 			}
 			return;
 		}
+		if (action == Action.SHEAR_SHEEP) {
+			Sheep sheep = sheep();
+			if (sheep != null) {
+				target = sheep.blockPosition();
+			}
+		}
 		if (!navigateToTarget()) {
 			return;
 		}
 		progress++;
 		int baseDuration = switch (action) {
-			case GATHER -> hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
-			case FORAGE -> FORAGE_TICKS;
+			case GATHER -> hasIronPickaxe() ? IRON_TOOL_GATHER_TICKS : hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
+			case SHEAR_SHEEP, FORAGE -> FORAGE_TICKS;
 			case BUILD -> BUILD_TICKS;
 			case EAT -> EAT_TICKS;
 			default -> CRAFT_TICKS;
 		};
 		var workType = switch (action) {
-			case GATHER -> VillagerPersonality.WorkType.GATHER;
+			case GATHER, SHEAR_SHEEP -> VillagerPersonality.WorkType.GATHER;
 			case FORAGE -> VillagerPersonality.WorkType.GATHER;
 			case BUILD -> VillagerPersonality.WorkType.BUILD;
 			case EAT -> VillagerPersonality.WorkType.GENERAL;
@@ -360,7 +383,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
 			duration = duration * 5 / 4;
 		}
-		if (action == Action.GATHER) {
+		if (action == Action.GATHER || action == Action.SHEAR_SHEEP) {
 			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		} else if (action != Action.BUILD && action != Action.EAT) {
 			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
@@ -374,6 +397,13 @@ public class VillagerWorkGoal extends Goal {
 			case FORAGE -> forage();
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
+			case BAKE_BREAD -> bakeBread();
+			case CRAFT_HOUSING -> craftHousing();
+			case CRAFT_SHEARS -> craftShears();
+			case SHEAR_SHEEP -> shearSheep();
+			case COLLECT_IRON -> collectIron();
+			case SMELT_IRON -> smeltIron();
+			case CRAFT_IRON_PICKAXE -> craftIronPickaxe();
 			case BUILD -> {
 				if (ConstructionSystem.buildNext(
 					(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
@@ -404,6 +434,28 @@ public class VillagerWorkGoal extends Goal {
 		if (canCraftSticks()) {
 			return Action.CRAFT_STICKS;
 		}
+		if (canBakeBread()) {
+			return Action.BAKE_BREAD;
+		}
+		currentHousingRecipe = chooseHousingRecipe();
+		if (currentHousingRecipe != null) {
+			return Action.CRAFT_HOUSING;
+		}
+		if (canCollectIron()) {
+			return Action.COLLECT_IRON;
+		}
+		if (canCraftIronPickaxe()) {
+			return Action.CRAFT_IRON_PICKAXE;
+		}
+		if (canCraftShears()) {
+			return Action.CRAFT_SHEARS;
+		}
+		if (canShearSheep()) {
+			return Action.SHEAR_SHEEP;
+		}
+		if (canSmeltIron()) {
+			return Action.SMELT_IRON;
+		}
 		if (canPolishPickaxe()) {
 			return Action.POLISH_PICKAXE;
 		}
@@ -430,6 +482,13 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).orElse(null);
 		}
+		if (action == Action.SHEAR_SHEEP) {
+			Sheep sheep = sheep();
+			return sheep == null ? null : sheep.blockPosition();
+		}
+		if (action == Action.SMELT_IRON || action == Action.COLLECT_IRON) {
+			return settlementData().getSmeltingStation(settlement).orElse(null);
+		}
 		if (action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE) {
 			return settlementData().getGrindingStation(settlement).orElse(null);
 		}
@@ -446,6 +505,10 @@ public class VillagerWorkGoal extends Goal {
 				return logs;
 			}
 		} else if (role == WorkRole.MINER) {
+			BlockPos ore = chooseOreTarget();
+			if (ore != null) {
+				return ore;
+			}
 			BlockPos stone = nearestResource(false);
 			if (stone != null) {
 				return stone;
@@ -463,7 +526,17 @@ public class VillagerWorkGoal extends Goal {
 				return stone;
 			}
 		}
-		if (hasStonePickaxe()) {
+		if (needsPlanks()) {
+			BlockPos logs = nearestResource(true);
+			if (logs != null) {
+				return logs;
+			}
+		}
+		BlockPos ore = chooseOreTarget();
+		if (ore != null) {
+			return ore;
+		}
+		if (hasMiningPickaxe()) {
 			BlockPos stone = nearestResource(false);
 			if (stone != null) {
 				return stone;
@@ -471,6 +544,31 @@ public class VillagerWorkGoal extends Goal {
 			return nearestResource(true);
 		}
 		return null;
+	}
+
+	private BlockPos chooseOreTarget() {
+		if (!hasMiningPickaxe() || hasIronPickaxe() && !needsShears()) {
+			return null;
+		}
+		if (needsRawIron()) {
+			BlockPos iron = nearestOre(true);
+			if (iron != null) {
+				return iron;
+			}
+		}
+		return needsCoal() ? nearestOre(false) : null;
+	}
+
+	private BlockPos nearestOre(boolean iron) {
+		if (settlement == null || !(villager.level() instanceof ServerLevel level)) {
+			return null;
+		}
+		return settlementData().resourcesOf(settlement).stream()
+			.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> iron ? SettlementMetallurgy.isIronOre(level.getBlockState(pos))
+				: SettlementMetallurgy.isCoalOre(level.getBlockState(pos)))
+			.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
+			.orElse(null);
 	}
 
 	private BlockPos nearestResource(boolean logs) {
@@ -622,6 +720,9 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.CARE) {
 			return activeCare().isPresent();
 		}
+		if (action == Action.SHEAR_SHEEP) {
+			return canShearSheep();
+		}
 		if (action == Action.GATHER) {
 			return isGatherable(target);
 		}
@@ -634,13 +735,18 @@ public class VillagerWorkGoal extends Goal {
 				return false;
 			}
 			return SettlementFarming.isMature(state)
-				|| availableItems(Items.POTATO) > 0
-				&& SettlementFarming.isPlantingSite(state, level.getBlockState(target.above()));
+				|| plantingItem() != null && SettlementFarming.isPlantingSite(state, level.getBlockState(target.above()));
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
+		}
+		if (action == Action.SMELT_IRON) {
+			return canSmeltIron();
+		}
+		if (action == Action.COLLECT_IRON) {
+			return canCollectIron();
 		}
 		Block station = action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE
 			? Blocks.STONECUTTER
@@ -659,8 +765,12 @@ public class VillagerWorkGoal extends Goal {
 		}
 		boolean missingFood = starvingWithoutFood();
 		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
+		ServerLevel level = (ServerLevel) villager.level();
+		boolean canFarm = SettlementFarming.canFarm(level, settlementData(), settlement);
+		boolean canHarvest = canFarm && SettlementFarming.findMatureCrop(level, villager.blockPosition()).isPresent();
+		boolean canPlant = canFarm && plantingItem() != null;
 		return SettlementForaging.needsForage(
-			missingFood || reserveLow, villager.level().getGameTime(), forageCooldownUntil
+			missingFood || reserveLow || canHarvest || canPlant, level.getGameTime(), forageCooldownUntil
 		);
 	}
 
@@ -687,7 +797,7 @@ public class VillagerWorkGoal extends Goal {
 		if (bush != null) {
 			return bush;
 		}
-		if (canFarm && availableItems(Items.POTATO) > 0) {
+		if (canFarm && plantingItem() != null) {
 			return SettlementFarming.findPlantingSite(level, settlementData(), settlement, villager.blockPosition()).orElse(null);
 		}
 		return null;
@@ -702,11 +812,22 @@ public class VillagerWorkGoal extends Goal {
 			SettlementFarming.harvest(level, settlementData(), settlement, villager, target);
 		} else if (SettlementForaging.isRipe(state)) {
 			SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
-		} else if (availableItems(Items.POTATO) > 0 && withdrawItems(Items.POTATO, 1)
-			&& removeItems(villager.getInventory(), Items.POTATO, 1) == 1
-			&& !SettlementFarming.plantPotato(level, settlementData(), settlement, villager, target)) {
-			SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.POTATO));
+		} else {
+			Item planting = plantingItem();
+			if (planting != null && withdrawItems(planting, 1) && removeItems(villager.getInventory(), planting, 1) == 1
+				&& !SettlementFarming.plant(level, settlementData(), settlement, villager, target, planting)) {
+				SettlementStockpile.insert(villager.getInventory(), new ItemStack(planting));
+			}
 		}
+	}
+
+	private Item plantingItem() {
+		for (Item item : List.of(Items.POTATO, Items.WHEAT_SEEDS, Items.CARROT, Items.BEETROOT_SEEDS)) {
+			if (availableItems(item) > 0) {
+				return item;
+			}
+		}
+		return null;
 	}
 
 	private boolean hasFoodAvailable() {
@@ -719,6 +840,9 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean isGatherable(BlockPos pos) {
 		BlockState state = villager.level().getBlockState(pos);
+		if (SettlementMetallurgy.isOre(state)) {
+			return hasMiningToolInHand();
+		}
 		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS);
 	}
 
@@ -729,7 +853,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		ServerLevel level = (ServerLevel) villager.level();
 		BlockState state = level.getBlockState(target);
-		List<ItemStack> drops = Block.getDrops(state, level, target, level.getBlockEntity(target));
+		List<ItemStack> drops = SettlementMetallurgy.isOre(state)
+			? Block.getDrops(state, level, target, level.getBlockEntity(target), villager, villager.getMainHandItem())
+			: Block.getDrops(state, level, target, level.getBlockEntity(target));
 		for (ItemStack drop : drops) {
 			if (!villager.getInventory().canAddItem(drop)) {
 				return;
@@ -777,9 +903,251 @@ public class VillagerWorkGoal extends Goal {
 		);
 	}
 
+	private boolean canBakeBread() {
+		return settlementData().stageOf(settlement) != SettlementStage.PRIMITIVE
+			&& hasCraftingStation()
+			&& availableItems(Items.WHEAT) >= 3
+			&& villager.getInventory().canAddItem(new ItemStack(Items.BREAD));
+	}
+
+	private void bakeBread() {
+		if (!canBakeBread() || !withdrawItems(Items.WHEAT, 3)) {
+			return;
+		}
+		if (removeItems(villager.getInventory(), Items.WHEAT, 3) != 3) {
+			return;
+		}
+		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.BREAD));
+		if (inserted < 1) {
+			villager.spawnAtLocation(new ItemStack(Items.BREAD));
+		}
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "bread");
+		SettlementSimulationService.recordCraftedProduct(villager, settlementData(), settlement, "bread", Items.BREAD, inserted);
+		SettlementIntelligence.recordCrafted((ServerLevel) villager.level(), settlementData(), settlement, villager, Items.BREAD, inserted);
+		settlementData().completeEraMilestone(settlement, CivilizationEras.BREAD_BAKED);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private HousingRecipes.Recipe chooseHousingRecipe() {
+		if (!hasCraftingStation() || !ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()) {
+			return null;
+		}
+		long planks = availableItems(Items.OAK_PLANKS);
+		if (availableItems(Items.OAK_DOOR) >= 1 && availableItems(Items.WHITE_BED) >= 1
+			&& availableItems(Items.TORCH) >= 2 && planks >= 29) {
+			return null;
+		}
+		if (planks < 29) {
+			return hasLogs() ? HousingRecipes.PLANKS : null;
+		}
+		if (planks < 35 && hasLogs()) {
+			return HousingRecipes.PLANKS;
+		}
+		if (availableItems(Items.OAK_DOOR) < 1 && availableItems(Items.OAK_PLANKS) >= 3) {
+			return HousingRecipes.DOOR;
+		}
+		if (availableItems(Items.TORCH) < 2 && availableItems(Items.COAL) >= 1 && availableItems(Items.STICK) >= 1) {
+			return HousingRecipes.TORCH;
+		}
+		if (availableItems(Items.WHITE_BED) < 1 && availableItems(Items.WHITE_WOOL) >= 3
+			&& availableItems(Items.OAK_PLANKS) >= 3) {
+			return HousingRecipes.BED;
+		}
+		return null;
+	}
+
+	private boolean needsPlanks() {
+		if (!ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()) {
+			return false;
+		}
+		if (availableItems(Items.OAK_DOOR) >= 1 && availableItems(Items.WHITE_BED) >= 1
+			&& availableItems(Items.TORCH) >= 2 && availableItems(Items.OAK_PLANKS) >= 29) {
+			return false;
+		}
+		return availableItems(Items.OAK_PLANKS) < 35 && !hasLogs();
+	}
+
+	private void craftHousing() {
+		HousingRecipes.Recipe recipe = currentHousingRecipe == null ? chooseHousingRecipe() : currentHousingRecipe;
+		if (recipe == null || !canCraftHousingIngredients(recipe)) {
+			return;
+		}
+		currentHousingRecipe = recipe;
+		for (HousingRecipes.Ingredient ingredient : recipe.ingredients()) {
+			if (ingredient.item() == Items.OAK_LOG) {
+				if (!withdrawOneLog() || !removeOneLog(villager.getInventory())) {
+					return;
+				}
+			} else if (!withdrawItems(ingredient.item(), ingredient.count())
+				|| removeItems(villager.getInventory(), ingredient.item(), ingredient.count()) != ingredient.count()) {
+				return;
+			}
+		}
+		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(recipe.output(), recipe.outputCount()));
+		if (inserted < recipe.outputCount()) {
+			villager.spawnAtLocation(new ItemStack(recipe.output(), recipe.outputCount() - inserted));
+		}
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, recipe.id());
+		SettlementSimulationService.recordCraftedProduct(
+			villager, settlementData(), settlement, recipe.id(), recipe.output(), inserted
+		);
+	}
+
+	private boolean canCraftHousingIngredients(HousingRecipes.Recipe recipe) {
+		if (!hasCraftingStation()) {
+			return false;
+		}
+		for (HousingRecipes.Ingredient ingredient : recipe.ingredients()) {
+			if (ingredient.item() == Items.OAK_LOG ? !hasLogs() : availableItems(ingredient.item()) < ingredient.count()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private void collectIron() {
+		var furnace = furnace();
+		int inserted = SettlementMetallurgy.collectIron(furnace, villager.getInventory());
+		if (inserted <= 0) {
+			return;
+		}
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "iron_ingot");
+		settlementData().completeEraMilestone(settlement, CivilizationEras.METAL_SMELTING);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private void smeltIron() {
+		if (!canSmeltIron() || !withdrawItems(Items.RAW_IRON, 1)) {
+			return;
+		}
+		if (SettlementMetallurgy.needsFuel(furnace()) && !withdrawItems(Items.COAL, 1)) {
+			return;
+		}
+		SettlementMetallurgy.load(furnace(), villager.getInventory());
+	}
+
+	private void craftIronPickaxe() {
+		if (!canCraftIronPickaxe() || !withdrawItems(Items.IRON_INGOT, 3) || !withdrawItems(Items.STICK, 2)) {
+			return;
+		}
+		if (removeItems(villager.getInventory(), Items.IRON_INGOT, 3) != 3
+			|| removeItems(villager.getInventory(), Items.STICK, 2) != 2) {
+			return;
+		}
+		ItemStack previousTool = villager.getMainHandItem().copy();
+		if (!previousTool.isEmpty()) {
+			ItemStack remainder = villager.getInventory().addItem(previousTool);
+			if (!remainder.isEmpty()) {
+				villager.spawnAtLocation(remainder);
+			}
+		}
+		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_PICKAXE));
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "iron_pickaxe");
+		settlementData().completeEraMilestone(settlement, CivilizationEras.METAL_TOOL_PRODUCTION);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private void craftShears() {
+		if (!canCraftShears() || !withdrawItems(Items.IRON_INGOT, 2)) {
+			return;
+		}
+		if (removeItems(villager.getInventory(), Items.IRON_INGOT, 2) != 2) {
+			return;
+		}
+		ItemStack previousTool = villager.getMainHandItem().copy();
+		if (!previousTool.isEmpty()) {
+			ItemStack remainder = villager.getInventory().addItem(previousTool);
+			if (!remainder.isEmpty()) {
+				villager.spawnAtLocation(remainder);
+			}
+		}
+		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.SHEARS));
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "shears");
+	}
+
+	private boolean canCraftShears() {
+		return hasCraftingStation() && needsShears() && availableItems(Items.IRON_INGOT) >= 2 && sheep() != null;
+	}
+
+	private boolean canShearSheep() {
+		return needsWool() && hasShears() && sheep() != null;
+	}
+
+	private void shearSheep() {
+		Sheep sheep = sheep();
+		if (!canShearSheep() || sheep == null) {
+			return;
+		}
+		sheep.shear(SoundSource.PLAYERS);
+		villager.getMainHandItem().hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
+		ServerLevel level = (ServerLevel) villager.level();
+		for (var itemEntity : level.getEntities(
+			net.minecraft.world.entity.EntityType.ITEM, new AABB(sheep.blockPosition()).inflate(2),
+			entity -> entity.getItem().is(Items.WHITE_WOOL)
+		)) {
+			ItemStack stack = itemEntity.getItem();
+			int produced = stack.getCount();
+			ItemStack remainder = villager.getInventory().addItem(stack);
+			if (remainder.isEmpty()) {
+				itemEntity.discard();
+			} else {
+				itemEntity.setItem(remainder);
+			}
+			int inserted = produced - remainder.getCount();
+			if (inserted > 0) {
+				SettlementSimulationService.recordProduction(villager, settlementData(), settlement, Items.WHITE_WOOL, inserted);
+			}
+		}
+	}
+
+	private Sheep sheep() {
+		if (!(villager.level() instanceof ServerLevel level)) {
+			return null;
+		}
+		if (sheepId != null && level.getEntity(sheepId) instanceof Sheep sheep && isShearableWhiteSheep(sheep)) {
+			return sheep;
+		}
+		return level.getEntities(EntityType.SHEEP, new AABB(villager.blockPosition()).inflate(12), this::isShearableWhiteSheep)
+			.stream()
+			.min(Comparator.comparingDouble(sheep -> sheep.distanceToSqr(villager)))
+			.map(sheep -> {
+				sheepId = sheep.getUUID();
+				return sheep;
+			})
+			.orElse(null);
+	}
+
+	private boolean isShearableWhiteSheep(Sheep sheep) {
+		return sheep.readyForShearing() && sheep.getColor() == DyeColor.WHITE;
+	}
+
+	private boolean canCollectIron() {
+		var furnace = furnace();
+		return hasSmeltingStation()
+			&& SettlementMetallurgy.hasIronOutput(furnace)
+			&& villager.getInventory().canAddItem(furnace.getItem(SettlementMetallurgy.OUTPUT_SLOT));
+	}
+
+	private boolean canSmeltIron() {
+		return hasSmeltingStation()
+			&& (!hasIronPickaxe() || needsShears())
+			&& availableItems(Items.IRON_INGOT) < requiredIronIngots()
+			&& availableItems(Items.RAW_IRON) >= 1
+			&& (!SettlementMetallurgy.needsFuel(furnace()) || availableItems(Items.COAL) >= 1)
+			&& SettlementMetallurgy.canLoad(furnace());
+	}
+
+	private boolean canCraftIronPickaxe() {
+		return hasCraftingStation()
+			&& !hasIronPickaxe()
+			&& hasStonePickaxe()
+			&& availableItems(Items.IRON_INGOT) >= 3
+			&& availableItems(Items.STICK) >= 2;
+	}
+
 	private boolean canCraftPickaxe() {
 		return hasCraftingStation()
-			&& !hasStonePickaxe()
+			&& !hasMiningPickaxe()
 			&& villager.getItemInHand(InteractionHand.MAIN_HAND).isEmpty()
 			&& availableItems(Items.COBBLESTONE) >= 3
 			&& availableItems(Items.STICK) >= 2;
@@ -842,6 +1210,11 @@ public class VillagerWorkGoal extends Goal {
 		return switch (action) {
 			case CRAFT_PICKAXE -> "stone_pickaxe";
 			case CRAFT_STICKS -> "sticks";
+			case BAKE_BREAD -> "bread";
+			case CRAFT_HOUSING -> currentHousingRecipe == null ? "housing" : currentHousingRecipe.id();
+			case CRAFT_SHEARS -> "shears";
+			case CRAFT_IRON_PICKAXE -> "iron_pickaxe";
+			case SMELT_IRON, COLLECT_IRON -> "iron_ingot";
 			case POLISH_PICKAXE -> "polished_stone_pickaxe";
 			case GRIND_SMOOTH_STONE -> "smooth_stone";
 			case FORAGE -> "plant_potato";
@@ -920,6 +1293,13 @@ public class VillagerWorkGoal extends Goal {
 		return settlement != null && hasStation(settlementData().getGrindingStation(settlement), Blocks.STONECUTTER);
 	}
 
+	private boolean hasSmeltingStation() {
+		return settlement != null && settlementData().getSmeltingStation(settlement)
+			.filter(pos -> settlement.center().distSqr(pos) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> SettlementMetallurgy.isSmeltingStation(villager.level().getBlockState(pos)))
+			.isPresent();
+	}
+
 	private boolean hasStation(Optional<BlockPos> station, Block block) {
 		if (settlement == null) {
 			return false;
@@ -930,12 +1310,45 @@ public class VillagerWorkGoal extends Goal {
 			.isPresent();
 	}
 
+	private net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace() {
+		return settlement == null ? null : SettlementMetallurgy.furnaceAt((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private long metalSupply(Item item) {
+		return availableItems(item) + SettlementMetallurgy.count(furnace(), item);
+	}
+
+	private int requiredIronIngots() {
+		return hasIronPickaxe() && needsShears() ? 2 : 3;
+	}
+
+	private boolean needsShears() {
+		return needsWool() && !hasShears();
+	}
+
+	private boolean needsWool() {
+		return ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()
+			&& availableItems(Items.WHITE_WOOL) < 3;
+	}
+
+	private boolean needsRawIron() {
+		return metalSupply(Items.RAW_IRON) + metalSupply(Items.IRON_INGOT) < requiredIronIngots();
+	}
+
+	private boolean needsCoal() {
+		return metalSupply(Items.RAW_IRON) > 0 && metalSupply(Items.IRON_INGOT) < requiredIronIngots()
+			&& metalSupply(Items.COAL) < 1;
+	}
+
 	private boolean needsSticks() {
-		return !hasStonePickaxe() && availableItems(Items.STICK) < 2;
+		if (!hasMiningPickaxe()) {
+			return availableItems(Items.STICK) < 2;
+		}
+		return !hasIronPickaxe() && availableItems(Items.IRON_INGOT) >= 3 && availableItems(Items.STICK) < 2;
 	}
 
 	private boolean needsCobblestone() {
-		return !hasStonePickaxe() && availableItems(Items.COBBLESTONE) < 3;
+		return !hasMiningPickaxe() && availableItems(Items.COBBLESTONE) < 3;
 	}
 
 	private boolean hasLogs() {
@@ -949,19 +1362,48 @@ public class VillagerWorkGoal extends Goal {
 		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, Items.OAK_LOG) > 0;
 	}
 
+	private boolean hasShears() {
+		ItemStack hand = villager.getMainHandItem();
+		if (hand.is(Items.SHEARS)) {
+			return true;
+		}
+		return (hand.isEmpty() || hasMiningToolInHand()) && equipPickaxe(Items.SHEARS);
+	}
+
+	private boolean hasMiningPickaxe() {
+		if (hasMiningToolInHand()) {
+			return true;
+		}
+		return villager.getMainHandItem().isEmpty() && (equipPickaxe(Items.IRON_PICKAXE) || equipPickaxe(Items.STONE_PICKAXE));
+	}
+
+	private boolean hasMiningToolInHand() {
+		return villager.getMainHandItem().is(Items.STONE_PICKAXE) || villager.getMainHandItem().is(Items.IRON_PICKAXE);
+	}
+
+	private boolean hasIronPickaxe() {
+		ItemStack hand = villager.getMainHandItem();
+		if (hand.is(Items.IRON_PICKAXE)) {
+			return true;
+		}
+		return (hand.isEmpty() || hand.is(Items.STONE_PICKAXE)) && equipPickaxe(Items.IRON_PICKAXE);
+	}
+
 	private boolean hasStonePickaxe() {
-		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
+		ItemStack hand = villager.getMainHandItem();
 		if (hand.is(Items.STONE_PICKAXE)) {
 			return true;
 		}
-		if (!hand.isEmpty()) {
-			return false;
-		}
+		return hand.isEmpty() && equipPickaxe(Items.STONE_PICKAXE);
+	}
+
+	private boolean equipPickaxe(Item item) {
 		for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
 			ItemStack stack = villager.getInventory().getItem(slot);
-			if (stack.is(Items.STONE_PICKAXE)) {
+			if (stack.is(item)) {
+				ItemStack previous = villager.getMainHandItem();
 				villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
-				villager.getInventory().setItem(slot, ItemStack.EMPTY);
+				villager.getInventory().setItem(slot, previous.isEmpty() ? ItemStack.EMPTY : previous);
 				return true;
 			}
 		}
@@ -1030,6 +1472,13 @@ public class VillagerWorkGoal extends Goal {
 		FORAGE("forage"),
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
+		BAKE_BREAD("bake"),
+		CRAFT_HOUSING("craft_housing"),
+		CRAFT_SHEARS("craft_shears"),
+		SHEAR_SHEEP("shear"),
+		COLLECT_IRON("collect"),
+		SMELT_IRON("smelt"),
+		CRAFT_IRON_PICKAXE("forge"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),

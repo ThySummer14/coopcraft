@@ -1,0 +1,8 @@
+{
+  "order": 30,
+  "milestones": [
+    "coopcraft:automated_production",
+    "coopcraft:information_storage",
+    "coopcraft:computation_network"
+  ]
+}

@@ -154,6 +154,22 @@ class SettlementStockpileTest {
 	}
 
 	@Test
+	void depositsMetalResourcesAsPublicStock() {
+		SimpleContainer villagerInventory = new SimpleContainer(3);
+		villagerInventory.setItem(0, new ItemStack(Items.RAW_IRON, 2));
+		villagerInventory.setItem(1, new ItemStack(Items.COAL, 3));
+		villagerInventory.setItem(2, new ItemStack(Items.IRON_INGOT, 4));
+		SimpleContainer stockpile = new SimpleContainer(3);
+
+		assertEquals(9, SettlementStockpile.depositGatheredResources(stockpile, villagerInventory));
+		assertEquals(2, stockpile.countItem(Items.RAW_IRON));
+		assertEquals(3, stockpile.countItem(Items.COAL));
+		assertEquals(4, stockpile.countItem(Items.IRON_INGOT));
+		assertEquals(9, SettlementStockpile.communalResourceCount(stockpile));
+		assertTrue(villagerInventory.isEmpty());
+	}
+
+	@Test
 	void readsPublicSurplusFromRealContents() {
 		SimpleContainer stockpile = new SimpleContainer(3);
 		stockpile.setItem(0, new ItemStack(Items.BREAD, 2));

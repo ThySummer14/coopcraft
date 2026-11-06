@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.Set;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
@@ -39,7 +40,7 @@ class SettlementSavedDataTest {
 		assertEquals(settlement, restored.find(center).orElseThrow());
 		assertEquals(SocialOrganization.PRIMITIVE_COMMUNE, restored.socialOrganizationOf(settlement));
 		assertTrue(restored.simulationOf(settlement).isEmpty());
-		assertEquals(21, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(26, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -53,7 +54,7 @@ class SettlementSavedDataTest {
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
 
 		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
-		assertEquals(21, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(26, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -195,18 +196,20 @@ class SettlementSavedDataTest {
 	}
 
 	@Test
-	void preservesConstructionHousingAndGrindingThroughSaveRoundTrip() {
+	void preservesConstructionHousingAndWorkstationsThroughSaveRoundTrip() {
 		SettlementSavedData data = new SettlementSavedData();
 		BlockPos center = new BlockPos(12, 65, -7);
 		Settlement settlement = data.getOrCreate(center, "Testhaven", 2);
 		ConstructionJob job = new ConstructionJob(ConstructionPlanner.STONE_COTTAGE, center.north(6), 23);
 		BlockPos bed = center.north(3);
 		BlockPos grindingStation = center.east(2);
+		BlockPos smeltingStation = center.south(2);
 		data.setConstructionJob(settlement, job);
 		data.advanceConstruction(settlement);
 		data.addHousingBed(settlement, bed);
 		data.addHousingBed(settlement, bed);
 		data.setGrindingStation(settlement, grindingStation);
+		data.setSmeltingStation(settlement, smeltingStation);
 
 		CompoundTag tag = data.save(new CompoundTag(), null);
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
@@ -214,6 +217,7 @@ class SettlementSavedDataTest {
 		assertEquals(new ConstructionJob(job.blueprintId(), job.origin(), 24), restored.getConstructionJob(settlement).orElseThrow());
 		assertEquals(1, restored.housingCapacity(settlement));
 		assertEquals(grindingStation, restored.getGrindingStation(settlement).orElseThrow());
+		assertEquals(smeltingStation, restored.getSmeltingStation(settlement).orElseThrow());
 		restored.completeConstruction(settlement);
 		assertTrue(restored.getConstructionJob(settlement).isEmpty());
 		assertEquals(1, restored.housingCapacity(settlement));
@@ -236,6 +240,30 @@ class SettlementSavedDataTest {
 	}
 
 	@Test
+	void preservesEraAndMilestonesAndMigratesOldData() {
+		SettlementSavedData data = new SettlementSavedData();
+		BlockPos center = new BlockPos(10, 64, 10);
+		Settlement settlement = data.getOrCreate(center, "Testhaven", 4);
+		data.setEra(settlement, CivilizationEras.byId(CivilizationEras.AGRICULTURAL));
+		data.completeEraMilestone(settlement, CivilizationEras.CULTIVATION);
+
+		CompoundTag tag = data.save(new CompoundTag(), null);
+		SettlementSavedData restored = SettlementSavedData.load(tag, null);
+		Settlement restoredSettlement = restored.find(center).orElseThrow();
+		assertEquals(CivilizationEras.AGRICULTURAL, restored.eraOf(restoredSettlement).id());
+		assertTrue(restored.eraMilestonesOf(restoredSettlement).contains(CivilizationEras.CULTIVATION));
+
+		tag.putInt("DataVersion", 21);
+		tag.remove("Eras");
+		tag.remove("EraMilestones");
+		SettlementSavedData old = SettlementSavedData.load(tag, null);
+		Settlement oldSettlement = old.find(center).orElseThrow();
+		assertEquals(CivilizationEras.PRIMITIVE, old.eraOf(oldSettlement).id());
+		assertTrue(old.eraMilestonesOf(oldSettlement).isEmpty());
+		assertEquals(26, old.save(new CompoundTag(), null).getInt("DataVersion"));
+	}
+
+	@Test
 	void preservesHearthThroughSaveRoundTrip() {
 		SettlementSavedData data = new SettlementSavedData();
 		BlockPos center = new BlockPos(12, 65, -7);
@@ -248,5 +276,64 @@ class SettlementSavedDataTest {
 		assertEquals(hearth, restored.getHearth(restored.find(center).orElseThrow()).orElseThrow());
 		restored.clearHearth(restored.find(center).orElseThrow());
 		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
+	}
+
+	@Test
+	void sharedPowerAndArchiveRegistrySurviveReload() {
+		SettlementSavedData data = new SettlementSavedData();
+		Settlement settlement = data.getOrCreate(new BlockPos(8, 64, 8), "Informationhaven", 0);
+		BlockPos source = new BlockPos(0, 64, 0);
+		data.recordPoweredProducer(settlement, new BlockPos(2, 64, 0), source);
+		data.recordPoweredProducer(settlement, new BlockPos(4, 64, 0), new BlockPos(0, 65, 0));
+		assertFalse(data.eraMilestonesOf(settlement).contains(CivilizationEras.AUTOMATED_PRODUCTION));
+		data.recordPoweredProducer(settlement, new BlockPos(6, 64, 0), source);
+		assertTrue(data.eraMilestonesOf(settlement).contains(CivilizationEras.AUTOMATED_PRODUCTION));
+		BlockPos archive = new BlockPos(10, 64, 8);
+		data.registerArchive(settlement, archive);
+
+		SettlementSavedData restored = SettlementSavedData.load(data.save(new CompoundTag(), null), null);
+		Settlement restoredSettlement = restored.find(settlement.center()).orElseThrow();
+
+		assertEquals(26, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertTrue(restored.eraMilestonesOf(restoredSettlement).contains(CivilizationEras.AUTOMATED_PRODUCTION));
+		assertEquals(Set.of(archive), restored.archiveStationsOf(restoredSettlement));
+	}
+
+	@Test
+	void planningAndLearningSurviveReload() {
+		SettlementSavedData data = new SettlementSavedData();
+		Settlement settlement = data.getOrCreate(new BlockPos(4, 64, 4), "Learninghaven", 0);
+		data.setEra(settlement, CivilizationEras.byId(CivilizationEras.INFORMATION));
+		UUID worker = UUID.randomUUID();
+		data.startPlan(settlement, SettlementPlan.Kind.BAKE_BREAD, worker, 1);
+		data.recordPlanOutput(settlement, worker, "minecraft:bread", 1, 2);
+		BlockPos core = new BlockPos(5, 64, 4);
+		data.registerPlanningCore(settlement, core);
+		ProductionStats stats = ProductionStats.initial();
+		for (long tick : new long[] {0, 80, 160, 180, 200}) {
+			stats = data.recordProductionCycle(settlement, SettlementIntelligence.POWERED_HARVEST, tick);
+		}
+
+		SettlementSavedData restored = SettlementSavedData.load(data.save(new CompoundTag(), null), null);
+		Settlement restoredSettlement = restored.find(settlement.center()).orElseThrow();
+
+		assertEquals(26, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(data.latestPlanOf(settlement).orElseThrow(), restored.latestPlanOf(restoredSettlement).orElseThrow());
+		assertEquals(stats, restored.productionStatsOf(restoredSettlement, SettlementIntelligence.POWERED_HARVEST));
+		assertEquals(Set.of(core), restored.planningCoresOf(restoredSettlement));
+		assertEquals(20, restored.productionIntervalOf(restoredSettlement, SettlementIntelligence.POWERED_HARVEST));
+	}
+
+	@Test
+	void originSurvivesReload() {
+		SettlementSavedData data = new SettlementSavedData();
+		Settlement settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Originhaven", 0);
+		assertEquals(SettlementOrigin.NEW_CAMP, data.originOf(settlement));
+		data.setOrigin(settlement, SettlementOrigin.ESTABLISHED_VILLAGE);
+
+		SettlementSavedData restored = SettlementSavedData.load(data.save(new CompoundTag(), null), null);
+
+		assertEquals(SettlementOrigin.ESTABLISHED_VILLAGE, restored.originOf(restored.find(settlement.center()).orElseThrow()));
+		assertEquals(26, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 }

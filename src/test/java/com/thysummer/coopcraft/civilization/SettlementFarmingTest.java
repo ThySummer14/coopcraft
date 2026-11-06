@@ -27,14 +27,12 @@ class SettlementFarmingTest {
 	}
 
 	@Test
-	void recognizesOnlyMatureCropsThatResidentsCanEatDirectly() {
-		for (Block block : new Block[] {Blocks.CARROTS, Blocks.POTATOES, Blocks.BEETROOTS}) {
+	void recognizesOnlyMatureSupportedCrops() {
+		for (Block block : new Block[] {Blocks.WHEAT, Blocks.CARROTS, Blocks.POTATOES, Blocks.BEETROOTS}) {
 			CropBlock crop = (CropBlock) block;
 			assertTrue(SettlementFarming.isMature(crop.getStateForAge(crop.getMaxAge())));
 			assertFalse(SettlementFarming.isMature(crop.defaultBlockState()));
 		}
-		CropBlock wheat = (CropBlock) Blocks.WHEAT;
-		assertFalse(SettlementFarming.isMature(wheat.getStateForAge(wheat.getMaxAge())));
 		assertFalse(SettlementFarming.isMature(Blocks.NETHER_WART.defaultBlockState()));
 	}
 

@@ -1,0 +1,22 @@
+id: natural-village-origin
+description: "Real generated residential village regression. Use a fresh dev world with seed 34239575550581757 and preserve its natural terrain and structures."
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamemode survival @p"
+    - "forceload add -1460 -722"
+    - "tp @p -1458 73 -722 180 0"
+steps:
+  - wait: 1000
+  - assert_json: {side: server, endpoint: "/command", request: {cmd: "seed"}, path: "output.0", op: contains, value: "34239575550581757"}
+  - assert_json: {side: server, endpoint: "/world/settlement-survey", request: {x: -1460, y: 73, z: -722}, path: "villageStructure", op: eq, value: true}
+  - assert_json: {side: server, endpoint: "/world/settlement-survey", request: {x: -1460, y: 73, z: -722}, path: "beds", op: gte, value: 3}
+  - assert_json: {side: server, endpoint: "/world/settlement-survey", request: {x: -1460, y: 73, z: -722}, path: "farmland", op: eq, value: 0}
+  - assert_json: {side: server, endpoint: "/world/settlement-survey", request: {x: -1460, y: 73, z: -722}, path: "plantedCrops", op: eq, value: 0}
+  - player_use_until: {x: -1460, y: 73, z: -722, face: up, screen_contains: "SettlementScreen", timeout_ms: 20000}
+  - assert_ui: {text_contains_any: ["农业时代", "Agricultural Age"]}
+  - assert_ui: {text_contains_any: ["原版村庄（农业起点）", "Vanilla village (agricultural start)"]}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", request: {}, path: "data.Origins.0.Origin", op: eq, value: "established_village"}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", request: {}, path: "data.Eras.0.Era", op: eq, value: "coopcraft:agricultural"}
+  - screenshot: "natural-village-origin"
+  - ui_close: {}

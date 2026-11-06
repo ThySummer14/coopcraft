@@ -688,6 +688,14 @@ public final class SimulationWorld {
 		return recordSocialEvent(EventType.STAGE_ADVANCED, List.of(), Map.of("stage", stageId), List.of());
 	}
 
+	public long recordEraAdvanced(String campId, String eraId) {
+		camp(campId);
+		if (eraId.isBlank()) {
+			throw new IllegalArgumentException("Era ID cannot be blank");
+		}
+		return recordSocialEvent(EventType.ERA_ADVANCED, List.of(), Map.of("era", eraId), List.of());
+	}
+
 	public long recordGiftInteraction(
 		String villagerPersonId,
 		String playerActorId,

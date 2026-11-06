@@ -38,7 +38,7 @@ class SettlementCoordinationPersistenceTest {
 		SettlementSavedData restored = data;
 		for (int reload = 0; reload < 2; reload++) {
 			CompoundTag saved = restored.save(new CompoundTag(), null);
-			assertEquals(21, saved.getInt("DataVersion"));
+			assertEquals(26, saved.getInt("DataVersion"));
 			restored = SettlementSavedData.load(saved, null);
 			Settlement restoredSettlement = restored.find(center).orElseThrow();
 			assertEquals(job, restored.getConstructionJob(restoredSettlement).orElseThrow());

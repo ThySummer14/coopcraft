@@ -34,12 +34,14 @@ public final class CivilizationGameTest implements FabricGameTest {
 	private static final BlockPos GRINDING_STATION = new BlockPos(1, 0, 5);
 
 	@SuppressWarnings("removal")
-	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 60000)
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 60000, batch = "civilization_founding")
 	public void foundsAndReusesSettlement(GameTestHelper helper) {
+		CivilizationGameTestSupport.clearAround(helper, BELL, 32);
 		helper.setBlock(BELL, Blocks.BELL);
 		ServerPlayer player = helper.makeMockServerPlayerInLevel();
 		player.setGameMode(GameType.SURVIVAL);
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		CivilizationGameTestSupport.resetSettlements(data);
 		BlockPos bell = helper.absolutePos(BELL);
 
 		useBlock(helper, player, BELL);

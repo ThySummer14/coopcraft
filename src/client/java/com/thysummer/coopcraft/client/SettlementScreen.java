@@ -2,6 +2,7 @@ package com.thysummer.coopcraft.client;
 
 import java.util.List;
 
+import com.thysummer.coopcraft.civilization.CivilizationEra;
 import com.thysummer.coopcraft.net.SettlementOverviewPayload;
 
 import net.minecraft.client.gui.GuiGraphics;
@@ -114,6 +115,17 @@ public class SettlementScreen extends Screen {
 			"coopcraft.settlement.population", data.totalResidents(), data.registeredResidents()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.housing", data.housingCapacity()), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.era", Component.translatable(CivilizationEra.translationKey(data.era()))
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.origin", Component.translatable("coopcraft.origin." + data.origin())
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		if (!data.nextEraMilestone().isEmpty()) {
+			y = drawWrapped(graphics, Component.translatable(
+				"coopcraft.settlement.next_era_milestone", Component.translatable(data.nextEraMilestone())
+			), x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+		}
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.stage", Component.translatable(data.stage().translationKey())
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;

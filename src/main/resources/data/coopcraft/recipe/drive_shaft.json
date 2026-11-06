@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "S": { "item": "minecraft:stick" }
+  },
+  "pattern": ["I", "S", "I"],
+  "result": { "count": 2, "id": "coopcraft:drive_shaft" },
+  "show_notification": true
+}

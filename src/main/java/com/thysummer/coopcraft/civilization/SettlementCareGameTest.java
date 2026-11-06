@@ -25,7 +25,7 @@ public final class SettlementCareGameTest implements FabricGameTest {
 	private static final BlockPos BELL = new BlockPos(2, 0, 2);
 	private static final BlockPos CHEST = new BlockPos(1, 0, 1);
 
-	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000, batch = "settlement_care")
 	public void nonRelativeCareUsesOneRealWorkSlot(GameTestHelper helper) {
 		CareScene scene = scene(helper);
 		CareAssignment assignment = scene.state().careForDependent(scene.dependent().getUUID()).orElseThrow();
