@@ -215,12 +215,7 @@ public final class SettlementSimulationState {
 	}
 
 	public List<SimulationEvent> recentEvents(int limit) {
-		if (limit < 0) {
-			throw new IllegalArgumentException("Event limit cannot be negative");
-		}
-		List<SimulationEvent> events = world.ledger().events();
-		int fromIndex = Math.max(0, events.size() - limit);
-		return List.copyOf(events.subList(fromIndex, events.size()));
+		return world.ledger().recentEvents(limit);
 	}
 
 	CompoundTag save() {

@@ -328,7 +328,7 @@ public final class SettlementSimulationService {
 				List.of(personId), Map.of("activity", activity, "villagerId", villager.getUUID().toString())
 			);
 			if (moved > 0) {
-				productionEventId = state.world().ledger().events().getLast().eventId();
+				productionEventId = state.world().ledger().lastEvent().orElseThrow().eventId();
 				data.setDirty();
 			}
 		}
@@ -359,20 +359,7 @@ public final class SettlementSimulationService {
 		if (personId == null) {
 			return false;
 		}
-		long previousPractice = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SKILL_PRACTICED)
-			.filter(event -> event.actors().equals(List.of(personId)))
-			.filter(event -> WorkType.CRAFT.name().equals(event.context().get("workType")))
-			.mapToLong(SimulationEvent::eventId)
-			.max().orElse(0);
-		List<Long> materialCauses = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT)
-			.filter(event -> event.eventId() > previousPractice)
-			.filter(event -> event.actors().contains(personId))
-			.filter(event -> "craft".equals(event.context().get("activity")))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.map(SimulationEvent::eventId)
-			.toList();
+		List<Long> materialCauses = craftingMaterialCauses(state.world().ledger().events(), personId, recipe);
 		long completed = state.world().recordCrafting(
 			personId, recipe, Map.of("activity", "craft", "villagerId", villager.getUUID().toString()), materialCauses
 		);
@@ -383,6 +370,22 @@ public final class SettlementSimulationService {
 		);
 		data.setDirty();
 		return practiced;
+	}
+
+	static List<Long> craftingMaterialCauses(List<SimulationEvent> events, String personId, String recipe) {
+		// Completion, not optional skill practice, closes one batch of recipe inputs.
+		long previousCompletion = events.stream()
+			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.CRAFT_COMPLETED)
+			.filter(event -> event.actors().equals(List.of(personId)))
+			.filter(event -> recipe.equals(event.context().get("recipe")))
+			.mapToLong(SimulationEvent::eventId).max().orElse(0);
+		return events.stream()
+			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT)
+			.filter(event -> event.eventId() > previousCompletion)
+			.filter(event -> event.actors().contains(personId))
+			.filter(event -> "craft".equals(event.context().get("activity")))
+			.filter(event -> recipe.equals(event.context().get("recipe")))
+			.map(SimulationEvent::eventId).toList();
 	}
 
 	public static int recordCraftedProduct(
