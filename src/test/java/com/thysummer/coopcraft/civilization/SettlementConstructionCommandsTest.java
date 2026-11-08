@@ -46,12 +46,18 @@ class SettlementConstructionCommandsTest {
 		for (int level : List.of(0, 1, 2)) {
 			assertEquals(1, dispatcher.execute("coop settlement construction", level));
 		}
+		var adopt = dispatcher.getRoot().getChild("coop").getChild("settlement")
+			.getChild("construction").getChild("adopt");
+		assertNotNull(adopt);
+		// Raw Brigadier completion is not Minecraft's permission-filtered client command tree.
+		// Verify the actual node requirement and execution gate, not suggestion visibility.
 		for (int level : List.of(0, 1)) {
+			assertFalse(adopt.canUse(level));
 			assertThrows(CommandSyntaxException.class,
 				() -> dispatcher.execute("coop settlement construction adopt " + FINGERPRINT, level));
-			var suggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("coop settlement construction ", level)).get();
-			assertTrue(suggestions.getList().isEmpty());
+			assertEquals(List.of("", "", ""), calls, "Rejected adoption must not dispatch a handler");
 		}
+		assertTrue(adopt.canUse(2));
 		assertEquals(1, dispatcher.execute("coop settlement construction adopt " + FINGERPRINT, 2));
 		assertEquals(List.of("", "", "", "adopt"), calls);
 		for (String suffix : List.of("adopt", "adopt \"" + FINGERPRINT + "\"", "adopt " + FINGERPRINT + " 1 2 3", "cancel", "force", "adopt job-id " + FINGERPRINT)) {

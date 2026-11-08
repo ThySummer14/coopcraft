@@ -122,7 +122,8 @@ class ConstructionCompatibilityTest {
 			new ConstructionInstruction(BlockPos.ZERO, Blocks.COBBLESTONE.defaultBlockState(), Items.COBBLESTONE, true),
 			original.instructions().get(1)));
 		var f = fixture(new ConstructionJob(ID, ORIGIN, 1, original.fingerprint()));
-		var stockpile = new SimpleContainer(new ItemStack(Items.OAK_LOG, 10));
+		var stockpile = new SimpleContainer(3);
+		stockpile.setItem(0, new ItemStack(Items.OAK_LOG, 10));
 		var saved = f.data().save(new CompoundTag(), null);
 		withPlan(original, () -> {
 			var demands = ConstructionPlanner.materialDemands(f.data(), f.settlement());
