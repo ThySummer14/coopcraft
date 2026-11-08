@@ -54,6 +54,12 @@
 
 这是正常施工中断恢复，不是崩溃时多个存档文件的原子事务，也不修复已建前缀被破坏的房屋。丢失蓝图和非法步骤仍按原有领取路径处理；本轮不迁移蓝图或自动认可玩家补建。
 
+## 第七增量：蓝图编译期契约
+
+在图层与special完成覆盖后统一检查门床完整性与先后顺序，再派生消耗标记，避免孤立免费部件、图层双重收费或覆盖删掉付费半。蓝图ID以资源路径为权威，尺寸/坐标/图层类型严格校验，并给小建筑设解析预算。现有石屋与火塘的布局、步骤与材料数量应保持不变。
+
+完整格式、合法示例、任意方块状态的成本边界及热重载风险见 [蓝图格式](blueprint-format.md)。本轮不声称修复了所有blockstate的成本，不迁移在建工地。
+
 ## 权威状态
 
 - 默认模式：真实背包/公仓持有物资，SettlementNeeds持有饱食。
@@ -73,6 +79,7 @@
 - 第四增量代码提交 `da4437b8` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42505053956) 已通过199项JUnit，0失败/0跳过；包括main/client/test编译、发行jar和源码包。可从该构建的 [Artifacts下载](https://github.com/ThySummer14/coopcraft/actions/runs/42505053956/artifacts/13626344188) 获取，安装时只取 `coopcraft-0.1.0.jar`，不要安装sources包，也不要与旧版coopcraft重复放置。
 - 第四增量运行jar SHA-256：`34a481d6cd9b1628e579299648aff92def2f692eee41e34a5518de2e8d491697`。构建需要JDK25，Minecraft运行使用Java21；Minecraft 1.21.1、Fabric Loader 0.20.1+、Fabric API。先在备份存档统一测试，再用于原世界。
 - 第五增量提交 `004ff1f9` 的 [住房反馈构建](https://github.com/ThySummer14/coopcraft/actions/runs/42506236414) 已通过209项JUnit，0失败/0跳过，含10项住房单测；新增真实床破坏与边界GameTest只编译、不运行。
+- 第六增量提交 `6244dd85` 的 [施工恢复构建](https://github.com/ThySummer14/coopcraft/actions/runs/42506923026) 已通过223项JUnit，0失败/0跳过，含9项只读就绪检查与5项诊断测试；真实施工恢复GameTest只编译、不运行。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
