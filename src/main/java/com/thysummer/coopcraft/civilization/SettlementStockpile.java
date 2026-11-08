@@ -2,6 +2,9 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -24,12 +27,25 @@ public final class SettlementStockpile {
 	}
 
 	public static void tick(ServerLevel level, SettlementSavedData data, Settlement settlement, long gameTime) {
+		tick(data, settlement, gameTime, () -> getStockpile(level, data, settlement), villagerId -> {
+			if (level.getEntity(villagerId) instanceof Villager villager
+				&& villager.isAlive()
+				&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED) {
+				return villager.getInventory();
+			}
+			return null;
+		});
+	}
+
+	/** The supplied inventory is only for a currently loaded, living, nearby member. */
+	static void tick(SettlementSavedData data, Settlement settlement, long gameTime,
+		Supplier<Container> stockpileAccess, Function<UUID, Container> eligibleInventory) {
 		if (data.getStockpile(settlement).isEmpty()
 			|| Math.floorMod(gameTime + settlement.id().getLeastSignificantBits(), WORK_INTERVAL_TICKS) != 0) {
 			return;
 		}
 
-		Container stockpile = getStockpile(level, data, settlement);
+		Container stockpile = stockpileAccess.get();
 		if (stockpile == null) {
 			return;
 		}
@@ -41,12 +57,15 @@ public final class SettlementStockpile {
 		long cycle = Math.floorDiv(gameTime, WORK_INTERVAL_TICKS) + settlement.id().getLeastSignificantBits();
 		int index = (int) Math.floorMod(cycle, (long) members.size());
 		SettlementMember member = members.get(index);
-		if (level.getEntity(member.villagerId()) instanceof Villager villager
-			&& villager.isAlive()
-			&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED) {
-			depositExcessFood(stockpile, villager.getInventory(), member.personality().foodRetentionPoints(BASIC_FOOD_POINTS));
-			distributeBasicFood(stockpile, villager.getInventory(), member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
-			depositGatheredResources(stockpile, villager.getInventory());
+		Container inventory = eligibleInventory.apply(member.villagerId());
+		if (inventory != null) {
+			// Survival rations belong solely to the abstract common store. Legacy food handoffs
+			// would hide pending imports in personal inventories without feeding the resident.
+			if (!SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+				depositExcessFood(stockpile, inventory, member.personality().foodRetentionPoints(BASIC_FOOD_POINTS));
+				distributeBasicFood(stockpile, inventory, member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
+			}
+			depositGatheredResources(stockpile, inventory);
 		}
 	}
 
