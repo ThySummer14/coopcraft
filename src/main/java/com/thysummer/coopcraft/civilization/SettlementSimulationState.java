@@ -355,6 +355,7 @@ public final class SettlementSimulationState {
 		for (int i = 0; i < proposals.size(); i++) {
 			state.world.registerProposal(loadProposal(proposals.getCompound(i)));
 		}
+		// Restore the recorded date verbatim. Only a new allocation may roll this ledger forward.
 		state.foodAllocationDay = tag.contains("FoodAllocationDay") ? tag.getLong("FoodAllocationDay") : Long.MIN_VALUE;
 		ListTag allocations = tag.getList("FoodAllocations", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < allocations.size(); i++) {
@@ -362,10 +363,6 @@ public final class SettlementSimulationState {
 			int units = allocation.getInt("Units");
 			if (units <= 0) {
 				throw new IllegalArgumentException("Restored food allocation must be positive");
-			}
-			if (state.foodAllocationDay != state.world.day()) {
-				state.foodAllocationDay = state.world.day();
-				state.foodAllocations.clear();
 			}
 			state.foodAllocations.put(allocation.getString("PersonId"), units);
 		}
