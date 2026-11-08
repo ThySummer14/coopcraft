@@ -35,7 +35,7 @@ public final class ConstructionRecoveryGameTest implements FabricGameTest {
 		data.setStockpile(settlement, chestPosition);
 		var plan = BlueprintManager.get(ConstructionPlanner.CAMPFIRE_HEARTH);
 		helper.assertTrue(plan != null && plan.instructions().size() > 2, "Loaded hearth blueprint must have a real prefix");
-		data.setConstructionJob(settlement, new ConstructionJob(plan.id(), origin, 0));
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, origin));
 		Villager builder = helper.spawn(EntityType.VILLAGER, new BlockPos(1, 0, 2));
 		Villager secondBuilder = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 2));
 		builder.setNoAi(true);
@@ -91,7 +91,7 @@ public final class ConstructionRecoveryGameTest implements FabricGameTest {
 		var settlement = data.getOrCreate(helper.absolutePos(new BlockPos(1, 0, 2)), "Identical obstacle", 0);
 		data.setStockpile(settlement, chestPosition);
 		var plan = BlueprintManager.get(ConstructionPlanner.CAMPFIRE_HEARTH);
-		data.setConstructionJob(settlement, new ConstructionJob(plan.id(), origin, 0));
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, origin));
 		var target = ConstructionSystem.nextBuildTarget(level, data, settlement).orElseThrow();
 		Villager builder = helper.spawn(EntityType.VILLAGER, new BlockPos(1, 0, 2));
 		builder.setNoAi(true);
@@ -114,6 +114,52 @@ public final class ConstructionRecoveryGameTest implements FabricGameTest {
 	}
 
 	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 100)
+	public void explicitLegacyAdoptionReloadsAndResumesWithOneMaterialCharge(GameTestHelper helper) {
+		var level = helper.getLevel();
+		BlockPos center = helper.absolutePos(new BlockPos(1, 0, 2));
+		BlockPos origin = helper.absolutePos(new BlockPos(0, 3, 0));
+		BlockPos chestPosition = helper.absolutePos(new BlockPos(0, 0, 0));
+		helper.setBlock(new BlockPos(0, 0, 0), Blocks.CHEST);
+		Container chest = (Container) level.getBlockEntity(chestPosition);
+		chest.setItem(0, new ItemStack(Items.COBBLESTONE, 32));
+		chest.setItem(1, new ItemStack(Items.CAMPFIRE, 2));
+		var data = new SettlementSavedData();
+		var settlement = data.getOrCreate(center, "Legacy plan adoption", 0);
+		data.setStockpile(settlement, chestPosition);
+		var plan = BlueprintManager.get(ConstructionPlanner.CAMPFIRE_HEARTH);
+		helper.assertTrue(plan != null && plan.instructions().size() > 2, "Need a completed prefix and further steps");
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, origin));
+		Villager builder = helper.spawn(EntityType.VILLAGER, new BlockPos(1, 0, 2));
+		builder.setNoAi(true);
+		try {
+			var first = ConstructionSystem.nextBuildTarget(level, data, settlement).orElseThrow();
+			helper.assertTrue(ConstructionSystem.buildNext(level, data, settlement, first, builder), "Build and pay for a real prefix");
+			var pending = ConstructionSystem.nextBuildTarget(level, data, settlement).orElseThrow();
+			int remaining = chest.countItem(pending.instruction().item());
+			// An old version saved these three fields, but had no plan fingerprint.
+			data.setConstructionJob(settlement, new ConstructionJob(plan.id(), origin, pending.job().nextIndex()));
+			var loaded = SettlementSavedData.load(data.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+			var loadedSettlement = loaded.find(center).orElseThrow();
+			helper.assertValueEqual("plan_unverified", ConstructionSystem.inspect(level, loaded, loadedSettlement).orElseThrow().blocker(), "Do not automatically bind legacy progress");
+			helper.assertTrue(ConstructionSystem.nextBuildTarget(level, loaded, loadedSettlement).isEmpty(), "Legacy progress stays paused");
+			helper.assertValueEqual("adopted", ConstructionSystem.adoptLegacyPlan(level, loaded, loadedSettlement, plan.fingerprint()).status(), "Explicitly adopt a verified completed prefix");
+			helper.assertValueEqual(remaining, chest.countItem(pending.instruction().item()), "Adoption does not charge or refund");
+			var restored = SettlementSavedData.load(loaded.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
+			var restoredSettlement = restored.find(center).orElseThrow();
+			var resumed = ConstructionSystem.nextBuildTarget(level, restored, restoredSettlement).orElseThrow();
+			helper.assertValueEqual(pending, resumed, "Retain the original index, position, and full plan signature");
+			helper.assertTrue(ConstructionSystem.buildNext(level, restored, restoredSettlement, resumed, builder), "Resume after adoption and save/reload");
+			helper.assertTrue(!ConstructionSystem.buildNext(level, restored, restoredSettlement, resumed, builder), "Old target cannot charge twice");
+			helper.assertValueEqual(remaining - (resumed.instruction().consume() ? 1 : 0), chest.countItem(resumed.instruction().item()), "Pay for exactly one new instruction");
+			helper.assertValueEqual(resumed.job().nextIndex() + 1, restored.getConstructionJob(restoredSettlement).orElseThrow().nextIndex(), "Advance exactly once");
+			helper.assertTrue(level.getBlockState(first.position()).equals(first.instruction().state()), "Keep the completed prefix");
+		} finally {
+			builder.kill();
+		}
+		helper.succeed();
+	}
+
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 100)
 	public void missingPlanRetainsSavedJobAndResumesWithSamePlan(GameTestHelper helper) throws Exception {
 		var level = helper.getLevel();
 		BlockPos center = helper.absolutePos(new BlockPos(1, 0, 2));
@@ -128,7 +174,7 @@ public final class ConstructionRecoveryGameTest implements FabricGameTest {
 		data.setStockpile(settlement, chestPosition);
 		var plan = BlueprintManager.get(ConstructionPlanner.CAMPFIRE_HEARTH);
 		helper.assertTrue(plan != null && plan.instructions().size() > 2, "Hearth must have a prefix and pending steps");
-		data.setConstructionJob(settlement, new ConstructionJob(plan.id(), origin, 0));
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, origin));
 		Villager builder = helper.spawn(EntityType.VILLAGER, new BlockPos(1, 0, 2));
 		builder.setNoAi(true);
 		Field field = BlueprintManager.class.getDeclaredField("plans");

@@ -11,6 +11,7 @@ import java.util.function.Predicate;
 
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -57,6 +58,11 @@ public final class SettlementCommands {
 			.executes(ctx -> handler.run(ctx, "events", ""))
 			.then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, SettlementEvents.MAX_COUNT))
 				.executes(ctx -> handler.run(ctx, "events", "count"))));
+		settlement.then(LiteralArgumentBuilder.<S>literal("construction")
+			.executes(ctx -> handler.run(ctx, "construction", ""))
+			.then(LiteralArgumentBuilder.<S>literal("adopt").requires(admin)
+				.then(RequiredArgumentBuilder.<S, String>argument("fingerprint", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "construction", "adopt")))));
 		var simulation = LiteralArgumentBuilder.<S>literal("simulation").requires(admin);
 		for (String feature : FEATURES) {
 			simulation.then(LiteralArgumentBuilder.<S>literal(feature)
@@ -92,6 +98,10 @@ public final class SettlementCommands {
 			source.sendFailure(message("no_settlement"));
 			return 0;
 		}
+		if (action.equals("construction") && option.isEmpty()) {
+			showConstruction(source, data, settlement);
+			return 1;
+		}
 		if (action.equals("events")) {
 			for (Component line : SettlementEvents.messages(level, data, settlement, eventCount(context, option))) {
 				source.sendSuccess(() -> line, false);
@@ -110,6 +120,21 @@ public final class SettlementCommands {
 		}
 		if (!source.hasPermission(2)) {
 			source.sendFailure(message("permission"));
+			return 0;
+		}
+		if (action.equals("construction") && option.equals("adopt")) {
+			String fingerprint = adoptionFingerprint(context);
+			if (!validFingerprint(fingerprint)) {
+				source.sendFailure(message("construction_adopt_invalid_fingerprint"));
+				return 0;
+			}
+			var result = ConstructionSystem.adoptLegacyPlan(level, data, settlement, fingerprint);
+			Component feedback = adoptionMessage(result);
+			if (result.status().equals("adopted")) {
+				source.sendSuccess(() -> feedback, false);
+				return 1;
+			}
+			source.sendFailure(feedback);
 			return 0;
 		}
 		if (action.equals("simulation")) {
@@ -145,6 +170,44 @@ public final class SettlementCommands {
 			: export(data, settlement, stockpile, type, requested);
 		send(source, "transferred", settlement.name(), action, option, moved, requested);
 		return moved;
+	}
+
+	static <S> String adoptionFingerprint(CommandContext<S> context) {
+		return StringArgumentType.getString(context, "fingerprint");
+	}
+
+	static boolean validFingerprint(String fingerprint) {
+		return fingerprint != null && fingerprint.matches("v1-[0-9a-f]{64}");
+	}
+
+	private static void showConstruction(CommandSourceStack source, SettlementSavedData data, Settlement settlement) {
+		var job = data.getConstructionJob(settlement).orElse(null);
+		if (job == null) {
+			send(source, "construction_adopt_no_job");
+			return;
+		}
+		var plan = BlueprintManager.get(job.blueprintId());
+		source.sendSuccess(() -> savedConstructionMessage(job, plan), false);
+		send(source, "construction_adopt_help");
+	}
+
+	/** Uses saved identity/progress only; a changed blueprint never supplies remaining requirements. */
+	static Component savedConstructionMessage(ConstructionJob job, ConstructionPlan plan) {
+		Object saved = job.planFingerprint().isEmpty() ? message("construction_unknown") : job.planFingerprint();
+		Object current = plan == null ? message("construction_unknown") : plan.fingerprint();
+		return message("construction_saved", job.blueprintId().toString(), job.origin().toShortString(),
+			job.nextIndex(), saved, current, job.compatibilityBlocker(plan).equals("ready")
+				? message("construction_compatible") : constructionBlocker(job.compatibilityBlocker(plan)));
+	}
+
+	static Component adoptionMessage(ConstructionPlanAdoption.Result result) {
+		Component feedback = message("construction_adopt_" + result.status());
+		return result.position() == null ? feedback
+			: message("construction_adopt_position", feedback, result.position().toShortString());
+	}
+
+	static Component constructionBlocker(String blocker) {
+		return Component.translatable("coopcraft.interaction.blocker.construction_" + blocker);
 	}
 
 	static <S> int eventCount(CommandContext<S> context, String option) {
@@ -266,7 +329,12 @@ public final class SettlementCommands {
 		send(source, "abstract", abstractStock.toString());
 		var job = data.getConstructionJob(settlement).orElse(null);
 		if (job != null) {
-			showProject(source, job.blueprintId(), job.nextIndex(), true, stockpile, state);
+			String blocker = job.compatibilityBlocker(BlueprintManager.get(job.blueprintId()));
+			if (blocker.equals("ready")) {
+				showProject(source, job.blueprintId(), job.nextIndex(), true, stockpile, state);
+			} else {
+				send(source, "construction_materials_blocked", job.blueprintId().toString(), constructionBlocker(blocker));
+			}
 		}
 		boolean pending = false;
 		for (var project : ConstructionPlanner.projects(data, settlement)) {
@@ -304,7 +372,7 @@ public final class SettlementCommands {
 
 	/** Formatting a snapshot never resolves a target, loads chunks, or changes a saved project. */
 	static Component constructionMessage(ConstructionReadiness readiness) {
-		Object total = readiness.blocker().equals("plan_unavailable")
+		Object total = List.of("plan_unavailable", "plan_unverified", "plan_changed").contains(readiness.blocker())
 			? message("construction_unknown") : readiness.total();
 		Object position = readiness.position() == null
 			? message("construction_unknown") : readiness.position().toShortString();

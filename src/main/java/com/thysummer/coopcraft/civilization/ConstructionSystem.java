@@ -35,7 +35,7 @@ public final class ConstructionSystem {
 				if (origin == null) {
 					continue;
 				}
-				job = new ConstructionJob(candidate.id(), origin, 0);
+				job = ConstructionJob.start(candidate, origin);
 				data.setConstructionJob(settlement, job);
 				break;
 			}
@@ -44,12 +44,9 @@ public final class ConstructionSystem {
 			}
 		}
 
-		// A missing plan or out-of-range index pauses the saved job without discarding progress.
+		// Never reinterpret an old index against a changed or unverified plan.
 		ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
-		if (plan == null) {
-			return Optional.empty();
-		}
-		if (job.nextIndex() < 0 || job.nextIndex() >= plan.instructions().size()) {
+		if (!job.compatibilityBlocker(plan).equals("ready")) {
 			return Optional.empty();
 		}
 
@@ -114,7 +111,7 @@ public final class ConstructionSystem {
 			return false;
 		}
 		ConstructionPlan plan = BlueprintManager.get(current.blueprintId());
-		if (plan == null || current.nextIndex() < 0 || current.nextIndex() >= plan.instructions().size()
+		if (!current.compatibilityBlocker(plan).equals("ready")
 			|| !plan.instructions().get(current.nextIndex()).equals(target.instruction())
 			|| !current.origin().offset(target.instruction().offset()).equals(target.position())) {
 			return false;
@@ -158,6 +155,29 @@ public final class ConstructionSystem {
 			data.advanceConstruction(settlement);
 		}
 		return true;
+	}
+
+	/** Explicit legacy-only adoption. Validation never consumes items or changes blocks/index. */
+	public static ConstructionPlanAdoption.Result adoptLegacyPlan(ServerLevel level, SettlementSavedData data,
+		Settlement settlement, String expectedFingerprint) {
+		return adoptLegacyPlan(data, settlement, expectedFingerprint, new ConstructionPlanAdoption.Probe() {
+			public boolean loaded(BlockPos position) { return level.isLoaded(position); }
+			public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
+				return level.getBlockState(position);
+			}
+		});
+	}
+
+	static ConstructionPlanAdoption.Result adoptLegacyPlan(SettlementSavedData data, Settlement settlement,
+		String expectedFingerprint, ConstructionPlanAdoption.Probe probe) {
+		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
+		ConstructionPlan plan = job == null ? null : BlueprintManager.get(job.blueprintId());
+		var result = ConstructionPlanAdoption.inspect(job, plan, expectedFingerprint, probe);
+		if (result.status().equals("adopted")) {
+			data.setConstructionJob(settlement,
+				new ConstructionJob(job.blueprintId(), job.origin(), job.nextIndex(), plan.fingerprint()));
+		}
+		return result;
 	}
 
 	private static Container loadedStockpile(ServerLevel level, SettlementSavedData data, Settlement settlement) {

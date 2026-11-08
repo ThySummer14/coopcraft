@@ -318,7 +318,7 @@ public final class SettlementSavedData extends SavedData {
 	public void advanceConstruction(Settlement settlement) {
 		ConstructionJob job = constructionJobs.get(settlement.id());
 		if (job != null) {
-			constructionJobs.put(settlement.id(), new ConstructionJob(job.blueprintId(), job.origin(), job.nextIndex() + 1));
+			constructionJobs.put(settlement.id(), job.advance());
 			setDirty();
 		}
 	}

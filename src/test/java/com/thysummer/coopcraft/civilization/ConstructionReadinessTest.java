@@ -26,10 +26,10 @@ class ConstructionReadinessTest {
 		Bootstrap.bootStrap();
 	}
 
-	private final ConstructionJob job = new ConstructionJob(ConstructionPlanner.CAMPFIRE_HEARTH, new BlockPos(6, 64, 0), 1);
 	private final ConstructionInstruction instruction = new ConstructionInstruction(new BlockPos(1, 0, 0),
 		Blocks.COBBLESTONE.defaultBlockState(), Items.COBBLESTONE, true);
-	private final ConstructionPlan plan = new ConstructionPlan(job.blueprintId(), List.of(instruction, instruction));
+	private final ConstructionPlan plan = new ConstructionPlan(ConstructionPlanner.CAMPFIRE_HEARTH, List.of(instruction, instruction));
+	private final ConstructionJob job = new ConstructionJob(plan.id(), new BlockPos(6, 64, 0), 1, plan.fingerprint());
 
 	private static class Probe implements ConstructionReadiness.Probe {
 		boolean ticking = true;
@@ -164,7 +164,8 @@ class ConstructionReadinessTest {
 		probe.stockpile = new SimpleContainer(new ItemStack(Items.DIRT, 64));
 		var free = new ConstructionInstruction(instruction.offset(), instruction.state(), instruction.item(), false);
 		var multipartPlan = new ConstructionPlan(job.blueprintId(), List.of(instruction, free));
-		assertEquals("ready", ConstructionReadiness.inspect(job, multipartPlan, probe).blocker());
+		assertEquals("ready", ConstructionReadiness.inspect(new ConstructionJob(job.blueprintId(), job.origin(), job.nextIndex(),
+			multipartPlan.fingerprint()), multipartPlan, probe).blocker());
 		assertEquals(64, probe.stockpile.countItem(Items.DIRT));
 		assertEquals(before, probe.state.save());
 	}

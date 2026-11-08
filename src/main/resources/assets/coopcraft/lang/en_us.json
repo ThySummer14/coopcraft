@@ -313,5 +313,21 @@
   "coopcraft.command.settlement.events_header": "%s: latest %s events (oldest first; core simulation days).",
   "coopcraft.command.settlement.events_none": "none",
   "coopcraft.command.settlement.events_row": "#%s | core day %s | %s | %s × %s | direct causes: %s",
-  "coopcraft.command.settlement.events_more_causes": " (+%s more)"
+  "coopcraft.command.settlement.events_more_causes": " (+%s more)",
+	"coopcraft.command.settlement.construction_saved": "Saved project %s | origin %s | nextIndex %s | saved fingerprint %s | current fingerprint %s | %s",
+	"coopcraft.command.settlement.construction_materials_blocked": "Project %s remaining requirements are unknown: %s. Inspect /coop settlement construction.",
+	"coopcraft.command.settlement.construction_adopt_help": "Back up first. OP2 may use /coop settlement construction adopt <current fingerprint> only for unsigned legacy jobs. Every completed step must be loaded and match the exact current block state. Adoption signs only; it does not repair, refund, or migrate. Signed changed plans require restoring the original plan.",
+	"coopcraft.command.settlement.construction_adopt_invalid_fingerprint": "Invalid fingerprint: expected v1- followed by exactly 64 lowercase hexadecimal characters.",
+	"coopcraft.command.settlement.construction_adopt_adopted": "Legacy job signed with the verified current blueprint. Origin, progress, blocks and items were unchanged. This does not prove the historical blueprint was identical.",
+	"coopcraft.command.settlement.construction_adopt_no_job": "No saved construction job.",
+	"coopcraft.command.settlement.construction_adopt_not_legacy": "Rejected: this job already has a signature. Adoption cannot override it; restore the original blueprint if it changed.",
+	"coopcraft.command.settlement.construction_adopt_plan_unavailable": "Rejected: the saved blueprint is unavailable. Restore it before trying adoption.",
+	"coopcraft.command.settlement.construction_adopt_invalid_index": "Rejected: saved progress is invalid for the current blueprint. No progress was changed.",
+	"coopcraft.command.settlement.construction_adopt_fingerprint_mismatch": "Rejected: supplied fingerprint does not match the current blueprint. Inspect construction again.",
+	"coopcraft.command.settlement.construction_adopt_prefix_unloaded": "Rejected: part of the completed prefix is unloaded. Load all completed steps before retrying; no chunks were forced to load.",
+	"coopcraft.command.settlement.construction_adopt_prefix_mismatch": "Rejected: a completed step does not exactly match the current blueprint block state. No repairs or refunds were made.",
+	"coopcraft.command.settlement.construction_adopt_position": "%s | position %s",
+	"coopcraft.interaction.blocker.construction_plan_unverified": "Paused: legacy job has no verified blueprint signature",
+	"coopcraft.interaction.blocker.construction_plan_changed": "Paused: blueprint differs from the saved signature; restore the original blueprint",
+	"coopcraft.command.settlement.construction_compatible": "Blueprint signature matches; this does not check the next position or materials."
 }

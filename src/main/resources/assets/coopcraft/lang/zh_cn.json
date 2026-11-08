@@ -313,5 +313,21 @@
   "coopcraft.command.settlement.events_header": "%s：最近 %s 条事件（由旧到新；日期为核心模拟日）。",
   "coopcraft.command.settlement.events_none": "无",
   "coopcraft.command.settlement.events_row": "#%s | 核心日 %s | %s | %s × %s | 直接原因：%s",
-  "coopcraft.command.settlement.events_more_causes": "（另有 %s 个）"
+  "coopcraft.command.settlement.events_more_causes": "（另有 %s 个）",
+	"coopcraft.command.settlement.construction_saved": "已保存项目 %s | 原点 %s | nextIndex %s | 保存指纹 %s | 当前指纹 %s | %s",
+	"coopcraft.command.settlement.construction_materials_blocked": "项目 %s 的剩余需求未知：%s。请查看 /coop settlement construction。",
+	"coopcraft.command.settlement.construction_adopt_help": "请先备份。仅无签名旧任务可由 OP2 执行 /coop settlement construction adopt <当前指纹>；全部已完成步骤须已加载且方块状态精确匹配当前蓝图。只补签名，不修复、不退款、不迁移。已签名但变更的蓝图须恢复原始蓝图。",
+	"coopcraft.command.settlement.construction_adopt_invalid_fingerprint": "指纹格式无效：须为 v1- 后接恰好 64 位小写十六进制字符。",
+	"coopcraft.command.settlement.construction_adopt_adopted": "旧任务已按核验通过的当前蓝图补签名。原点、进度、方块和物品均未改变；这不能证明历史蓝图完全相同。",
+	"coopcraft.command.settlement.construction_adopt_no_job": "没有已保存的施工任务。",
+	"coopcraft.command.settlement.construction_adopt_not_legacy": "拒绝：任务已有签名，不能覆盖；若蓝图变更，请恢复原始蓝图。",
+	"coopcraft.command.settlement.construction_adopt_plan_unavailable": "拒绝：保存任务的蓝图不可用，请先恢复蓝图。",
+	"coopcraft.command.settlement.construction_adopt_invalid_index": "拒绝：保存进度对当前蓝图无效，未更改任何进度。",
+	"coopcraft.command.settlement.construction_adopt_fingerprint_mismatch": "拒绝：提供的指纹与当前蓝图不符，请重新查询 construction。",
+	"coopcraft.command.settlement.construction_adopt_prefix_unloaded": "拒绝：已完成部分存在未加载位置。请加载全部已完成步骤后重试；没有强制加载区块。",
+	"coopcraft.command.settlement.construction_adopt_prefix_mismatch": "拒绝：某个已完成步骤的方块状态与当前蓝图不完全匹配，没有修复或退款。",
+	"coopcraft.command.settlement.construction_adopt_position": "%s | 位置 %s",
+	"coopcraft.interaction.blocker.construction_plan_unverified": "暂停：旧任务尚无已核验的蓝图签名",
+	"coopcraft.interaction.blocker.construction_plan_changed": "暂停：蓝图与保存签名不符，请恢复原始蓝图",
+	"coopcraft.command.settlement.construction_compatible": "蓝图签名一致；此处尚未检查下一位置或材料。"
 }

@@ -9,11 +9,9 @@ import net.minecraft.world.item.ItemStack;
 public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex, int total, BlockPos position, String blocker) {
 	static ConstructionReadiness inspect(ConstructionJob job, ConstructionPlan plan, Probe probe) {
 		int total = plan == null ? 0 : plan.instructions().size();
-		if (plan == null) {
-			return result(job, total, null, "plan_unavailable");
-		}
-		if (job.nextIndex() < 0 || job.nextIndex() >= total) {
-			return result(job, total, null, "invalid_index");
+		String compatibility = job.compatibilityBlocker(plan);
+		if (!compatibility.equals("ready")) {
+			return result(job, total, null, compatibility);
 		}
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
 		BlockPos position = job.origin().offset(instruction.offset());

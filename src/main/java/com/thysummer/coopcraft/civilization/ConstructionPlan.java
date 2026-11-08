@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -25,10 +26,31 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.Property;
 
-public record ConstructionPlan(ResourceLocation id, List<ConstructionInstruction> instructions) {
-	public ConstructionPlan {
-		instructions = List.copyOf(instructions);
+public final class ConstructionPlan {
+	private final ResourceLocation id;
+	private final List<ConstructionInstruction> instructions;
+	private final String fingerprint;
+
+	public ConstructionPlan(ResourceLocation id, List<ConstructionInstruction> instructions) {
+		this.id = Objects.requireNonNull(id, "id");
+		this.instructions = List.copyOf(instructions);
+		this.fingerprint = ConstructionPlanFingerprint.compute(id, this.instructions);
 	}
+
+	public ResourceLocation id() { return id; }
+	public List<ConstructionInstruction> instructions() { return instructions; }
+	public String fingerprint() { return fingerprint; }
+
+	@Override
+	public boolean equals(Object other) {
+		return other instanceof ConstructionPlan plan && id.equals(plan.id) && instructions.equals(plan.instructions);
+	}
+
+	@Override
+	public int hashCode() { return Objects.hash(id, instructions); }
+
+	@Override
+	public String toString() { return "ConstructionPlan[id=" + id + ", instructions=" + instructions + "]"; }
 
 	/** Compiles resource JSON without imposing JSON restrictions on synthetic plans. */
 	public static ConstructionPlan fromJson(ResourceLocation location, JsonObject json) {

@@ -29,6 +29,22 @@ public final class ConstructionPlanner {
 		return List.copyOf(projects);
 	}
 
+	/** A paused saved job must not trigger production for a different or unverified plan. */
+	public static List<Map<Item, Integer>> materialDemands(SettlementSavedData data, Settlement settlement) {
+		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
+		if (job != null) {
+			ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
+			return "ready".equals(job.compatibilityBlocker(plan))
+				? List.of(remainingMaterials(plan, job.nextIndex())) : List.of();
+		}
+		List<Map<Item, Integer>> demands = new ArrayList<>();
+		for (Project project : projects(data, settlement)) {
+			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
+			if (plan != null) demands.add(remainingMaterials(plan, 0));
+		}
+		return List.copyOf(demands);
+	}
+
 	/** Consumption still ahead of a saved job, excluding free door/bed continuation parts. */
 	public static Map<Item, Integer> remainingMaterials(ConstructionPlan plan, int nextIndex) {
 		if (nextIndex < 0 || nextIndex > plan.instructions().size()) {

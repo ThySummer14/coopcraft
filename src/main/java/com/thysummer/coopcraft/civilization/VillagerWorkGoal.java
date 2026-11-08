@@ -303,7 +303,8 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private SettlementMaterialCrafting.Recipe chooseMaterialRecipe() {
-		if (!hasCraftingStation()) {
+		List<Map<Item, Integer>> demands = constructionMaterialDemands();
+		if (demands.isEmpty() || !hasCraftingStation()) {
 			return null;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
@@ -311,7 +312,7 @@ public class VillagerWorkGoal extends Goal {
 			return null;
 		}
 		SettlementSimulationState state = settlementData().simulationOf(settlement).orElse(null);
-		for (Map<Item, Integer> demand : constructionMaterialDemands()) {
+		for (Map<Item, Integer> demand : demands) {
 			var recipe = SettlementMaterialCrafting.chooseRecipe(stockpile, state, demand);
 			if (recipe.isPresent()) {
 				return recipe.get();
@@ -321,24 +322,12 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private List<Map<Item, Integer>> constructionMaterialDemands() {
-		ConstructionJob job = settlementData().getConstructionJob(settlement).orElse(null);
-		if (job != null) {
-			ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
-			return plan == null || job.nextIndex() > plan.instructions().size() ? List.of()
-				: List.of(ConstructionPlanner.remainingMaterials(plan, job.nextIndex()));
-		}
-		List<Map<Item, Integer>> demands = new ArrayList<>();
-		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(settlementData(), settlement)) {
-			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
-			if (plan != null) {
-				demands.add(ConstructionPlanner.remainingMaterials(plan, 0));
-			}
-		}
-		return demands;
+		return ConstructionPlanner.materialDemands(settlementData(), settlement);
 	}
 
 	private boolean needsConstructionLogs() {
-		if (!hasCraftingStation()) {
+		List<Map<Item, Integer>> demands = constructionMaterialDemands();
+		if (demands.isEmpty() || !hasCraftingStation()) {
 			return false;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
@@ -350,7 +339,7 @@ public class VillagerWorkGoal extends Goal {
 			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.OAK_LOG);
 		long availableSticks = SettlementMaterialCrafting.countPlain(villager.getInventory(), Items.STICK)
 			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.STICK);
-		for (Map<Item, Integer> demand : constructionMaterialDemands()) {
+		for (Map<Item, Integer> demand : demands) {
 			for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
 				if (demand.getOrDefault(recipe.output(), 0) <= SettlementMaterialCrafting.countPlain(stockpile, recipe.output())) {
 					continue;
@@ -369,7 +358,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private void craftMaterials() {
-		// Another resident may have completed this shortage during our travel/work time.
+		// Recheck shortages and the pinned plan after travel/work, including a data-pack reload.
 		if (currentMaterialRecipe == null || chooseMaterialRecipe() != currentMaterialRecipe) {
 			return;
 		}
