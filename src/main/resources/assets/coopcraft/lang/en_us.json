@@ -286,5 +286,16 @@
 	"coopcraft.settlement.bed_invalid": "Housing requires a complete matching bed",
 	"coopcraft.settlement.bed_unloaded": "Both halves of the bed must be loaded before registration",
 	"coopcraft.settlement.bed_no_settlement": "No existing settlement nearby to register this bed",
-	"coopcraft.command.settlement.housing": "Registered beds: %s | Registered residents: %s | Missing beds: %s"
+	"coopcraft.command.settlement.housing": "Registered beds: %s | Registered residents: %s | Missing beds: %s",
+	"coopcraft.interaction.blocker.construction_ready": "Next position and material checks passed",
+	"coopcraft.interaction.blocker.construction_target_not_ticking": "Paused: next position is unloaded or not entity-ticking",
+	"coopcraft.interaction.blocker.construction_target_occupied": "Paused: a block occupies the next position",
+	"coopcraft.interaction.blocker.construction_entity_obstructed": "Paused: a living entity occupies the next position",
+	"coopcraft.interaction.blocker.construction_stockpile_unavailable": "Paused: communal stockpile is unavailable",
+	"coopcraft.interaction.blocker.construction_stockpile_full": "Paused: communal stockpile cannot accept material for the next step",
+	"coopcraft.interaction.blocker.construction_missing_material": "Paused: material for the next step is missing",
+	"coopcraft.interaction.blocker.construction_plan_unavailable": "Paused: saved blueprint is unavailable",
+	"coopcraft.interaction.blocker.construction_invalid_index": "Paused: saved construction index is invalid",
+	"coopcraft.command.settlement.construction_progress": "Project %s | saved steps %s / %s | next position %s | %s",
+	"coopcraft.command.settlement.construction_unknown": "Unknown"
 }

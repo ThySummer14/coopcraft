@@ -196,13 +196,20 @@ public class VillagerWorkGoal extends Goal {
 		if (satiety <= SettlementNeeds.HUNGRY_AT && !foodAvailable) {
 			return new WorkStatus("idle", null, "hungry_no_food");
 		}
-		if (data.getConstructionJob(current).isPresent()) {
-			return new WorkStatus("idle", null, "construction_blocked");
+		var construction = ConstructionSystem.inspect(level, data, current);
+		if (construction.isPresent()) {
+			return constructionStatus(construction.get());
 		}
 		if (data.resourcesOf(current).isEmpty()) {
 			return new WorkStatus("idle", null, "no_resources");
 		}
 		return new WorkStatus("idle", null, null);
+	}
+
+	/** An available next step does not mean an idle resident has started building or is blocked. */
+	static WorkStatus constructionStatus(ConstructionReadiness readiness) {
+		return new WorkStatus("idle", null, readiness.blocker().equals("ready")
+			? null : "construction_" + readiness.blocker());
 	}
 
 	public record WorkStatus(String action, BlockPos target, String blocker) {

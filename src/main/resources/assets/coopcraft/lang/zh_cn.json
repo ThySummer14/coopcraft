@@ -286,5 +286,16 @@
 	"coopcraft.settlement.bed_invalid": "住房登记需要两半完整且匹配的床",
 	"coopcraft.settlement.bed_unloaded": "床的两半均加载后才能登记",
 	"coopcraft.settlement.bed_no_settlement": "附近没有可登记此床的已有聚落",
-	"coopcraft.command.settlement.housing": "登记床位：%s | 登记居民：%s | 住房缺口：%s"
+	"coopcraft.command.settlement.housing": "登记床位：%s | 登记居民：%s | 住房缺口：%s",
+	"coopcraft.interaction.blocker.construction_ready": "下一位置与材料检查通过",
+	"coopcraft.interaction.blocker.construction_target_not_ticking": "暂停：下一位置未加载或不在实体运算范围",
+	"coopcraft.interaction.blocker.construction_target_occupied": "暂停：下一位置被方块占据",
+	"coopcraft.interaction.blocker.construction_entity_obstructed": "暂停：下一位置有活体实体挡住",
+	"coopcraft.interaction.blocker.construction_stockpile_unavailable": "暂停：公仓不可用",
+	"coopcraft.interaction.blocker.construction_stockpile_full": "暂停：公仓无法接收下一步材料",
+	"coopcraft.interaction.blocker.construction_missing_material": "暂停：缺少下一步所需材料",
+	"coopcraft.interaction.blocker.construction_plan_unavailable": "暂停：已保存蓝图不可用",
+	"coopcraft.interaction.blocker.construction_invalid_index": "暂停：已保存施工进度无效",
+	"coopcraft.command.settlement.construction_progress": "施工项目%s | 已保存步数%s / %s | 下一位置%s | %s",
+	"coopcraft.command.settlement.construction_unknown": "未知"
 }

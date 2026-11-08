@@ -88,6 +88,8 @@ public final class SettlementCommands {
 		}
 		if (action.equals("status") || action.equals("materials")) {
 			showStatus(source, data, settlement);
+			ConstructionSystem.inspect(level, data, settlement).ifPresent(readiness ->
+				source.sendSuccess(() -> constructionMessage(readiness), false));
 			showMaterials(source, data, settlement, SettlementStockpile.getStockpile(level, data, settlement));
 			return 1;
 		}
@@ -212,7 +214,7 @@ public final class SettlementCommands {
 	private static void showProject(CommandSourceStack source, ResourceLocation id, int nextIndex, boolean active,
 		Container stockpile, SettlementSimulationState state) {
 		var plan = BlueprintManager.get(id);
-		if (plan == null || nextIndex > plan.instructions().size()) {
+		if (plan == null || nextIndex < 0 || nextIndex > plan.instructions().size()) {
 			send(source, "plan_unavailable", id.toString());
 			return;
 		}
@@ -229,6 +231,17 @@ public final class SettlementCommands {
 		Map<String, Long> missing = new LinkedHashMap<>();
 		materialGaps(remaining, available).forEach((item, count) -> missing.put(BuiltInRegistries.ITEM.getKey(item).toString(), count));
 		send(source, "gaps", missing.toString());
+	}
+
+	/** Formatting a snapshot never resolves a target, loads chunks, or changes a saved project. */
+	static Component constructionMessage(ConstructionReadiness readiness) {
+		Object total = readiness.blocker().equals("plan_unavailable")
+			? message("construction_unknown") : readiness.total();
+		Object position = readiness.position() == null
+			? message("construction_unknown") : readiness.position().toShortString();
+		return message("construction_progress", readiness.blueprintId().toString(),
+			readiness.nextIndex(), total, position,
+			Component.translatable("coopcraft.interaction.blocker.construction_" + readiness.blocker()));
 	}
 
 	static <T> Map<T, Long> materialGaps(Map<T, Integer> required, Map<T, Long> available) {

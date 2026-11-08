@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.BedBlock;
@@ -48,21 +49,58 @@ public final class ConstructionSystem {
 			data.cancelConstruction(settlement);
 			return Optional.empty();
 		}
-		if (job.nextIndex() >= plan.instructions().size()) {
+		if (job.nextIndex() < 0 || job.nextIndex() >= plan.instructions().size()) {
 			data.cancelConstruction(settlement);
 			return Optional.empty();
 		}
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
 		BlockPos position = job.origin().offset(instruction.offset());
-		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)) {
+		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)
+			|| !level.getBlockState(position).isAir()) {
 			return Optional.empty();
 		}
 		Container stockpile = loadedStockpile(level, data, settlement);
 		if (stockpile == null || (instruction.consume() && ConstructionMaterials.available(stockpile, data.simulationOf(settlement).orElse(null), instruction.item()) < 1)) {
 			return Optional.empty();
 		}
+		if (instruction.consume() && stockpile.countItem(instruction.item()) < 1
+			&& !ConstructionReadiness.canInsertOne(stockpile, new ItemStack(instruction.item()))) {
+			return Optional.empty();
+		}
 		return Optional.of(new BuildTarget(job, instruction, position));
+	}
+
+	/** Read-only snapshot of an existing job; never starts, cancels or advances construction. */
+	public static Optional<ConstructionReadiness> inspect(ServerLevel level, SettlementSavedData data, Settlement settlement) {
+		return data.getConstructionJob(settlement).map(job -> ConstructionReadiness.inspect(
+			job, BlueprintManager.get(job.blueprintId()), new ConstructionReadiness.Probe() {
+				@Override
+				public boolean ticking(BlockPos position) {
+					return level.isLoaded(position) && level.isPositionEntityTicking(position);
+				}
+
+				@Override
+				public boolean air(BlockPos position) {
+					return level.getBlockState(position).isAir();
+				}
+
+				@Override
+				public boolean entityObstructed(BlockPos position) {
+					return !level.getEntitiesOfClass(LivingEntity.class, new AABB(position),
+						entity -> entity.isAlive() && !entity.isSpectator()).isEmpty();
+				}
+
+				@Override
+				public Container stockpile() {
+					return loadedStockpile(level, data, settlement);
+				}
+
+				@Override
+				public SettlementSimulationState simulation() {
+					return data.simulationOf(settlement).orElse(null);
+				}
+			}));
 	}
 
 	public static boolean buildNext(
@@ -88,8 +126,8 @@ public final class ConstructionSystem {
 				entity -> entity.isAlive() && !entity.isSpectator()).isEmpty()) {
 			return false;
 		}
+		// Player blocks, even identical states, pause the existing job without consuming or skipping.
 		if (!level.getBlockState(target.position()).isAir()) {
-			data.cancelConstruction(settlement);
 			return false;
 		}
 
