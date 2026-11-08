@@ -339,6 +339,23 @@ public final class SettlementSavedData extends SavedData {
 		return housingBeds.getOrDefault(settlement.id(), Set.of()).size();
 	}
 
+	/** Immutable snapshot: callers cannot mutate the saved bed ledger while iterating. */
+	public Set<BlockPos> housingBeds(Settlement settlement) {
+		return Set.copyOf(housingBeds.getOrDefault(settlement.id(), Set.of()));
+	}
+
+	public boolean hasHousingBed(Settlement settlement, BlockPos pos) {
+		return housingBeds.getOrDefault(settlement.id(), Set.of()).contains(pos);
+	}
+
+	public void removeHousingBed(Settlement settlement, BlockPos pos) {
+		Set<BlockPos> beds = housingBeds.get(settlement.id());
+		if (beds != null && beds.remove(pos)) {
+			if (beds.isEmpty()) housingBeds.remove(settlement.id());
+			setDirty();
+		}
+	}
+
 	public void addHousingBed(Settlement settlement, BlockPos pos) {
 		Set<BlockPos> beds = housingBeds.computeIfAbsent(settlement.id(), key -> new LinkedHashSet<>());
 		if (beds.add(pos.immutable())) {

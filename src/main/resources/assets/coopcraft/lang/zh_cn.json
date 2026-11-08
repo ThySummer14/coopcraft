@@ -279,5 +279,12 @@
   "coopcraft.command.settlement.pending_project": "待建%s，所需物资：%s",
   "coopcraft.command.settlement.gap_unknown": "已登记公仓可用后才能确定物资缺口。",
   "coopcraft.command.settlement.gaps": "材料缺口（单项目，计入可用真实及抽象库存）：%s",
-  "coopcraft.command.settlement.transferred": "%s：%s %s 实际交接%s / 请求%s。仅计入真实移动数量。"
+  "coopcraft.command.settlement.transferred": "%s：%s %s 实际交接%s / 请求%s。仅计入真实移动数量。",
+	"coopcraft.settlement.bed_registered": "已将此床登记为 %s 的住房",
+	"coopcraft.settlement.bed_already_registered": "此床已登记到 %s",
+	"coopcraft.settlement.bed_other_settlement": "此床已属于另一聚落",
+	"coopcraft.settlement.bed_invalid": "住房登记需要两半完整且匹配的床",
+	"coopcraft.settlement.bed_unloaded": "床的两半均加载后才能登记",
+	"coopcraft.settlement.bed_no_settlement": "附近没有可登记此床的已有聚落",
+	"coopcraft.command.settlement.housing": "登记床位：%s | 登记居民：%s | 住房缺口：%s"
 }

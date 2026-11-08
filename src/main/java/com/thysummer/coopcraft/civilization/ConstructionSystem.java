@@ -8,7 +8,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -106,8 +105,8 @@ public final class ConstructionSystem {
 			data.completeConstruction(settlement);
 			for (ConstructionInstruction part : plan.instructions()) {
 				BlockPos bed = current.origin().offset(part.offset());
-				if (part.item() == Items.WHITE_BED && part.consume() && level.isLoaded(bed) && level.getBlockState(bed).is(Blocks.WHITE_BED)) {
-					data.addHousingBed(settlement, bed);
+				if (part.state().getBlock() instanceof BedBlock && part.consume()) {
+					SettlementHousing.registerBed(level, data, settlement, bed);
 				}
 			}
 			if (plan.id().equals(ConstructionPlanner.CAMPFIRE_HEARTH)) {

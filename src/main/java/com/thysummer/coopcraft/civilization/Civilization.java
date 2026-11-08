@@ -34,6 +34,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -64,7 +65,13 @@ public final class Civilization {
 	}
 
 	private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+		if (!level.isLoaded(hit.getBlockPos())) {
+			return InteractionResult.PASS;
+		}
 		BlockState state = level.getBlockState(hit.getBlockPos());
+		if (state.getBlock() instanceof BedBlock) {
+			return onUseBed(player, level, hand, hit);
+		}
 		if (state.is(Blocks.BELL)) {
 			return onUseBell(player, level, hit);
 		}
@@ -84,6 +91,41 @@ public final class Civilization {
 			return onUseResource(player, level, hit);
 		}
 		return InteractionResult.PASS;
+	}
+
+	static InteractionResult onUseBed(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+		if (hand != InteractionHand.MAIN_HAND || !player.isShiftKeyDown() || !player.getMainHandItem().isEmpty()) {
+			return InteractionResult.PASS;
+		}
+		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
+			return InteractionResult.PASS;
+		}
+		return registerHousingBed(serverPlayer, serverLevel, SettlementSavedData.get(serverLevel), hit.getBlockPos());
+	}
+
+	/** Explicit player registration only: never discovers other beds or creates a settlement. */
+	static InteractionResult registerHousingBed(ServerPlayer player, ServerLevel level, SettlementSavedData data, BlockPos pos) {
+		var bed = SettlementHousing.inspectBed(level, pos);
+		if (bed.status() != SettlementHousing.BedStatus.VALID) {
+			player.displayClientMessage(Component.translatable(bed.status() == SettlementHousing.BedStatus.UNLOADED
+				? "coopcraft.settlement.bed_unloaded" : "coopcraft.settlement.bed_invalid"), true);
+			return InteractionResult.SUCCESS;
+		}
+		// Both clicks must select the same settlement, including at radius and nearest-owner boundaries.
+		Optional<Settlement> settlement = data.find(bed.foot());
+		if (settlement.isEmpty()) {
+			player.displayClientMessage(Component.translatable("coopcraft.settlement.bed_no_settlement"), true);
+			return InteractionResult.SUCCESS;
+		}
+		String key = switch (SettlementHousing.registerBed(level, data, settlement.get(), bed.foot())) {
+			case ADDED -> "bed_registered";
+			case ALREADY_REGISTERED -> "bed_already_registered";
+			case OTHER_SETTLEMENT -> "bed_other_settlement";
+			case INVALID -> "bed_invalid";
+			case UNLOADED -> "bed_unloaded";
+		};
+		player.displayClientMessage(Component.translatable("coopcraft.settlement." + key, settlement.get().name()), true);
+		return InteractionResult.SUCCESS;
 	}
 
 	private static InteractionResult onUseBell(Player player, Level level, BlockHitResult hit) {
@@ -256,6 +298,7 @@ public final class Civilization {
 		for (ServerLevel level : server.getAllLevels()) {
 			SettlementSavedData data = SettlementSavedData.get(level);
 			for (Settlement settlement : data.all()) {
+				SettlementHousing.tick(level, data, settlement, level.getGameTime());
 				SettlementSimulationService.tick(level, data, settlement);
 				SettlementNeeds.tick(level, data, settlement, level.getGameTime());
 				SettlementStockpile.tick(level, data, settlement, level.getGameTime());

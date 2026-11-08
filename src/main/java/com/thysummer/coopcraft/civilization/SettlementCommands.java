@@ -168,6 +168,8 @@ public final class SettlementCommands {
 			SettlementSimulationService.isSkillsEnabled(data, settlement),
 			SettlementSimulationService.isGrowthEnabled(data, settlement),
 			SettlementSimulationService.isNormsEnabled(data, settlement));
+		var housing = ConstructionPlanner.housingPlan(data, settlement);
+		send(source, "housing", housing.housingCapacity(), housing.registeredMembers(), housing.missingBeds());
 	}
 
 	private static void showMaterials(CommandSourceStack source, SettlementSavedData data, Settlement settlement, Container stockpile) {

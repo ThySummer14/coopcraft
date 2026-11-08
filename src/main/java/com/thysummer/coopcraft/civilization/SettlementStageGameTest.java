@@ -4,6 +4,8 @@ import java.util.List;
 
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -24,9 +26,9 @@ public final class SettlementStageGameTest implements FabricGameTest {
 		Villager second = helper.spawn(EntityType.VILLAGER, new BlockPos(3, 0, 4));
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(first, second));
 
-		putBedFoot(helper, new BlockPos(0, 0, 0));
-		putBedFoot(helper, new BlockPos(1, 0, 0));
-		putBedFoot(helper, new BlockPos(2, 0, 0));
+		putBed(helper, new BlockPos(0, 0, 0));
+		putBed(helper, new BlockPos(1, 0, 0));
+		putBed(helper, new BlockPos(2, 0, 0));
 		helper.setBlock(new BlockPos(0, 0, 2), Blocks.CRAFTING_TABLE);
 		helper.setBlock(new BlockPos(1, 0, 2), Blocks.FURNACE);
 		helper.setBlock(new BlockPos(0, 0, 3), Blocks.STONECUTTER);
@@ -60,7 +62,14 @@ public final class SettlementStageGameTest implements FabricGameTest {
 		helper.succeed();
 	}
 
-	private static void putBedFoot(GameTestHelper helper, BlockPos pos) {
-		helper.setBlock(pos, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.PART, BedPart.FOOT));
+	private static void putBed(GameTestHelper helper, BlockPos pos) {
+		var foot = helper.absolutePos(pos);
+		var head = foot.south();
+		var level = helper.getLevel();
+		level.setBlock(foot.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		level.setBlock(head.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		var state = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
+		level.setBlock(foot, state.setValue(BedBlock.PART, BedPart.FOOT), Block.UPDATE_CLIENTS);
+		level.setBlock(head, state.setValue(BedBlock.PART, BedPart.HEAD), Block.UPDATE_ALL);
 	}
 }

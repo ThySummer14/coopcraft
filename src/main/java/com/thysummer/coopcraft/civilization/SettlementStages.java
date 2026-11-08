@@ -11,7 +11,6 @@ import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -69,7 +68,7 @@ public final class SettlementStages {
 			data.setStage(settlement, survey.stage());
 		}
 		for (BlockPos bed : survey.bedPositions()) {
-			data.addHousingBed(settlement, bed);
+			SettlementHousing.registerBed(level, data, settlement, bed);
 		}
 		if (data.getCraftingStation(settlement).isEmpty()) {
 			survey.craftingTable().ifPresent(pos -> data.setCraftingStation(settlement, pos));
@@ -87,6 +86,7 @@ public final class SettlementStages {
 		if (Math.floorMod(gameTime + settlement.id().getLeastSignificantBits(), PROGRESS_INTERVAL_TICKS) != 0) {
 			return;
 		}
+		SettlementHousing.reconcile(level, data, settlement);
 		SettlementStage achieved = progressionStage(level, data, settlement);
 		if (achieved.ordinal() <= data.stageOf(settlement).ordinal()) {
 			return;
@@ -137,7 +137,8 @@ public final class SettlementStages {
 						continue;
 					}
 					BlockState state = level.getBlockState(pos);
-					if (state.is(BlockTags.BEDS) && state.getValue(BedBlock.PART) == BedPart.FOOT) {
+					if (state.getBlock() instanceof BedBlock && state.getValue(BedBlock.PART) == BedPart.FOOT
+						&& SettlementHousing.inspectBed(level, pos).status() == SettlementHousing.BedStatus.VALID) {
 						beds.add(pos.immutable());
 					} else if (state.is(Blocks.FARMLAND)) {
 						farmland++;

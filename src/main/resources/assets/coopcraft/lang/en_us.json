@@ -279,5 +279,12 @@
   "coopcraft.command.settlement.pending_project": "Pending %s, required materials: %s",
   "coopcraft.command.settlement.gap_unknown": "Material gap unknown until the registered stockpile is available.",
   "coopcraft.command.settlement.gaps": "Missing materials (per project, usable real + abstract stock): %s",
-  "coopcraft.command.settlement.transferred": "%s: %s %s moved %s / %s requested. Only actual transferred units are counted."
+  "coopcraft.command.settlement.transferred": "%s: %s %s moved %s / %s requested. Only actual transferred units are counted.",
+	"coopcraft.settlement.bed_registered": "Bed registered as housing for %s",
+	"coopcraft.settlement.bed_already_registered": "This bed is already registered to %s",
+	"coopcraft.settlement.bed_other_settlement": "This bed belongs to another settlement",
+	"coopcraft.settlement.bed_invalid": "Housing requires a complete matching bed",
+	"coopcraft.settlement.bed_unloaded": "Both halves of the bed must be loaded before registration",
+	"coopcraft.settlement.bed_no_settlement": "No existing settlement nearby to register this bed",
+	"coopcraft.command.settlement.housing": "Registered beds: %s | Registered residents: %s | Missing beds: %s"
 }

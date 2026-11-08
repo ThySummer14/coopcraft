@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.thysummer.coopcraft.CoopCraft;
 import com.thysummer.coopcraft.civilization.Settlement;
 import com.thysummer.coopcraft.civilization.SettlementSavedData;
+import com.thysummer.coopcraft.civilization.SettlementHousing;
 
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.minecraft.ChatFormatting;
@@ -125,6 +126,7 @@ public final class Waystations {
 		}
 
 		Settlement settlement = found.get();
+		SettlementHousing.reconcile(level, settlements, settlement);
 		if (settlements.housingCapacity(settlement) <= 0) {
 			player.sendSystemMessage(Component.translatable("coopcraft.waystation.need_house"));
 			return false;
