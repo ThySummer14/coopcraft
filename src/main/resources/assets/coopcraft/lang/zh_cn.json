@@ -308,5 +308,10 @@
 	"coopcraft.command.settlement.rations_explanation": "只读观察：额度包含照料调整；营养指已领食物所含的模拟营养，不是实际饥饿恢复值。饥饿越高越饿；历史不完整的营养显示未知。不改变规则。",
 	"coopcraft.command.settlement.rations_row": "%s | 已领 %s / 额度 %s 件 | 剩余 %s 件 | 所领食物营养 %s | 饥饿 %s（越高越饿）| 核心日 %s",
 	"coopcraft.command.settlement.rations_unknown": "未知（历史不完整）",
-	"coopcraft.command.settlement.rations_truncated": "另有 %s 名符合条件的成员未显示；最多显示 %s 行。"
+	"coopcraft.command.settlement.rations_truncated": "另有 %s 名符合条件的成员未显示；最多显示 %s 行。",
+  "coopcraft.command.settlement.events_empty": "%s：暂无模拟事件记录。",
+  "coopcraft.command.settlement.events_header": "%s：最近 %s 条事件（由旧到新；日期为核心模拟日）。",
+  "coopcraft.command.settlement.events_none": "无",
+  "coopcraft.command.settlement.events_row": "#%s | 核心日 %s | %s | %s × %s | 直接原因：%s",
+  "coopcraft.command.settlement.events_more_causes": "（另有 %s 个）"
 }

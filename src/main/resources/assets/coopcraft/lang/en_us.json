@@ -308,5 +308,10 @@
 	"coopcraft.command.settlement.rations_explanation": "Read-only observation: cap includes care adjustments; nutrition is the simulated nutrition contained in allocated food, not actual hunger recovery. Higher hunger means hungrier. Incomplete historical nutrition is unknown. Rules are unchanged.",
 	"coopcraft.command.settlement.rations_row": "%s | allocated %s / cap %s units | remaining %s | food nutrition %s | hunger %s (higher = hungrier) | core day %s",
 	"coopcraft.command.settlement.rations_unknown": "Unknown (incomplete history)",
-	"coopcraft.command.settlement.rations_truncated": "%s more eligible residents omitted; display limit is %s rows."
+	"coopcraft.command.settlement.rations_truncated": "%s more eligible residents omitted; display limit is %s rows.",
+  "coopcraft.command.settlement.events_empty": "%s: no recorded simulation events.",
+  "coopcraft.command.settlement.events_header": "%s: latest %s events (oldest first; core simulation days).",
+  "coopcraft.command.settlement.events_none": "none",
+  "coopcraft.command.settlement.events_row": "#%s | core day %s | %s | %s × %s | direct causes: %s",
+  "coopcraft.command.settlement.events_more_causes": " (+%s more)"
 }

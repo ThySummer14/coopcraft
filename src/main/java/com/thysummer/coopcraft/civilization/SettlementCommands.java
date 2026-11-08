@@ -53,6 +53,10 @@ public final class SettlementCommands {
 		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
+		settlement.then(LiteralArgumentBuilder.<S>literal("events")
+			.executes(ctx -> handler.run(ctx, "events", ""))
+			.then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, SettlementEvents.MAX_COUNT))
+				.executes(ctx -> handler.run(ctx, "events", "count"))));
 		var simulation = LiteralArgumentBuilder.<S>literal("simulation").requires(admin);
 		for (String feature : FEATURES) {
 			simulation.then(LiteralArgumentBuilder.<S>literal(feature)
@@ -87,6 +91,12 @@ public final class SettlementCommands {
 		if (settlement == null) {
 			source.sendFailure(message("no_settlement"));
 			return 0;
+		}
+		if (action.equals("events")) {
+			for (Component line : SettlementEvents.messages(level, data, settlement, eventCount(context, option))) {
+				source.sendSuccess(() -> line, false);
+			}
+			return 1;
 		}
 		if (action.equals("rations")) {
 			return showRations(source, data, settlement);
@@ -135,6 +145,10 @@ public final class SettlementCommands {
 			: export(data, settlement, stockpile, type, requested);
 		send(source, "transferred", settlement.name(), action, option, moved, requested);
 		return moved;
+	}
+
+	static <S> int eventCount(CommandContext<S> context, String option) {
+		return option.equals("count") ? IntegerArgumentType.getInteger(context, "count") : SettlementEvents.DEFAULT_COUNT;
 	}
 
 	static Optional<Settlement> nearest(List<Settlement> settlements, Vec3 position) {
