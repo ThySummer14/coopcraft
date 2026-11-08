@@ -6,6 +6,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -716,16 +717,13 @@ public class VillagerWorkGoal extends Goal {
 		if (!canCraftSticks()) return;
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"sticks", Items.STICK, 8);
-		if (!withdrawOneLog() || !removeOneLog(villager.getInventory())) {
+		if (!withdrawOneLog() || !SettlementPersonalCrafting.craft(villager.getInventory(),
+			stack -> stack.is(ItemTags.LOGS), new ItemStack(Items.STICK, 8))) {
 			return;
-		}
-		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.STICK, 8));
-		if (inserted < 8) {
-			villager.spawnAtLocation(new ItemStack(Items.STICK, 8 - inserted));
 		}
 		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
 			SettlementSimulationService.recordCraftedProduct(
-				villager, settlementData(), settlement, completed, Items.STICK, inserted));
+				villager, settlementData(), settlement, completed, Items.STICK, 8));
 	}
 
 	private boolean canCraftPickaxe() {
@@ -739,8 +737,7 @@ public class VillagerWorkGoal extends Goal {
 	private boolean canCraftSticks() {
 		return hasCraftingStation()
 			&& needsSticks()
-			&& hasLogs()
-			&& villager.getInventory().canAddItem(new ItemStack(Items.STICK, 8));
+			&& canConvertOne(stack -> stack.is(ItemTags.LOGS), Items.OAK_LOG, new ItemStack(Items.STICK, 8));
 	}
 
 	private boolean canPolishPickaxe() {
@@ -758,8 +755,8 @@ public class VillagerWorkGoal extends Goal {
 			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& availableItems(Items.SMOOTH_STONE) < 3
-			&& availableItems(Items.COBBLESTONE) >= 1
-			&& villager.getInventory().canAddItem(new ItemStack(Items.SMOOTH_STONE));
+			&& canConvertOne(stack -> stack.is(Items.COBBLESTONE), Items.COBBLESTONE,
+				new ItemStack(Items.SMOOTH_STONE));
 	}
 
 	private void craftPolishedPickaxe() {
@@ -786,16 +783,13 @@ public class VillagerWorkGoal extends Goal {
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"smooth_stone", Items.SMOOTH_STONE, 1);
 		if (!withdrawItems(Items.COBBLESTONE, 1)
-			|| removeItems(villager.getInventory(), Items.COBBLESTONE, 1) != 1) {
+			|| !SettlementPersonalCrafting.craft(villager.getInventory(), stack -> stack.is(Items.COBBLESTONE),
+				new ItemStack(Items.SMOOTH_STONE))) {
 			return;
-		}
-		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.SMOOTH_STONE));
-		if (inserted < 1) {
-			villager.spawnAtLocation(new ItemStack(Items.SMOOTH_STONE));
 		}
 		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
 			SettlementSimulationService.recordCraftedProduct(
-				villager, settlementData(), settlement, completed, Items.SMOOTH_STONE, inserted));
+				villager, settlementData(), settlement, completed, Items.SMOOTH_STONE, 1));
 	}
 
 	private String craftingRecipe() {
@@ -905,15 +899,22 @@ public class VillagerWorkGoal extends Goal {
 		return !hasStonePickaxe() && availableItems(Items.COBBLESTONE) < 3;
 	}
 
-	private boolean hasLogs() {
-		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
-			return true;
+	/** Mirror the real withdrawal order without exporting or moving anything during action selection. */
+	private boolean canConvertOne(Predicate<ItemStack> ingredient, Item abstractInput, ItemStack output) {
+		if (villager.getInventory().hasAnyMatching(ingredient)) {
+			return SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, ItemStack.EMPTY, output);
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile != null && stockpile.hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
-			return true;
+		if (stockpile != null) {
+			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+				ItemStack stack = stockpile.getItem(slot);
+				if (!stack.isEmpty() && ingredient.test(stack)) {
+					return SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, stack, output);
+				}
+			}
 		}
-		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, Items.OAK_LOG) > 0;
+		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, abstractInput) > 0
+			&& SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, new ItemStack(abstractInput), output);
 	}
 
 	private boolean hasStonePickaxe() {
@@ -959,16 +960,6 @@ public class VillagerWorkGoal extends Goal {
 			remaining -= removed.getCount();
 		}
 		return count - remaining;
-	}
-
-	private static boolean removeOneLog(Container inventory) {
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			ItemStack stack = inventory.getItem(slot);
-			if (stack.is(ItemTags.LOGS) && !inventory.removeItem(slot, 1).isEmpty()) {
-				return true;
-			}
-		}
-		return false;
 	}
 
 	private enum Action {
