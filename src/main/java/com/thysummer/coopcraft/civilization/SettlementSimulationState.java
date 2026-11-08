@@ -366,6 +366,7 @@ public final class SettlementSimulationState {
 			}
 			state.foodAllocations.put(allocation.getString("PersonId"), units);
 		}
+		state.norms.restoreChargedSupervision();
 		return state;
 	}
 

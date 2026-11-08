@@ -26,6 +26,45 @@ public final class NormSystem {
 		this.config = config;
 	}
 
+	/**
+	 * Rebuild only supervision charges evidenced by today's restored ledger. Call after
+	 * restoring the world, not from the constructor: resident social hours are already saved.
+	 * Allocation totals and information propagation cannot be reconstructed unambiguously.
+	 */
+	public void restoreChargedSupervision() {
+		for (SimulationEvent event : world.ledger().eventsAtDay(world.day())) {
+			if ((event.type() != EventType.NORM_ENFORCED && event.type() != EventType.NORM_VIOLATION)
+				|| !Norm.NEED_FIRST_COMMON_STORE.equals(event.context().get("normId"))
+				|| event.actors().size() < 3) {
+				continue;
+			}
+			List<SimulationEvent> allocations = event.causalLinks().stream()
+				.map(world.ledger()::event).flatMap(Optional::stream)
+				.filter(cause -> cause.type() == EventType.SHARE)
+				.filter(cause -> "camp-storage".equals(cause.context().get("allocation")))
+				.toList();
+			// Ambiguous or missing historical evidence must not grant free supervision.
+			if (allocations.size() != 1) {
+				continue;
+			}
+			SimulationEvent allocation = allocations.getFirst();
+			if (allocation.day() != event.day() || allocation.actors().size() != 2
+				|| !allocation.actors().getFirst().equals(event.actors().getFirst())) {
+				continue;
+			}
+			String campId = allocation.actors().get(1);
+			if (campId.isBlank() || allocation.inputs().isEmpty()
+				|| allocation.inputs().stream().anyMatch(flow -> !("camp:" + campId).equals(flow.fromLocation()))) {
+				continue;
+			}
+			// Position, not identity, distinguishes requester from actual supervisors:
+			// a requester can also appear again as one of the supervisors.
+			for (String supervisorId : event.actors().subList(1, event.actors().size())) {
+				chargedSupervision.add(event.day() + ":" + campId + ':' + supervisorId);
+			}
+		}
+	}
+
 	public void propagateInformation() {
 		if (lastPropagationDay == world.day()) {
 			return;
