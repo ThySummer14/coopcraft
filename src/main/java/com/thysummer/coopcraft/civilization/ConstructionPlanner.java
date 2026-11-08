@@ -2,10 +2,14 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Collections;
 
 import com.thysummer.coopcraft.CoopCraft;
 
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 
 public final class ConstructionPlanner {
 	public static final ResourceLocation CAMPFIRE_HEARTH = CoopCraft.id("campfire_hearth");
@@ -23,6 +27,21 @@ public final class ConstructionPlanner {
 			projects.add(new Project(STONE_COTTAGE));
 		}
 		return List.copyOf(projects);
+	}
+
+	/** Consumption still ahead of a saved job, excluding free door/bed continuation parts. */
+	public static Map<Item, Integer> remainingMaterials(ConstructionPlan plan, int nextIndex) {
+		if (nextIndex < 0 || nextIndex > plan.instructions().size()) {
+			throw new IllegalArgumentException("Construction index is outside the plan");
+		}
+		Map<Item, Integer> materials = new LinkedHashMap<>();
+		for (int i = nextIndex; i < plan.instructions().size(); i++) {
+			ConstructionInstruction instruction = plan.instructions().get(i);
+			if (instruction.consume()) {
+				materials.merge(instruction.item(), 1, Integer::sum);
+			}
+		}
+		return Collections.unmodifiableMap(materials);
 	}
 
 	public static HousingPlan housingPlan(SettlementSavedData data, Settlement settlement) {

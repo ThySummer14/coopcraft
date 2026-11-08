@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Set;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
@@ -51,10 +52,15 @@ public final class SettlementStockpile {
 
 	static Container getStockpile(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		BlockPos pos = data.getStockpile(settlement).orElse(null);
-		if (pos == null) {
+		if (pos == null || !level.isLoaded(pos)) {
 			return null;
 		}
 		if (level.getBlockState(pos).getBlock() instanceof ChestBlock chest) {
+			for (Direction direction : Direction.Plane.HORIZONTAL) {
+				if (!level.isLoaded(pos.relative(direction))) {
+					return null;
+				}
+			}
 			return ChestBlock.getContainer(chest, level.getBlockState(pos), level, pos, false);
 		}
 		return level.getBlockEntity(pos) instanceof Container container ? container : null;

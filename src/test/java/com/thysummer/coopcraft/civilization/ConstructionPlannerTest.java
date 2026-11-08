@@ -4,6 +4,11 @@ import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import org.junit.jupiter.api.BeforeAll;
 
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +18,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConstructionPlannerTest {
+	@BeforeAll
+	static void bootstrapMinecraft() {
+		SharedConstants.tryDetectVersion();
+		Bootstrap.bootStrap();
+	}
+
+	@Test
+	void remainingMaterialsFollowProgressAndDoNotChargeMultipartTwice() {
+		ConstructionPlan plan = new ConstructionPlan(ConstructionPlanner.STONE_COTTAGE, List.of(
+			new ConstructionInstruction(BlockPos.ZERO, Blocks.OAK_PLANKS.defaultBlockState(), Items.OAK_PLANKS, true),
+			new ConstructionInstruction(new BlockPos(1, 0, 0), Blocks.OAK_DOOR.defaultBlockState(), Items.OAK_DOOR, true),
+			new ConstructionInstruction(new BlockPos(1, 1, 0), Blocks.OAK_DOOR.defaultBlockState(), Items.OAK_DOOR, false)));
+		assertEquals(java.util.Map.of(Items.OAK_PLANKS, 1, Items.OAK_DOOR, 1), ConstructionPlanner.remainingMaterials(plan, 0));
+		assertEquals(java.util.Map.of(Items.OAK_DOOR, 1), ConstructionPlanner.remainingMaterials(plan, 1));
+		assertTrue(ConstructionPlanner.remainingMaterials(plan, 2).isEmpty());
+		assertTrue(ConstructionPlanner.remainingMaterials(plan, 3).isEmpty());
+		assertThrows(IllegalArgumentException.class, () -> ConstructionPlanner.remainingMaterials(plan, -1));
+		assertThrows(IllegalArgumentException.class, () -> ConstructionPlanner.remainingMaterials(plan, 4));
+	}
+
 	@Test
 	void noMembersNeedNoHousing() {
 		ConstructionPlanner.HousingPlan plan = new ConstructionPlanner.HousingPlan(0, 0);

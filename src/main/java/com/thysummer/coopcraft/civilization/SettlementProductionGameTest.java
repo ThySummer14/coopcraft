@@ -15,6 +15,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.Container;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
@@ -29,6 +30,46 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 	private static final BlockPos GRINDING_STATION = new BlockPos(3, 0, 3);
 	private static final BlockPos VILLAGER = new BlockPos(2, 0, 2);
 	private static final BlockPos STONE = new BlockPos(2, 0, 3);
+
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
+	public void workGoalMakesPublicHousingSuppliesFromRealIngredients(GameTestHelper helper) {
+		helper.setBlock(CHEST, Blocks.CHEST);
+		helper.setBlock(CRAFTING_TABLE, Blocks.CRAFTING_TABLE);
+		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		Settlement settlement = data.getOrCreate(helper.absolutePos(BELL), "Public workshop", 0);
+		data.setStockpile(settlement, helper.absolutePos(CHEST));
+		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
+		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
+		villager.setNoAi(true);
+		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_PICKAXE));
+		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
+		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG, 10));
+		SettlementStockpile.insert(chest, new ItemStack(Items.WHITE_WOOL, 3));
+		SettlementStockpile.insert(chest, new ItemStack(Items.COAL));
+		SettlementStockpile.insert(chest, new ItemStack(Items.STICK));
+		SettlementStockpile.insert(chest, new ItemStack(Items.BREAD, 3));
+		VillagerWorkGoal goal = new VillagerWorkGoal(villager);
+		int batches = 0;
+		for (; batches < 20 && goal.canUse(); batches++) {
+			helper.assertValueEqual("craft_materials", goal.status().action(), "Only unmet housing supplies should be crafted");
+			goal.start();
+			for (int tick = 0; tick < 300 && goal.canContinueToUse(); tick++) {
+				goal.tick();
+			}
+		}
+		helper.assertTrue(batches > 0 && batches < 20, "Production must stop once demand is met");
+		helper.assertValueEqual(31, chest.countItem(Items.OAK_PLANKS), "Ten logs yield forty planks minus six for doors and three for the bed");
+		helper.assertValueEqual(3, chest.countItem(Items.OAK_DOOR), "One door batch must remain public");
+		helper.assertValueEqual(1, chest.countItem(Items.WHITE_BED), "Real wool and planks must become one public bed");
+		helper.assertValueEqual(4, chest.countItem(Items.TORCH), "One fuel and stick must become four public torches");
+		helper.assertValueEqual(0, chest.countItem(Items.OAK_LOG), "All ten consumed logs must leave the chest");
+		helper.assertValueEqual(0, chest.countItem(Items.WHITE_WOOL), "The bed must consume its wool");
+		helper.assertValueEqual(0, chest.countItem(Items.COAL), "Torches must consume fuel");
+		villager.kill();
+		helper.succeed();
+	}
 
 	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
 	public void realGatherBecomesOneAbstractBatch(GameTestHelper helper) {

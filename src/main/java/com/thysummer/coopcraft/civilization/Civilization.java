@@ -311,7 +311,19 @@ public final class Civilization {
 		if (event.context().containsKey("normId")) {
 			addDetail(details, "rule", "coopcraft.simulation.norm." + event.context().get("normId"));
 		}
-		addDetail(details, "recipe", event.context().get("recipe"));
+		String recipeId = event.context().get("recipe");
+		String recipeLabel = recipeId;
+		for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
+			if (recipe.id().equals(recipeId)) {
+				recipeLabel = recipe.output().getDescriptionId();
+				break;
+			}
+		}
+		addDetail(details, "recipe", recipeLabel);
+		if ("build".equals(event.context().get("activity"))) {
+			addDetail(details, "project", event.context().get("blueprint"));
+			addDetail(details, "construction_step", event.context().get("index"));
+		}
 		addDetail(details, "item", event.context().get("item"));
 		addDetail(details, "player", event.context().get("player"));
 		addDetail(details, "work_type", event.context().containsKey("workType")

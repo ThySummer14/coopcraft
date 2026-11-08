@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
@@ -43,6 +44,7 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos target;
 	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
+	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
 	private Settlement settlement;
 	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
@@ -138,6 +140,7 @@ public class VillagerWorkGoal extends Goal {
 		target = null;
 		forageTarget = null;
 		currentBuildTarget = null;
+		currentMaterialRecipe = null;
 		settlement = null;
 		progress = 0;
 		searchCooldown = 0;
@@ -253,6 +256,7 @@ public class VillagerWorkGoal extends Goal {
 			case FORAGE -> forage();
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
+			case CRAFT_MATERIALS -> craftMaterials();
 			case BUILD -> ConstructionSystem.buildNext(
 				(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
 			);
@@ -283,8 +287,91 @@ public class VillagerWorkGoal extends Goal {
 		if (canGrindSmoothStone()) {
 			return Action.GRIND_SMOOTH_STONE;
 		}
+		currentMaterialRecipe = chooseMaterialRecipe();
+		if (currentMaterialRecipe != null) {
+			return Action.CRAFT_MATERIALS;
+		}
 		BlockPos gatherTarget = chooseGatherTarget();
 		return gatherTarget == null ? null : Action.GATHER;
+	}
+
+	private SettlementMaterialCrafting.Recipe chooseMaterialRecipe() {
+		if (!hasCraftingStation()) {
+			return null;
+		}
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (stockpile == null) {
+			return null;
+		}
+		SettlementSimulationState state = settlementData().simulationOf(settlement).orElse(null);
+		for (Map<Item, Integer> demand : constructionMaterialDemands()) {
+			var recipe = SettlementMaterialCrafting.chooseRecipe(stockpile, state, demand);
+			if (recipe.isPresent()) {
+				return recipe.get();
+			}
+		}
+		return null;
+	}
+
+	private List<Map<Item, Integer>> constructionMaterialDemands() {
+		ConstructionJob job = settlementData().getConstructionJob(settlement).orElse(null);
+		if (job != null) {
+			ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
+			return plan == null || job.nextIndex() > plan.instructions().size() ? List.of()
+				: List.of(ConstructionPlanner.remainingMaterials(plan, job.nextIndex()));
+		}
+		List<Map<Item, Integer>> demands = new ArrayList<>();
+		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(settlementData(), settlement)) {
+			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
+			if (plan != null) {
+				demands.add(ConstructionPlanner.remainingMaterials(plan, 0));
+			}
+		}
+		return demands;
+	}
+
+	private boolean needsConstructionLogs() {
+		if (!hasCraftingStation()) {
+			return false;
+		}
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (stockpile == null) {
+			return false;
+		}
+		SettlementSimulationState state = settlementData().simulationOf(settlement).orElse(null);
+		long logs = SettlementMaterialCrafting.countPlain(villager.getInventory(), Items.OAK_LOG)
+			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.OAK_LOG);
+		long availableSticks = SettlementMaterialCrafting.countPlain(villager.getInventory(), Items.STICK)
+			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.STICK);
+		for (Map<Item, Integer> demand : constructionMaterialDemands()) {
+			for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
+				if (demand.getOrDefault(recipe.output(), 0) <= SettlementMaterialCrafting.countPlain(stockpile, recipe.output())) {
+					continue;
+				}
+				int planks = Math.max(0, recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0)
+					- SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_PLANKS));
+				long sticks = Math.max(0L, recipe.ingredients().getOrDefault(Items.STICK, 0) - availableSticks);
+				long requiredLogs = recipe.ingredients().getOrDefault(Items.OAK_LOG, 0)
+					+ (planks + 3) / 4 + (sticks + 7) / 8;
+				if (logs < requiredLogs) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private void craftMaterials() {
+		// Another resident may have completed this shortage during our travel/work time.
+		if (currentMaterialRecipe == null || chooseMaterialRecipe() != currentMaterialRecipe) {
+			return;
+		}
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (stockpile != null && SettlementMaterialCrafting.craft(stockpile,
+			settlementData().simulationOf(settlement).orElse(null), currentMaterialRecipe,
+			villager.getUUID(), settlementData()::setDirty)) {
+			SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, currentMaterialRecipe.id());
+		}
 	}
 
 	private BlockPos chooseTarget(Action action) {
@@ -312,6 +399,16 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos chooseGatherTarget() {
 		if (settlement == null || !SettlementSimulationService.hasGatherTime(settlementData(), settlement, villager.getUUID())) {
 			return null;
+		}
+		if (needsConstructionLogs()) {
+			BlockPos oak = settlementData().resourcesOf(settlement).stream()
+				.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+				.filter(pos -> villager.level().isLoaded(pos) && villager.level().getBlockState(pos).is(Blocks.OAK_LOG))
+				.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
+				.orElse(null);
+			if (oak != null) {
+				return oak;
+			}
 		}
 		if (role == WorkRole.WOODCUTTER) {
 			BlockPos logs = nearestResource(true);
@@ -352,6 +449,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		return settlementData().resourcesOf(settlement).stream()
 			.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> level.isLoaded(pos) && level.isPositionEntityTicking(pos))
 			.filter(pos -> {
 				BlockState state = level.getBlockState(pos);
 				return logs ? state.is(BlockTags.LOGS) : state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE);
@@ -484,7 +582,8 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isTargetValid() {
-		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
+		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)
+			|| !level.isLoaded(target) || !level.isPositionEntityTicking(target)) {
 			return false;
 		}
 		if (action == Action.EAT) {
@@ -558,7 +657,11 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isGatherable(BlockPos pos) {
-		BlockState state = villager.level().getBlockState(pos);
+		if (!(villager.level() instanceof ServerLevel level) || !level.isLoaded(pos)
+			|| !level.isPositionEntityTicking(pos)) {
+			return false;
+		}
+		BlockState state = level.getBlockState(pos);
 		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS);
 	}
 
@@ -576,7 +679,9 @@ public class VillagerWorkGoal extends Goal {
 			}
 		}
 
-		level.destroyBlock(target, false, villager);
+		if (!level.destroyBlock(target, false, villager)) {
+			return;
+		}
 		for (ItemStack drop : drops) {
 			int produced = drop.getCount();
 			ItemStack remainder = villager.getInventory().addItem(drop);
@@ -765,7 +870,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		return station
 			.filter(pos -> settlement.center().distSqr(pos) <= SEARCH_RADIUS_SQUARED)
-			.filter(pos -> villager.level().getBlockState(pos).is(block))
+			.filter(pos -> villager.level().isLoaded(pos)
+				&& ((ServerLevel) villager.level()).isPositionEntityTicking(pos)
+				&& villager.level().getBlockState(pos).is(block))
 			.isPresent();
 	}
 
@@ -848,6 +955,7 @@ public class VillagerWorkGoal extends Goal {
 		FORAGE("forage"),
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
+		CRAFT_MATERIALS("craft_materials"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),
