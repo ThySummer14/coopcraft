@@ -317,6 +317,38 @@ class SettlementMaterialCraftingTest {
 		state.world().assertConservation();
 	}
 
+	@Test
+	void completesAndStopsTheWholeHousingSupplyChain() {
+		SimpleContainer stock = new SimpleContainer(9);
+		SettlementStockpile.insert(stock, new ItemStack(Items.OAK_LOG, 10));
+		SettlementStockpile.insert(stock, new ItemStack(Items.WHITE_WOOL, 3));
+		SettlementStockpile.insert(stock, new ItemStack(Items.COAL));
+		SettlementStockpile.insert(stock, new ItemStack(Items.STICK));
+		Map<Item, Integer> demand = new LinkedHashMap<>();
+		demand.put(Items.COBBLESTONE, 50);
+		demand.put(Items.OAK_PLANKS, 29);
+		demand.put(Items.OAK_DOOR, 1);
+		demand.put(Items.WHITE_BED, 1);
+		demand.put(Items.TORCH, 2);
+		int batches = 0;
+		while (batches < 30) {
+			var recipe = SettlementMaterialCrafting.chooseRecipe(stock, null, demand);
+			if (recipe.isEmpty()) { break; }
+			assertTrue(SettlementMaterialCrafting.craft(stock, null, recipe.get(), ACTOR, () -> {}));
+			batches++;
+		}
+		assertEquals(13, batches);
+		assertEquals(31, stock.countItem(Items.OAK_PLANKS));
+		assertEquals(3, stock.countItem(Items.OAK_DOOR));
+		assertEquals(1, stock.countItem(Items.WHITE_BED));
+		assertEquals(4, stock.countItem(Items.TORCH));
+		assertEquals(0, stock.countItem(Items.OAK_LOG));
+		assertEquals(0, stock.countItem(Items.WHITE_WOOL));
+		assertEquals(0, stock.countItem(Items.COAL));
+		assertEquals(0, stock.countItem(Items.STICK));
+		assertTrue(SettlementMaterialCrafting.chooseRecipe(stock, null, demand).isEmpty());
+	}
+
 	private static long quantity(SettlementSimulationState state, ResourceType type) {
 		return state.world().batchesAt(state.campOwner()).stream().filter(batch -> batch.resourceType() == type)
 			.mapToLong(batch -> batch.quantity()).sum();

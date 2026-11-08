@@ -48,6 +48,7 @@ public final class Civilization {
 	}
 
 	public static void register() {
+		SettlementCommands.register();
 		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new BlueprintManager());
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);

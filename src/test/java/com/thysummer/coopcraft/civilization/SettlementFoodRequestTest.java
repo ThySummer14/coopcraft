@@ -29,6 +29,9 @@ class SettlementFoodRequestTest {
 		Fixture fixture = fixture();
 		assertFalse(pending(fixture));
 		assertEquals(60, SettlementSimulationService.eat(fixture.data(), fixture.settlement(), fixture.resident()));
+		assertTrue(SettlementSimulationService.hasFood(fixture.data(), fixture.settlement()),
+			"A ration denial is not a physical food shortage");
+		assertFalse(SettlementSimulationService.hasFoodFor(fixture.data(), fixture.settlement(), fixture.resident()));
 		int eventsAfterMeal = fixture.state().world().ledger().events().size();
 		for (int i = 0; i < 100; i++) {
 			assertTrue(pending(fixture));

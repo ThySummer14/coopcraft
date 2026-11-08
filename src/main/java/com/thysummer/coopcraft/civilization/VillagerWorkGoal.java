@@ -621,7 +621,9 @@ public class VillagerWorkGoal extends Goal {
 		if (!SettlementForaging.canForage(settlementData(), settlement)) {
 			return false;
 		}
-		boolean hasFood = hasFoodAvailable();
+		// A personal ration cap is not a physical shortage in the communal store.
+		boolean hasFood = SettlementSimulationService.isSurvivalEnabled(settlementData(), settlement)
+			? SettlementSimulationService.hasFood(settlementData(), settlement) : hasFoodAvailable();
 		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
 		return SettlementForaging.needsForage(
 			hasFood, reserveLow, villager.level().getGameTime(), forageCooldownUntil

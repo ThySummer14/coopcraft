@@ -25,8 +25,14 @@
 - 配方、批量数量见主线设计；木材只使用橡木，白羊毛和煤/木炭仍由玩家提供。
 - 每次只做一批，先检查容量，临近完成再检查共享需求，避免多个村民为旧缺口重复生产。
 - 抽象原料只有在生存与生产同时启用时才能导出；制作成品只放在真实公仓。
-- 已补17项制作助手JUnit、施工剩余材料单测，以及真实Goal制作整套住宅材料的GameTest（尚待运行）。
-- 新增feature/fix分支轻量CI，只执行Gradle build与JUnit；不会启动Minecraft/GameTest服务器。第一轮生存/施工修复的完整构建已通过，新建材增量将单独验证。
+- 已补18项制作助手JUnit、施工剩余材料单测，以及真实Goal制作整套住宅材料的GameTest（尚待运行）。
+- 新增feature/fix分支轻量CI，只执行Gradle build与JUnit；不会启动Minecraft/GameTest服务器。第一轮修复164项JUnit通过；第二轮建材增量182项JUnit通过。
+
+## 第三增量：可观察、可操作的实测入口
+
+新增 `/coop settlement status|materials` 只读查询，以及OP等级2的模拟开关、8类资源显式导入/导出。所有目标按玩家真实维度/位置选择64格内最近聚落，数量限制1–4096，未加载公仓拒绝交接；不凭空give、不自动新建聚落。完整流程见 [聚落命令文档](settlement-commands.md)。新增8项命令JUnit，以及完整住宅材料链停止条件单测。
+
+个人领取额度耗尽现在与公仓实际缺粮分开判断：拒绝不再误触发“仓库无粮”觅食。
 
 ## 权威状态
 
@@ -42,7 +48,7 @@
 - 已通过：`git diff --check`、资源JSON语法检查。
 - 本地完整构建限制：已取得并校验官方Temurin JDK25，Gradle9.7.1/Loom1.18.4可加载；但Loom配置时探测Unix domain socket遭运行环境拒绝（`SocketException: Operation not permitted`）。正常权限审批后相同。未进入Minecraft集成源码编译。
 - 云端已通过：提交 `f4b3932e` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42503573329)，包括main/client/test编译、全部JUnit、jar打包；饱食、储备、浆果、请求去重和施工混合库存新增单测均在这轮内。
-- 第二增量的公共建材与剩余需求单测尚待新提交CI；真实AI觅食/进食、到仓拒绝、建材制作GameTest均只编译、不运行。
+- 第二增量提交 `ee8900d9` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42504108616) 已通过182项JUnit，0失败/0跳过，并生成jar；真实AI觅食/进食、到仓拒绝、建材制作GameTest均只编译、不运行。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
