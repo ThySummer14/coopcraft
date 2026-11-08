@@ -1,5 +1,8 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.UUID;
+import java.util.function.Predicate;
+
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -15,22 +18,28 @@ public final class SettlementNeeds {
 	}
 
 	public static void tick(ServerLevel level, SettlementSavedData data, Settlement settlement, long gameTime) {
-		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-			return;
-		}
-		if (Math.floorMod(gameTime + settlement.id().getLeastSignificantBits(), DECAY_INTERVAL_TICKS) != 0) {
-			return;
-		}
-		for (SettlementMember member : data.membersOf(settlement)) {
-			if (Math.floorMod(gameTime + member.villagerId().getLeastSignificantBits(), DECAY_INTERVAL_TICKS) != 0) {
-				continue;
-			}
-			if (level.getEntity(member.villagerId()) instanceof Villager villager
+		tick(data, settlement, gameTime, villagerId ->
+			level.getEntity(villagerId) instanceof Villager villager
 				&& villager.isAlive()
-				&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED) {
+				&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED);
+	}
+
+	static void tick(SettlementSavedData data, Settlement settlement, long gameTime, Predicate<UUID> eligibleMember) {
+		if (SettlementSimulationService.isSurvivalEnabled(data, settlement) || !isDecayTick(settlement.id(), gameTime)) {
+			return;
+		}
+		// Stagger settlements, not their members: a second UUID gate would starve most members of decay.
+		for (SettlementMember member : data.membersOf(settlement)) {
+			if (eligibleMember.test(member.villagerId())) {
 				data.setSatiety(settlement, member.villagerId(), decayedSatiety(data.needsOf(settlement, member.villagerId()).satiety()));
 			}
 		}
+	}
+
+	static boolean isDecayTick(UUID settlementId, long gameTime) {
+		// Reduce before adding so UUID/time overflow cannot change the 600-tick phase.
+		long phase = Math.floorMod(settlementId.getLeastSignificantBits(), DECAY_INTERVAL_TICKS);
+		return (Math.floorMod(gameTime, DECAY_INTERVAL_TICKS) + phase) % DECAY_INTERVAL_TICKS == 0;
 	}
 
 	public static boolean hasFood(Container first, Container second) {
@@ -61,8 +70,8 @@ public final class SettlementNeeds {
 		}
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			Integer points = Villager.FOOD_POINTS.get(stack.getItem());
-			if (points != null && points > 0) {
+			int points = SettlementFood.points(stack.getItem());
+			if (points > 0) {
 				inventory.removeItem(slot, 1);
 				inventory.setChanged();
 				return points;
@@ -84,8 +93,8 @@ public final class SettlementNeeds {
 			return false;
 		}
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			Integer points = Villager.FOOD_POINTS.get(inventory.getItem(slot).getItem());
-			if (points != null && points > 0) {
+			int points = SettlementFood.points(inventory.getItem(slot).getItem());
+			if (points > 0) {
 				return true;
 			}
 		}

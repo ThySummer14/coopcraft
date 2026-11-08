@@ -217,7 +217,7 @@ public final class VillagerInteraction {
 		if (stack.isEmpty()) {
 			return false;
 		}
-		if (Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0) > 0) {
+		if (SettlementFood.points(stack.getItem()) > 0) {
 			return true;
 		}
 		return MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent();
@@ -226,7 +226,7 @@ public final class VillagerInteraction {
 	private static boolean isSupportedFood(ItemStack stack, boolean survival) {
 		return survival
 			? MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent()
-			: Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0) > 0;
+			: SettlementFood.points(stack.getItem()) > 0;
 	}
 
 	private static int satietyOf(

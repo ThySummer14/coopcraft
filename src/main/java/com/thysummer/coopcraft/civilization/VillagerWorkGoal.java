@@ -37,7 +37,6 @@ public class VillagerWorkGoal extends Goal {
 	private static final int EAT_TICKS = 40;
 	private static final int FORAGE_TICKS = 40;
 	private static final long FORAGE_RETRY_TICKS = 200;
-	private static final int FOOD_RESERVE_POINTS_PER_MEMBER = 8;
 
 	private final Villager villager;
 	private Action action;
@@ -169,7 +168,7 @@ public class VillagerWorkGoal extends Goal {
 
 	public WorkStatus status() {
 		if (action != null) {
-			if (action == Action.EAT && !hasFoodAvailable()) {
+			if (action == Action.EAT && !hasFoodAvailable() && !hasPendingFoodRefusal()) {
 				return new WorkStatus("idle", null, "hungry_no_food");
 			}
 			return new WorkStatus(action.id(), target, travelTicks >= 100 ? "path_blocked" : null);
@@ -240,7 +239,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
 			duration = duration * 5 / 4;
 		}
-		if (action == Action.GATHER) {
+		if (action == Action.GATHER || action == Action.FORAGE) {
 			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		} else if (action != Action.BUILD && action != Action.EAT) {
 			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
@@ -491,7 +490,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
 				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
-				&& hasFoodAvailable();
+				&& (hasFoodAvailable() || hasPendingFoodRefusal());
 		}
 		if (action == Action.GATHER) {
 			return isGatherable(target);
@@ -511,27 +510,29 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean shouldEat() {
-		return settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
-			&& hasFoodAvailable();
+		return (settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
+			&& hasFoodAvailable()) || hasPendingFoodRefusal();
+	}
+
+	private boolean hasPendingFoodRefusal() {
+		return SettlementSimulationService.hasPendingFoodRefusal(settlementData(), settlement, villager.getUUID());
 	}
 
 	private boolean shouldForage() {
 		if (!SettlementForaging.canForage(settlementData(), settlement)) {
 			return false;
 		}
-		boolean missingFood = !hasFoodAvailable();
+		boolean hasFood = hasFoodAvailable();
 		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
 		return SettlementForaging.needsForage(
-			missingFood || reserveLow, villager.level().getGameTime(), forageCooldownUntil
+			hasFood, reserveLow, villager.level().getGameTime(), forageCooldownUntil
 		);
 	}
 
 	private boolean foodReserveLow() {
-		Container stockpile = SettlementStockpile.getStockpile(
+		return SettlementForaging.reserveLow(settlementData(), settlement, SettlementStockpile.getStockpile(
 			(ServerLevel) villager.level(), settlementData(), settlement
-		);
-		return SettlementStockpile.communalFoodPoints(stockpile)
-			< settlementData().registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
+		));
 	}
 
 	private BlockPos findRipeBerryBush() {

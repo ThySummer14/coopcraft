@@ -27,6 +27,55 @@ public final class SettlementNormGameTest implements FabricGameTest {
 	private static final BlockPos CHEST = new BlockPos(1, 0, 1);
 
 	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
+	public void workGoalRequestsRefusalOnlyAfterReachingStore(GameTestHelper helper) {
+		helper.setBlock(CHEST, Blocks.CHEST);
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		BlockPos chest = helper.absolutePos(CHEST);
+		Settlement settlement = data.getOrCreate(helper.absolutePos(BELL), "AI food requests", 0);
+		data.setStockpile(settlement, chest);
+		Villager resident = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
+		resident.setNoAi(true);
+		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(resident));
+		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
+		SettlementSimulationService.setSurvivalEnabled(helper.getLevel(), data, settlement, true);
+		SettlementSimulationService.setNormsEnabled(data, settlement, true);
+		String personId = state.residentId(resident.getUUID()).orElseThrow();
+		state.world().person(personId).setHunger(100);
+		state.world().importExternalBatch(ResourceType.FISH, 20, state.campOwner());
+		SettlementSimulationService.eat(data, settlement, resident.getUUID());
+		int eventsBeforeRequest = state.world().ledger().events().size();
+		VillagerWorkGoal goal = new VillagerWorkGoal(resident);
+		for (int query = 0; query < 20; query++) {
+			helper.assertTrue(goal.canUse(), "Exhausted but hungry residents must be able to request at the store");
+		}
+		helper.assertValueEqual(eventsBeforeRequest, state.world().ledger().events().size(),
+			"Goal eligibility queries must not record requests");
+		resident.setPos(chest.getX() + 10.5, chest.getY(), chest.getZ() + 0.5);
+		goal.start();
+		goal.tick();
+		helper.assertValueEqual(eventsBeforeRequest, state.world().ledger().events().size(),
+			"A resident away from the store must not record a refusal");
+		// A failed remote path may stop and clear the goal. Begin a fresh attempt at the store.
+		goal.stop();
+		resident.setPos(chest.getX() + 1.5, chest.getY(), chest.getZ() + 0.5);
+		helper.assertTrue(goal.canUse(), "Arriving at the store must allow the still-pending request");
+		goal.start();
+		for (int tick = 0; tick < 300 && goal.canContinueToUse(); tick++) {
+			goal.tick();
+		}
+		helper.assertTrue(!SettlementSimulationService.hasPendingFoodRefusal(data, settlement, resident.getUUID()),
+			"Completing the actual EAT action must settle the pending refusal");
+		long refusals = state.world().ledger().eventsAtDay(state.world().day()).stream()
+			.filter(event -> event.type() == EventType.SHARE_REFUSED && event.actors().equals(List.of(personId, state.campOwner().id())))
+			.count();
+		helper.assertValueEqual(1L, refusals, "The real work goal must record exactly one refusal");
+		helper.assertTrue(!goal.canContinueToUse(), "The settled refusal must not keep EAT running");
+		state.world().assertConservation();
+		resident.kill();
+		helper.succeed();
+	}
+
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
 	public void refusalLeadsToPersistedRuleThatChangesRealAllocation(GameTestHelper helper) {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));

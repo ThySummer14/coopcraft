@@ -7,7 +7,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -25,10 +25,10 @@ public final class ConstructionSystem {
 		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
 		if (job == null) {
 			clearStaleHearth(level, data, settlement);
-			Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
+			Container stockpile = loadedStockpile(level, data, settlement);
 			for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
 				ConstructionPlan candidate = BlueprintManager.get(project.blueprintId());
-				if (candidate == null || !hasAllMaterials(stockpile, candidate)) {
+				if (candidate == null || !ConstructionMaterials.hasAll(stockpile, data.simulationOf(settlement).orElse(null), candidate)) {
 					continue;
 				}
 				BlockPos origin = chooseOrigin(level, settlement, candidate);
@@ -56,11 +56,11 @@ public final class ConstructionSystem {
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
 		BlockPos position = job.origin().offset(instruction.offset());
-		if (!level.isLoaded(position)) {
+		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)) {
 			return Optional.empty();
 		}
-		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		if (stockpile == null || (instruction.consume() && stockpile.countItem(instruction.item()) < 1)) {
+		Container stockpile = loadedStockpile(level, data, settlement);
+		if (stockpile == null || (instruction.consume() && ConstructionMaterials.available(stockpile, data.simulationOf(settlement).orElse(null), instruction.item()) < 1)) {
 			return Optional.empty();
 		}
 		return Optional.of(new BuildTarget(job, instruction, position));
@@ -77,8 +77,16 @@ public final class ConstructionSystem {
 		if (current == null || !current.equals(target.job())) {
 			return false;
 		}
+		ConstructionPlan plan = BlueprintManager.get(current.blueprintId());
+		if (plan == null || current.nextIndex() < 0 || current.nextIndex() >= plan.instructions().size()
+			|| !plan.instructions().get(current.nextIndex()).equals(target.instruction())
+			|| !current.origin().offset(target.instruction().offset()).equals(target.position())) {
+			return false;
+		}
 		ConstructionInstruction instruction = target.instruction();
-		if (!level.isLoaded(target.position()) || villager.getBoundingBox().intersects(new AABB(target.position()))) {
+		if (!level.isLoaded(target.position()) || !level.isPositionEntityTicking(target.position())
+			|| !level.getEntitiesOfClass(LivingEntity.class, new AABB(target.position()),
+				entity -> entity.isAlive() && !entity.isSpectator()).isEmpty()) {
 			return false;
 		}
 		if (!level.getBlockState(target.position()).isAir()) {
@@ -86,33 +94,27 @@ public final class ConstructionSystem {
 			return false;
 		}
 
-		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		if (stockpile == null || (instruction.consume() && stockpile.countItem(instruction.item()) < 1)) {
-			return false;
-		}
-		if (instruction.consume()) {
-			removeOne(stockpile, instruction.item());
-		}
-
+		Container stockpile = loadedStockpile(level, data, settlement);
 		boolean firstPart = instruction.consume()
 			&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
-		level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL);
-		ConstructionPlan plan = BlueprintManager.get(current.blueprintId());
-		if (plan == null || current.nextIndex() + 1 >= plan.instructions().size()) {
+		if (!ConstructionMaterials.place(stockpile, data.simulationOf(settlement).orElse(null),
+			instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
+			() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL))) {
+			return false;
+		}
+		if (current.nextIndex() + 1 >= plan.instructions().size()) {
 			data.completeConstruction(settlement);
-			if (plan != null) {
-				for (ConstructionInstruction part : plan.instructions()) {
-					BlockPos bed = current.origin().offset(part.offset());
-					if (part.item() == Items.WHITE_BED && part.consume() && level.getBlockState(bed).is(Blocks.WHITE_BED)) {
-						data.addHousingBed(settlement, bed);
-					}
+			for (ConstructionInstruction part : plan.instructions()) {
+				BlockPos bed = current.origin().offset(part.offset());
+				if (part.item() == Items.WHITE_BED && part.consume() && level.isLoaded(bed) && level.getBlockState(bed).is(Blocks.WHITE_BED)) {
+					data.addHousingBed(settlement, bed);
 				}
-				if (plan.id().equals(ConstructionPlanner.CAMPFIRE_HEARTH)) {
-					for (ConstructionInstruction part : plan.instructions()) {
-						if (part.state().is(Blocks.CAMPFIRE)) {
-							data.setHearth(settlement, current.origin().offset(part.offset()));
-							break;
-						}
+			}
+			if (plan.id().equals(ConstructionPlanner.CAMPFIRE_HEARTH)) {
+				for (ConstructionInstruction part : plan.instructions()) {
+					if (part.state().is(Blocks.CAMPFIRE)) {
+						data.setHearth(settlement, current.origin().offset(part.offset()));
+						break;
 					}
 				}
 			}
@@ -122,21 +124,23 @@ public final class ConstructionSystem {
 		return true;
 	}
 
-	private static boolean hasAllMaterials(Container stockpile, ConstructionPlan plan) {
-		if (stockpile == null) {
-			return false;
+	private static Container loadedStockpile(ServerLevel level, SettlementSavedData data, Settlement settlement) {
+		BlockPos position = data.getStockpile(settlement).orElse(null);
+		if (position == null || !level.isLoaded(position)) {
+			return null;
 		}
-		for (var entry : plan.materials().entrySet()) {
-			if (stockpile.countItem(entry.getKey()) < entry.getValue()) {
-				return false;
+		// A double chest can touch the neighboring chunk; do not ask its container to load that chunk.
+		for (Direction direction : Direction.Plane.HORIZONTAL) {
+			if (!level.isLoaded(position.relative(direction))) {
+				return null;
 			}
 		}
-		return true;
+		return SettlementStockpile.getStockpile(level, data, settlement);
 	}
 
 	private static void clearStaleHearth(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		BlockPos hearth = data.getHearth(settlement).orElse(null);
-		if (hearth != null && !level.getBlockState(hearth).is(Blocks.CAMPFIRE)) {
+		if (hearth != null && level.isLoaded(hearth) && !level.getBlockState(hearth).is(Blocks.CAMPFIRE)) {
 			data.clearHearth(settlement);
 		}
 	}
@@ -156,20 +160,11 @@ public final class ConstructionSystem {
 	private static boolean canPlace(ServerLevel level, ConstructionPlan plan, BlockPos origin) {
 		for (ConstructionInstruction instruction : plan.instructions()) {
 			BlockPos position = origin.offset(instruction.offset());
-			if (!level.isPositionEntityTicking(position) || !level.getBlockState(position).isAir()) {
+			if (!level.isLoaded(position) || !level.isPositionEntityTicking(position) || !level.getBlockState(position).isAir()) {
 				return false;
 			}
 		}
 		return true;
-	}
-
-	private static void removeOne(Container stockpile, Item item) {
-		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-			if (stockpile.getItem(slot).is(item)) {
-				stockpile.removeItem(slot, 1);
-				return;
-			}
-		}
 	}
 
 	public record BuildTarget(ConstructionJob job, ConstructionInstruction instruction, BlockPos position) {

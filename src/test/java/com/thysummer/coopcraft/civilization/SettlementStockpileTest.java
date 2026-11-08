@@ -154,6 +154,22 @@ class SettlementStockpileTest {
 	}
 
 	@Test
+	void foragedBerriesEnterTheSameRationAndReserveAccounting() {
+		SimpleContainer inventory = new SimpleContainer(2);
+		SimpleContainer stockpile = new SimpleContainer(2);
+		inventory.setItem(0, new ItemStack(Items.SWEET_BERRIES, 20));
+
+		assertEquals(8, SettlementStockpile.depositExcessFood(stockpile, inventory));
+		assertEquals(12, inventory.countItem(Items.SWEET_BERRIES));
+		assertEquals(8, SettlementStockpile.communalFoodPoints(stockpile));
+		inventory.removeItem(0, 4);
+		assertEquals(4, SettlementStockpile.distributeBasicFood(stockpile, inventory));
+		assertEquals(12, inventory.countItem(Items.SWEET_BERRIES));
+		assertEquals(4, stockpile.countItem(Items.SWEET_BERRIES));
+		assertEquals(16, inventory.countItem(Items.SWEET_BERRIES) + stockpile.countItem(Items.SWEET_BERRIES));
+	}
+
+	@Test
 	void readsPublicSurplusFromRealContents() {
 		SimpleContainer stockpile = new SimpleContainer(3);
 		stockpile.setItem(0, new ItemStack(Items.BREAD, 2));

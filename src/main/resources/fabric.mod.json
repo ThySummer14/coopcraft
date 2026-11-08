@@ -28,6 +28,7 @@
 			"com.thysummer.coopcraft.civilization.SettlementSimulationStateGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementSurvivalGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementProductionGameTest",
+			"com.thysummer.coopcraft.civilization.SettlementForagingGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementGrowthGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementDistributionGameTest",
 			"com.thysummer.coopcraft.civilization.SettlementNormGameTest",

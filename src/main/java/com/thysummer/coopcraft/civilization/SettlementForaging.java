@@ -19,6 +19,7 @@ public final class SettlementForaging {
 	private static final int SEARCH_RADIUS = 12;
 	private static final int SEARCH_VERTICAL_RADIUS = 4;
 	private static final int RIPE_AGE = 2;
+	private static final int FOOD_RESERVE_POINTS_PER_MEMBER = 8;
 
 	private SettlementForaging() {
 	}
@@ -28,8 +29,18 @@ public final class SettlementForaging {
 			|| SettlementSimulationService.isProductionEnabled(data, settlement);
 	}
 
-	static boolean needsForage(boolean hasFood, long gameTime, long cooldownUntil) {
-		return !hasFood && gameTime >= cooldownUntil;
+	static boolean needsForage(boolean hasFood, boolean reserveLow, long gameTime, long cooldownUntil) {
+		return (!hasFood || reserveLow) && gameTime >= cooldownUntil;
+	}
+
+	static boolean reserveLow(SettlementSavedData data, Settlement settlement, Container stockpile) {
+		long target = (long) data.registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state != null && state.survivalEnabled()) {
+			// Legacy points restore five satiety; abstract food already stores nutrition.
+			return state.world().availableNutrition(state.campOwner()) < target * 5;
+		}
+		return SettlementStockpile.communalFoodPoints(stockpile) < target;
 	}
 
 	static boolean isRipe(BlockState state) {
@@ -70,12 +81,17 @@ public final class SettlementForaging {
 		Villager villager,
 		BlockPos position
 	) {
+		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)) {
+			return 0;
+		}
 		BlockState state = level.getBlockState(position);
 		if (!isRipe(state)) {
 			return 0;
 		}
 		List<ItemStack> drops = Block.getDrops(state, level, position, level.getBlockEntity(position));
-		level.setBlock(position, state.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL);
+		if (!level.setBlock(position, state.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL)) {
+			return 0;
+		}
 		villager.swing(InteractionHand.MAIN_HAND);
 		int harvested = 0;
 		for (ItemStack drop : drops) {

@@ -477,6 +477,29 @@ public final class SettlementSimulationService {
 			&& survival(state).availableFood(state.campOwner().id()) > 0;
 	}
 
+	/** Read-only eligibility; the request is recorded only after the villager reaches the store. */
+	public static boolean hasPendingFoodRefusal(SettlementSavedData data, Settlement settlement, UUID villagerId) {
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled() || !state.normsEnabled()) {
+			return false;
+		}
+		return state.residentId(villagerId)
+			.map(personId -> hasPendingFoodRefusal(state, state.world().person(personId)))
+			.orElse(false);
+	}
+
+	private static boolean hasPendingFoodRefusal(SettlementSimulationState state, Person person) {
+		return state.survivalEnabled() && state.normsEnabled() && person.isAlive()
+			&& person.hunger() > 5 && state.remainingFoodUnits(person.id()) == 0
+			&& !hasFoodRefusalToday(state, person);
+	}
+
+	private static boolean hasFoodRefusalToday(SettlementSimulationState state, Person person) {
+		return state.world().ledger().eventsAtDay(state.world().day()).stream()
+			.anyMatch(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SHARE_REFUSED
+				&& event.actors().equals(List.of(person.id(), state.campOwner().id())));
+	}
+
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled()) {
@@ -507,13 +530,7 @@ public final class SettlementSimulationService {
 	}
 
 	private static void recordFoodRefusal(SettlementSavedData data, SettlementSimulationState state, Person person) {
-		if (!state.normsEnabled() || person.hunger() <= 5) {
-			return;
-		}
-		boolean alreadyRefused = state.world().ledger().eventsAtDay(state.world().day()).stream()
-			.anyMatch(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SHARE_REFUSED
-				&& event.actors().equals(List.of(person.id(), state.campOwner().id())));
-		if (alreadyRefused) {
+		if (!hasPendingFoodRefusal(state, person)) {
 			return;
 		}
 		long request = state.world().recordShareRequest(person.id(), state.campOwner().id(), person.hunger() - 5L);
