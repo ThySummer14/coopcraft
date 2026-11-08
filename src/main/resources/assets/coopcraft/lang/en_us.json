@@ -1,4 +1,7 @@
 {
+	"coopcraft.interaction.action.harvest_crop": "Harvesting potatoes",
+	"coopcraft.settlement.crop_marked": "Potato plot marked for %s",
+	"coopcraft.settlement.crop_unmarked": "Potato plot unmarked for %s",
 	"category.coopcraft": "CoopCraft",
 	"key.coopcraft.share_coords": "Share Coordinates",
 	"coopcraft.coords.shared": "%s shared coords in %s: %s",

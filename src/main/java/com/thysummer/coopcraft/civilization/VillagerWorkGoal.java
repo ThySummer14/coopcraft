@@ -92,7 +92,7 @@ public class VillagerWorkGoal extends Goal {
 		if (shouldForage()) {
 			BlockPos bush = findRipeBerryBush();
 			if (bush != null) {
-				action = Action.FORAGE;
+				action = SettlementCropHarvest.isRipe(villager.level().getBlockState(bush)) ? Action.HARVEST_CROP : Action.FORAGE;
 				forageTarget = bush;
 				target = bush;
 				progress = 0;
@@ -234,14 +234,14 @@ public class VillagerWorkGoal extends Goal {
 		progress++;
 		int baseDuration = switch (action) {
 			case GATHER -> hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
-			case FORAGE -> FORAGE_TICKS;
+			case FORAGE, HARVEST_CROP -> FORAGE_TICKS;
 			case BUILD -> BUILD_TICKS;
 			case EAT -> EAT_TICKS;
 			default -> CRAFT_TICKS;
 		};
 		var workType = switch (action) {
 			case GATHER -> VillagerPersonality.WorkType.GATHER;
-			case FORAGE -> VillagerPersonality.WorkType.GATHER;
+			case FORAGE, HARVEST_CROP -> VillagerPersonality.WorkType.GATHER;
 			case BUILD -> VillagerPersonality.WorkType.BUILD;
 			case EAT -> VillagerPersonality.WorkType.GENERAL;
 			default -> VillagerPersonality.WorkType.CRAFT;
@@ -250,7 +250,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
 			duration = duration * 5 / 4;
 		}
-		if (action == Action.GATHER || action == Action.FORAGE) {
+		if (action == Action.GATHER || (action == Action.FORAGE || action == Action.HARVEST_CROP)) {
 			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		} else if (action != Action.BUILD && action != Action.EAT) {
 			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
@@ -261,7 +261,7 @@ public class VillagerWorkGoal extends Goal {
 
 		switch (action) {
 			case GATHER -> gather();
-			case FORAGE -> forage();
+			case FORAGE, HARVEST_CROP -> forage();
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
 			case CRAFT_MATERIALS -> craftMaterials();
@@ -384,7 +384,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.BUILD) {
 			return currentBuildTarget == null ? null : currentBuildTarget.position();
 		}
-		if (action == Action.FORAGE) {
+		if (action == Action.FORAGE || action == Action.HARVEST_CROP) {
 			return forageTarget;
 		}
 		if (action == Action.EAT) {
@@ -499,7 +499,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (villager.getNavigation().isDone()) {
 			boolean moving = action == Action.BUILD ? navigateToConstructionApproach()
-				: action == Action.FORAGE ? navigateToForageApproach() : navigateTo(target.above());
+				: (action == Action.FORAGE || action == Action.HARVEST_CROP) ? navigateToForageApproach() : navigateTo(target.above());
 			if (!moving) {
 				stop();
 			} else {
@@ -594,8 +594,10 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.GATHER) {
 			return isGatherable(target);
 		}
-		if (action == Action.FORAGE) {
-			return SettlementForaging.isRipe(level.getBlockState(target));
+		if (action == Action.FORAGE || action == Action.HARVEST_CROP) {
+			return action == Action.HARVEST_CROP
+				? SettlementCropHarvest.validTarget(level, settlementData(), settlement, target)
+				: SettlementForaging.isRipe(level.getBlockState(target));
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
@@ -640,14 +642,21 @@ public class VillagerWorkGoal extends Goal {
 		if (!(villager.level() instanceof ServerLevel level)) {
 			return null;
 		}
-		return SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
+		BlockPos origin = villager.blockPosition();
+		BlockPos berry = SettlementForaging.findRipeBush(level, origin).orElse(null);
+		BlockPos crop = SettlementCropHarvest.findRipe(level, settlementData(), settlement, origin).orElse(null);
+		return crop != null && (berry == null || origin.distSqr(crop) < origin.distSqr(berry)) ? crop : berry;
 	}
 
 	private void forage() {
 		if (target == null || !(villager.level() instanceof ServerLevel level)) {
 			return;
 		}
-		SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+		if (action == Action.HARVEST_CROP) {
+			SettlementCropHarvest.harvest(level, settlementData(), settlement, villager, target);
+		} else {
+			SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+		}
 	}
 
 	private boolean hasFoodAvailable() {
@@ -669,7 +678,14 @@ public class VillagerWorkGoal extends Goal {
 
 	private void gather() {
 		if (!isGatherable(target)) {
-			settlementData().removeResource(settlement, target);
+			// Preserve unknown/unloaded targets and planted or temporarily bare crop plots.
+			if (target != null && villager.level() instanceof ServerLevel level
+				&& level.isLoaded(target) && level.isPositionEntityTicking(target)
+				&& level.isLoaded(target.below())
+				&& !level.getBlockState(target).is(Blocks.POTATOES)
+				&& !level.getBlockState(target.below()).is(Blocks.FARMLAND)) {
+				settlementData().removeResource(settlement, target);
+			}
 			return;
 		}
 		ServerLevel level = (ServerLevel) villager.level();
@@ -965,6 +981,7 @@ public class VillagerWorkGoal extends Goal {
 	private enum Action {
 		GATHER("gather"),
 		FORAGE("forage"),
+		HARVEST_CROP("harvest_crop"),
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
 		CRAFT_MATERIALS("craft_materials"),

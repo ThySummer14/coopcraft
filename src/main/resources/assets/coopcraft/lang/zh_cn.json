@@ -1,4 +1,7 @@
 {
+	"coopcraft.interaction.action.harvest_crop": "收获马铃薯",
+	"coopcraft.settlement.crop_marked": "已为%s标记马铃薯田",
+	"coopcraft.settlement.crop_unmarked": "已取消%s的马铃薯田标记",
 	"category.coopcraft": "CoopCraft",
 	"key.coopcraft.share_coords": "分享坐标",
 	"coopcraft.coords.shared": "队友 %s 在 %s 分享了坐标：%s",

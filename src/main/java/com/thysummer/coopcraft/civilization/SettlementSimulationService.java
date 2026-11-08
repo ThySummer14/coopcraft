@@ -314,11 +314,17 @@ public final class SettlementSimulationService {
 		int inserted,
 		String activity
 	) {
+		return recordProduction(data, settlement, villager.getUUID(), villager.getInventory(), item, inserted, activity);
+	}
+
+	/** Container boundary shared by real collection and server-free service regression tests. */
+	static int recordProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled() || inserted <= 0) {
 			return 0;
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
+		String personId = state.residentId(actor).orElse(null);
 		if (personId == null) {
 			return 0;
 		}
@@ -327,8 +333,8 @@ public final class SettlementSimulationService {
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
 		if (state.productionEnabled() && resourceType != null) {
 			moved = MinecraftStockpileAdapter.importToSimulation(
-				villager.getInventory(), state.world(), state.campOwner(), resourceType, inserted,
-				List.of(personId), Map.of("activity", activity, "villagerId", villager.getUUID().toString())
+				inventory, state.world(), state.campOwner(), resourceType, inserted,
+				List.of(personId), Map.of("activity", activity, "villagerId", actor.toString())
 			);
 			if (moved > 0) {
 				productionEventId = state.world().ledger().lastEvent().orElseThrow().eventId();
@@ -338,7 +344,7 @@ public final class SettlementSimulationService {
 		if (state.skillsEnabled()) {
 			boolean practiced = knowledge(state).practice(
 				state.world().person(personId), WorkType.GATHER,
-				Map.of("activity", activity, "villagerId", villager.getUUID().toString()),
+				Map.of("activity", activity, "villagerId", actor.toString()),
 				productionEventId < 0 ? List.of() : List.of(productionEventId)
 			);
 			if (practiced) {

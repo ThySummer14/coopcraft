@@ -69,6 +69,9 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 		BlockState state = level.getBlockState(hit.getBlockPos());
+		if (state.is(Blocks.POTATOES) || state.is(Blocks.FARMLAND)) {
+			return onUseCropPlot(player, level, hand, hit);
+		}
 		if (state.getBlock() instanceof BedBlock) {
 			return onUseBed(player, level, hand, hit);
 		}
@@ -91,6 +94,28 @@ public final class Civilization {
 			return onUseResource(player, level, hit);
 		}
 		return InteractionResult.PASS;
+	}
+
+	static InteractionResult onUseCropPlot(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+		if (hand != InteractionHand.MAIN_HAND || !player.isShiftKeyDown() || !player.getMainHandItem().isEmpty()) {
+			return InteractionResult.PASS;
+		}
+		if (!(level instanceof ServerLevel serverLevel)) return InteractionResult.PASS;
+		BlockPos clicked = hit.getBlockPos();
+		if (!level.isLoaded(clicked)) return InteractionResult.PASS;
+		BlockState clickedState = level.getBlockState(clicked);
+		boolean farmland = clickedState.is(Blocks.FARMLAND);
+		if (!farmland && !clickedState.is(Blocks.POTATOES)) return InteractionResult.PASS;
+		BlockPos plot = farmland ? clicked.above() : clicked;
+		if (!level.isLoaded(plot)) return InteractionResult.PASS;
+		SettlementSavedData data = SettlementSavedData.get(serverLevel);
+		Optional<Settlement> settlement = data.find(plot);
+		if (settlement.isEmpty()) return InteractionResult.PASS;
+		// Farmland only cancels an existing mark; new plots need an actual planted potato.
+		if (farmland && !data.resourcesOf(settlement.get()).contains(plot)) return InteractionResult.PASS;
+		boolean added = data.toggleResource(settlement.get(), plot);
+		player.displayClientMessage(Component.translatable("coopcraft.settlement.crop_" + (added ? "marked" : "unmarked"), settlement.get().name()), true);
+		return InteractionResult.SUCCESS;
 	}
 
 	static InteractionResult onUseBed(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
