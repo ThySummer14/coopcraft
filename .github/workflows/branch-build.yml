@@ -34,6 +34,8 @@ jobs:
         run: ./gradlew build
       - name: run pure Java ration experiments
         run: tools/analysis/run_ration_experiments.sh "${{ runner.temp }}/coopcraft-ration-experiments.csv"
+      - name: run pure Java request order experiments
+        run: tools/analysis/run_request_order_experiments.sh "${{ runner.temp }}/coopcraft-request-order-experiments.csv"
       # Branch backups are compiled without launching Minecraft or a GameTest server.
       # The existing PR/main workflow retains its separate integration checks.
       - name: capture build artifacts
@@ -53,3 +55,8 @@ jobs:
         with:
           name: coopcraft-ration-experiments
           path: ${{ runner.temp }}/coopcraft-ration-experiments.csv
+      - name: capture request order experiment CSV
+        uses: actions/upload-artifact@v7
+        with:
+          name: coopcraft-request-order-experiments
+          path: ${{ runner.temp }}/coopcraft-request-order-experiments.csv
