@@ -149,7 +149,12 @@ public final class SettlementSimulationState {
 		foodAllocations.put(personId, total);
 	}
 
-	private int dailyFoodUnitCap(String personId) {
+	/** Current-day persisted allocation count, without advancing or resetting its ledger. */
+	public int allocatedFoodUnits(String personId) {
+		return foodAllocationDay == world.day() ? foodAllocations.getOrDefault(personId, 0) : 0;
+	}
+
+	public int dailyFoodUnitCap(String personId) {
 		int baseCap = normsEnabled ? world.norm(campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
 			.filter(Norm::isActive)
 			.map(Norm::allocationUnitCap)

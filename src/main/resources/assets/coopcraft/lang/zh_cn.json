@@ -297,5 +297,11 @@
 	"coopcraft.interaction.blocker.construction_plan_unavailable": "暂停：已保存蓝图不可用",
 	"coopcraft.interaction.blocker.construction_invalid_index": "暂停：已保存施工进度无效",
 	"coopcraft.command.settlement.construction_progress": "施工项目%s | 已保存步数%s / %s | 下一位置%s | %s",
-	"coopcraft.command.settlement.construction_unknown": "未知"
+	"coopcraft.command.settlement.construction_unknown": "未知",
+	"coopcraft.command.settlement.rations_disabled": "口粮观察未启用：生存模拟未开启。",
+	"coopcraft.command.settlement.rations_header": "%s 口粮 | 显示 %s / %s 名符合条件的成员（已加载、存活、已映射且距聚落中心64格内；按UUID排序）",
+	"coopcraft.command.settlement.rations_explanation": "只读观察：额度包含照料调整；营养指已领食物所含的模拟营养，不是实际饥饿恢复值。饥饿越高越饿；历史不完整的营养显示未知。不改变规则。",
+	"coopcraft.command.settlement.rations_row": "%s | 已领 %s / 额度 %s 件 | 剩余 %s 件 | 所领食物营养 %s | 饥饿 %s（越高越饿）| 核心日 %s",
+	"coopcraft.command.settlement.rations_unknown": "未知（历史不完整）",
+	"coopcraft.command.settlement.rations_truncated": "另有 %s 名符合条件的成员未显示；最多显示 %s 行。"
 }

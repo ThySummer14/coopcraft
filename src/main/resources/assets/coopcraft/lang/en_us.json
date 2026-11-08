@@ -297,5 +297,11 @@
 	"coopcraft.interaction.blocker.construction_plan_unavailable": "Paused: saved blueprint is unavailable",
 	"coopcraft.interaction.blocker.construction_invalid_index": "Paused: saved construction index is invalid",
 	"coopcraft.command.settlement.construction_progress": "Project %s | saved steps %s / %s | next position %s | %s",
-	"coopcraft.command.settlement.construction_unknown": "Unknown"
+	"coopcraft.command.settlement.construction_unknown": "Unknown",
+	"coopcraft.command.settlement.rations_disabled": "Ration observation is not enabled: survival simulation is off.",
+	"coopcraft.command.settlement.rations_header": "%s rations | showing %s / %s eligible residents (loaded, alive, mapped members within 64 blocks of the center; UUID order)",
+	"coopcraft.command.settlement.rations_explanation": "Read-only observation: cap includes care adjustments; nutrition is the simulated nutrition contained in allocated food, not actual hunger recovery. Higher hunger means hungrier. Incomplete historical nutrition is unknown. Rules are unchanged.",
+	"coopcraft.command.settlement.rations_row": "%s | allocated %s / cap %s units | remaining %s | food nutrition %s | hunger %s (higher = hungrier) | core day %s",
+	"coopcraft.command.settlement.rations_unknown": "Unknown (incomplete history)",
+	"coopcraft.command.settlement.rations_truncated": "%s more eligible residents omitted; display limit is %s rows."
 }

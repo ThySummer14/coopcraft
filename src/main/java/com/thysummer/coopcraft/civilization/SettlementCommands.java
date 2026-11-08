@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -22,6 +23,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.phys.Vec3;
 
@@ -48,7 +50,7 @@ public final class SettlementCommands {
 	/** Generic tree lets unit tests exercise the actual grammar and permission predicates without a server. */
 	static <S> LiteralArgumentBuilder<S> commandTree(Predicate<S> admin, Handler<S> handler) {
 		var settlement = LiteralArgumentBuilder.<S>literal("settlement");
-		for (String action : List.of("status", "materials")) {
+		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
 		var simulation = LiteralArgumentBuilder.<S>literal("simulation").requires(admin);
@@ -85,6 +87,9 @@ public final class SettlementCommands {
 		if (settlement == null) {
 			source.sendFailure(message("no_settlement"));
 			return 0;
+		}
+		if (action.equals("rations")) {
+			return showRations(source, data, settlement);
 		}
 		if (action.equals("status") || action.equals("materials")) {
 			showStatus(source, data, settlement);
@@ -161,6 +166,56 @@ public final class SettlementCommands {
 			}
 		}
 		return moved;
+	}
+
+	static final int RATION_ROW_LIMIT = 32;
+
+	/** Name is resolved only from a currently loaded real villager in the player's dimension. */
+	static record RationRow(Component name, SettlementRations.Snapshot snapshot) {}
+
+	private static int showRations(CommandSourceStack source, SettlementSavedData data, Settlement settlement)
+		throws CommandSyntaxException {
+		if (!SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+			send(source, "rations_disabled");
+			return 0;
+		}
+		var level = source.getPlayerOrException().serverLevel();
+		List<RationRow> eligible = new ArrayList<>();
+		// UUID lookup only: no world scan, chunk load, reconciliation or daily-ledger reset.
+		for (var snapshot : SettlementRations.inspect(data, settlement)) {
+			if (level.getEntity(snapshot.villagerId()) instanceof Villager villager
+				&& rationVisible(villager.isAlive(), villager.position(), settlement.center().getCenter())) {
+				eligible.add(new RationRow(villager.getName(), snapshot));
+			}
+		}
+		var rows = visibleRationRows(eligible);
+		send(source, "rations_header", settlement.name(), rows.size(), eligible.size());
+		send(source, "rations_explanation");
+		for (var row : rows) {
+			source.sendSuccess(() -> rationMessage(row), false);
+		}
+		if (eligible.size() > rows.size()) {
+			send(source, "rations_truncated", eligible.size() - rows.size(), RATION_ROW_LIMIT);
+		}
+		return 1;
+	}
+
+	static boolean rationVisible(boolean alive, Vec3 position, Vec3 center) {
+		return alive && position.distanceToSqr(center) <= 64.0 * 64.0;
+	}
+
+	static List<RationRow> visibleRationRows(List<RationRow> eligible) {
+		return eligible.stream().sorted(Comparator.comparing(row -> row.snapshot().villagerId().toString()))
+			.limit(RATION_ROW_LIMIT).toList();
+	}
+
+	/** Nutrition is food content, not a claim about the resident's actual hunger recovery. */
+	static Component rationMessage(RationRow row) {
+		var snapshot = row.snapshot();
+		Object nutrition = snapshot.foodNutritionReceived().isPresent()
+			? snapshot.foodNutritionReceived().getAsLong() : message("rations_unknown");
+		return message("rations_row", row.name(), snapshot.allocatedUnits(), snapshot.dailyUnitCap(),
+			snapshot.remainingUnits(), nutrition, snapshot.hunger(), snapshot.day());
 	}
 
 	private static void showStatus(CommandSourceStack source, SettlementSavedData data, Settlement settlement) {

@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `/coop settlement status` | 普通玩家 | 查看开关、登记床位与缺口、真实/抽象公仓库存、施工和待建项目 |
 | `/coop settlement materials` | 普通玩家 | 同上，重点用于核对项目剩余消耗与缺口 |
+| `/coop settlement rations` | 普通玩家 | 只读查看已加载居民当日件数额度、所领食物含营养与当前饥饿 |
 | `/coop settlement simulation <开关> <true或false>` | OP等级2 | 通过现有服务修改开关 |
 | `/coop settlement import <资源> <数量>` | OP等级2 | 从已登记公仓真实物品显式转入抽象库存 |
 | `/coop settlement export <资源> <数量>` | OP等级2 | 从抽象批次显式转回已登记公仓 |
@@ -43,6 +44,7 @@
 /coop settlement simulation norms true
 /coop settlement import tubers 64
 /coop settlement materials
+/coop settlement rations
 ```
 
 **开启survival后真实公仓食物不会自动导入。未显式import就可能缺粮。** 请紧接着导入食物，并根据居民数持续观察补粮。若仓库没有足够马铃薯，返回实际交接数会小于64；不能把请求数当成实际库存。也可放入生鳕鱼并执行 `/coop settlement import fish 32`。
@@ -61,6 +63,14 @@
 
 6. 执行 `/coop settlement simulation survival false`，检查五个开关均为false，抽象库存仍在。需要时用export取回；关闭模拟不阻止显式交接。
 7. 用普通玩家验证status/materials仍可读，而simulation/import/export不能使用。离开所有聚落中心64格后，再执行status，应提示无聚落而不创建新聚落。
+
+## 配给观察：件数与营养分开
+
+`/coop settlement rations` 只在模拟生存开启时显示配给台账，不创建状态或开启功能。范围为当前聚落中已映射、真实已加载、仍存活且距中心64格内的成员；按UUID稳定排序，最多显示32行，并说明省略人数。查询不强制加载居民、不发放食物、不重置额度或推进核心日。
+
+每行给出核心日、已领件数/每日额度/剩余件数、所领食物含模拟营养、当前饥饿（越高越饿）。营养从当天实际公仓分配事件的历史营养值汇总，件数以持久化配额台账为准；二者不匹配、历史不完整或超出数值范围时显示未知，不补造数据。
+
+**食物所含营养不等于实际缓解的饥饿量，也不是现实热量。** 例如恰好领到3份野果含54模拟营养，3份猎物含84；实际进食仍会按当前需要停止，不保证每次吃满3份。此命令不改变既有件数规则，不加入营养额度、紧急补领或新分配制度。
 
 ## 床位登记与失效验证
 
