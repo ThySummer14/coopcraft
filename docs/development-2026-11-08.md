@@ -178,7 +178,7 @@
 
 实际完成时在取料后重新检查当前背包，只有整批八木棍或一平滑石全部容纳才回写变化槽；容量不足保留已取原料，不扣半份配方、不掉落溢出、不写完成或技能事件。既有配方、工作站、需求、组件消费规则及一次性导入回执保持不变，未消费物品的组件不被重建。限制为服务端线程上的标准、非重入容器，不提供第三方回调或存档崩溃的事务保证。
 
-新增17项真实容器单测和3项容器/生产服务/完整聚落NBT组合测试；组合测试覆盖两种产物与production开/关、失败后保留导出原料、重载重试及完成证据。它们不执行Villager Goal、运行时LOGS标签或实体寻路；已有Goal回归随main源码编译，仍不启动游戏。本轮环境恢复后只有Java21运行时、没有javac，完整编译与JUnit交由既有JDK25分支CI核验，结果见后续记录。
+新增17项真实容器单测和3项容器/生产服务/完整聚落NBT组合测试；组合测试覆盖两种产物与production开/关、失败后保留导出原料、重载重试及完成证据。它们不执行Villager Goal、运行时LOGS标签或实体寻路；已有Goal回归随main源码编译，仍不启动游戏。本轮环境恢复后没有javac命令及JDK25，完整编译与JUnit由既有JDK25分支CI核验；本地用Java21自带编译模块的source/target21参数独立复跑两组纯Java实验，结果见后续记录。聚落NBT组合测试保留同一内存背包，没有模拟村民实体存档重载。
 
 ## 权威状态
 
@@ -216,6 +216,7 @@
 - 第十九增量提交 `f1b9d0cb` 的 [制作证据构建](https://github.com/ThySummer14/coopcraft/actions/runs/42526943414) 已通过401项JUnit，0失败/0跳过；制作专项23项（11项服务、4项实际SimpleContainer中断/重载、8项历史详情）替代旧2项，净增21项。main/client/test全编译与jar打包成功，206行配给与48行多人实验CSV哈希不变。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42526943414/artifacts/13635618111) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `382096eeb1ba97ebf578c755261b6ddd10ef0196d4907279a39b0a58ac534acb`。服务测试的配方遍历不等于五条Villager路径实机验证；未启动游戏。
 - 第二十增量提交 `2da039f1` 的 [工具补料构建](https://github.com/ThySummer14/coopcraft/actions/runs/42528209222) 已通过414项JUnit，0失败/0跳过，新增9项需求决策及4项实际容器/服务计数/NBT回归；纯决策9项也经本地独立Java/JUnit执行通过。main/client/test全编译与jar打包成功，206行配给和48行多人实验CSV哈希保持不变。两条真实Goal GameTest仅编译，未执行且要求隔离聚落。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42528209222/artifacts/13636720243) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `687b4678a63b0384d1175296aa7045f1c04dae14584e3ffcceadaaa236d9f408`。
 - 第二十一增量提交 `99f8d75a` 的 [旧镐保留构建](https://github.com/ThySummer14/coopcraft/actions/runs/42529246770) 已通过425项JUnit，0失败/0跳过，新增11项真实ItemStack/注册表/序列化回归；main/client/test全编译与jar打包成功。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42529246770/artifacts/13635754649) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `72e2ae376b316fd15500f078d8d5bbfbd8ce47e58871d63b0038647a7292edbd`。既有Goal组件断言只编译，未执行。
+- 第二十二增量提交 `15602794` 的 [背包容量构建](https://github.com/ThySummer14/coopcraft/actions/runs/42534841037) 已通过445项JUnit，0失败/0跳过，新增17项容器及3项生产服务/完整聚落NBT组合回归；main/client/test全编译与jar打包成功。206行配给与48行多人实验CSV同本地独立复跑逐字一致，SHA-256分别为 `d597cb8f80c0574c1a687f899fc93a5cc55eb6d7c41338a280597b6aae3ca216`、`3112824f08c6a793101ac94985af137f908004be6a064b4430b3d43979a6bb25`。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42534841037/artifacts/13639420398) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `4f5b3dee86682baeafdb5d217dc965cc028a54f59e6f64a3a2d27e24c03ee477`。旧条件对照确证原料腾格的错误拒绝；实际Goal/LOGS标签/寻路仍待统一游戏测试。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
