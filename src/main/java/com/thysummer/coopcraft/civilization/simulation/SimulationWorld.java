@@ -611,17 +611,29 @@ public final class SimulationWorld {
 	}
 
 	public long recordShareRefusal(long requestEventId, String requesterId, String targetId, double score) {
+		return recordShareRefusal(requestEventId, requesterId, targetId, score, Map.of());
+	}
+
+	/** Records a snapshot of the refusal evidence; the explicit score remains authoritative. */
+	public long recordShareRefusal(
+		long requestEventId, String requesterId, String targetId, double score, Map<String, String> context
+	) {
 		SimulationEvent request = ledger.event(requestEventId).orElseThrow();
-		if (request.type() != EventType.SHARE_REQUEST) {
-			throw new IllegalArgumentException("Refusal must reference a share request");
+		if (request.type() != EventType.SHARE_REQUEST
+			|| !request.actors().equals(List.of(requesterId, targetId))) {
+			throw new IllegalArgumentException("Refusal must reference a share request between the same actors");
 		}
 		Person requester = person(requesterId);
-		requester.adjustTrust(targetId, -2);
+		Map<String, String> eventContext = new LinkedHashMap<>(Map.copyOf(context));
+		eventContext.put("score", Double.toString(score));
 		long eventId = ledger.nextEventId();
-		ledger.append(new SimulationEvent(
+		SimulationEvent refusal = new SimulationEvent(
 			eventId, day, EventType.SHARE_REFUSED, List.of(requesterId, targetId), List.of(), List.of(),
-			Map.of("score", Double.toString(score)), List.of(requestEventId)
-		));
+			eventContext, List.of(requestEventId)
+		);
+		// Finish event validation before changing relationships.
+		ledger.append(refusal);
+		requester.adjustTrust(targetId, -2);
 		return eventId;
 	}
 

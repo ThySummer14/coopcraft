@@ -352,6 +352,12 @@ public final class Civilization {
 		} else if (!event.actors().isEmpty()) {
 			addDetail(details, "actor", residentName(level, event.actors().getFirst()));
 		}
+		List<SettlementOverviewPayload.SimulationEventDetail> refusalDetails = FoodRefusalDetails.project(event);
+		if (!refusalDetails.isEmpty()) {
+			// One resident plus five refusal details fits the existing six-detail wire limit.
+			details.addAll(refusalDetails);
+			return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType, quantity, details);
+		}
 		if (event.context().containsKey("normId")) {
 			addDetail(details, "rule", "coopcraft.simulation.norm." + event.context().get("normId"));
 		}

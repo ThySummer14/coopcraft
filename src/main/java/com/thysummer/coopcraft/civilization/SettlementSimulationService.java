@@ -536,8 +536,19 @@ public final class SettlementSimulationService {
 		if (!hasPendingFoodRefusal(state, person)) {
 			return;
 		}
-		long request = state.world().recordShareRequest(person.id(), state.campOwner().id(), person.hunger() - 5L);
-		state.world().recordShareRefusal(request, person.id(), state.campOwner().id(), 0);
+		long neededNutrition = person.hunger() - 5L;
+		// Snapshot the current item allowance and abstract common food, not actual hunger relief.
+		Map<String, String> context = Map.of(
+			"reason", "daily-unit-cap-exhausted",
+			"allocationBasis", "item_units",
+			"allocatedUnits", Integer.toString(state.allocatedFoodUnits(person.id())),
+			"cap", Integer.toString(state.dailyFoodUnitCap(person.id())),
+			"hunger", Integer.toString(person.hunger()),
+			"neededNutrition", Long.toString(neededNutrition),
+			"availableNutrition", Long.toString(state.world().availableNutrition(state.campOwner()))
+		);
+		long request = state.world().recordShareRequest(person.id(), state.campOwner().id(), neededNutrition);
+		state.world().recordShareRefusal(request, person.id(), state.campOwner().id(), 0, context);
 		data.setDirty();
 	}
 
