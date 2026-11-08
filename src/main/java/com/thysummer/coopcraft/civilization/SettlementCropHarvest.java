@@ -8,7 +8,6 @@ import java.util.function.Supplier;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
@@ -67,20 +66,6 @@ public final class SettlementCropHarvest {
 		return reserved ? Optional.of(output) : Optional.empty();
 	}
 
-	/** Complete insertion plan, then successful world mutation, then inventory commit. No overflow drops.
-	 * Scope: standard non-reentrant SimpleContainer on the server thread, not crash atomicity. */
-	static boolean commit(SimpleContainer inventory, List<ItemStack> output, BooleanSupplier replant) {
-		SimpleContainer planned = new SimpleContainer(inventory.getContainerSize());
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) planned.setItem(slot, inventory.getItem(slot).copy());
-		for (ItemStack stack : output) {
-			if (!planned.addItem(stack.copy()).isEmpty()) return false;
-		}
-		if (!replant.getAsBoolean()) return false;
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) inventory.setItem(slot, planned.getItem(slot).copy());
-		inventory.setChanged();
-		return true;
-	}
-
 	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos) {
 		if (villager.isBaby() || !validTarget(level, data, settlement, pos)) return 0;
 		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)
@@ -88,7 +73,7 @@ public final class SettlementCropHarvest {
 		BlockState mature = level.getBlockState(pos);
 		var output = outputAfterSeed(Block.getDrops(mature, level, pos, level.getBlockEntity(pos)));
 		if (output.isEmpty()) return 0;
-		if (!commit(villager.getInventory(), output.get(), () -> validTarget(level, data, settlement, pos)
+		if (!SettlementHarvestCommit.commit(villager.getInventory(), output.get(), () -> validTarget(level, data, settlement, pos)
 			&& level.getBlockState(pos).equals(mature)
 			&& level.setBlock(pos, ((CropBlock) Blocks.POTATOES).getStateForAge(0), Block.UPDATE_ALL))) return 0;
 		villager.swing(InteractionHand.MAIN_HAND);

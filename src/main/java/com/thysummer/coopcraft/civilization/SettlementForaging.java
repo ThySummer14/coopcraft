@@ -2,11 +2,16 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -74,41 +79,50 @@ public final class SettlementForaging {
 		return Optional.ofNullable(best);
 	}
 
-	public static int harvest(
-		ServerLevel level,
-		SettlementSavedData data,
-		Settlement settlement,
-		Villager villager,
-		BlockPos position
-	) {
-		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)) {
-			return 0;
+	/** Same lazy eligibility boundary used by execution and Goal continuation. */
+	static boolean validTarget(SettlementSavedData data, Settlement settlement, UUID actor,
+		BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block) {
+		return adult.getAsBoolean() && canForage(data, settlement)
+			&& (!SettlementSimulationService.isSurvivalEnabled(data, settlement)
+				|| data.simulationOf(settlement).flatMap(state -> state.residentId(actor)).isPresent())
+			&& loaded.getAsBoolean() && ticking.getAsBoolean() && isRipe(block.get());
+	}
+
+	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement,
+		Villager villager, BlockPos pos) {
+		return validTarget(data, settlement, villager.getUUID(), () -> !villager.isBaby(),
+			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
+	}
+
+	/** Production entry shared by world harvesting and server-free regression tests.
+	 * Loot and world mutation stay lazy; every eligibility condition is rechecked after planning. */
+	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, SimpleContainer inventory,
+		BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block,
+		Supplier<List<ItemStack>> loot, Predicate<BlockState> regrow) {
+		if (!validTarget(data, settlement, actor, adult, loaded, ticking, block)) return 0;
+		BlockState mature = block.get();
+		List<ItemStack> output = loot.get().stream().map(ItemStack::copy).toList();
+		if (!SettlementHarvestCommit.commit(inventory, output,
+			() -> validTarget(data, settlement, actor, adult, loaded, ticking, block)
+				&& block.get().equals(mature) && regrow.test(mature))) return 0;
+		int berries = output.stream().filter(stack -> stack.is(Items.SWEET_BERRIES)
+			&& stack.getComponentsPatch().isEmpty()).mapToInt(ItemStack::getCount).sum();
+		if (berries > 0) SettlementSimulationService.recordProduction(
+			data, settlement, actor, inventory, Items.SWEET_BERRIES, berries, "forage");
+		return output.stream().mapToInt(ItemStack::getCount).sum();
+	}
+
+	public static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement,
+		Villager villager, BlockPos position) {
+		int harvested = harvest(data, settlement, villager.getUUID(), villager.getInventory(),
+			() -> !villager.isBaby(), () -> level.isLoaded(position),
+			() -> level.isPositionEntityTicking(position), () -> level.getBlockState(position),
+			() -> Block.getDrops(level.getBlockState(position), level, position, level.getBlockEntity(position)),
+			mature -> level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
+		if (harvested > 0) {
+			villager.swing(InteractionHand.MAIN_HAND);
+			depositForagedFood(level, data, settlement, villager);
 		}
-		BlockState state = level.getBlockState(position);
-		if (!isRipe(state)) {
-			return 0;
-		}
-		List<ItemStack> drops = Block.getDrops(state, level, position, level.getBlockEntity(position));
-		if (!level.setBlock(position, state.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL)) {
-			return 0;
-		}
-		villager.swing(InteractionHand.MAIN_HAND);
-		int harvested = 0;
-		for (ItemStack drop : drops) {
-			int produced = drop.getCount();
-			ItemStack remainder = villager.getInventory().addItem(drop);
-			int inserted = produced - remainder.getCount();
-			if (!remainder.isEmpty()) {
-				villager.spawnAtLocation(remainder);
-			}
-			if (inserted > 0) {
-				SettlementSimulationService.recordProduction(
-					villager, data, settlement, drop.getItem(), inserted, "forage"
-				);
-				harvested += inserted;
-			}
-		}
-		depositForagedFood(level, data, settlement, villager);
 		return harvested;
 	}
 

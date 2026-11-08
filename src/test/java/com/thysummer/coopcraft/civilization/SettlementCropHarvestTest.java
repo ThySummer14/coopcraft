@@ -51,7 +51,7 @@ class SettlementCropHarvestTest {
 		named.set(DataComponents.CUSTOM_NAME, Component.literal("Keep me"));
 		var output = SettlementCropHarvest.outputAfterSeed(List.of(named, new ItemStack(Items.POISONOUS_POTATO), new ItemStack(Items.POTATO, 3))).orElseThrow();
 		SimpleContainer inventory = new SimpleContainer(3);
-		assertTrue(SettlementCropHarvest.commit(inventory, output, () -> true));
+		assertTrue(SettlementHarvestCommit.commit(inventory, output, () -> true));
 		assertTrue(ItemStack.matches(named, inventory.getItem(0)));
 		assertEquals(1, inventory.countItem(Items.POISONOUS_POTATO));
 		assertEquals(4, inventory.countItem(Items.POTATO));
@@ -60,28 +60,28 @@ class SettlementCropHarvestTest {
 	@Test void capacityMustFitTheWholeBatchBeforeWorldMutation() {
 		SimpleContainer inventory = new SimpleContainer(1);
 		AtomicInteger replants = new AtomicInteger();
-		assertFalse(SettlementCropHarvest.commit(inventory, List.of(new ItemStack(Items.POTATO, 2), new ItemStack(Items.POISONOUS_POTATO)), () -> { replants.incrementAndGet(); return true; }));
+		assertFalse(SettlementHarvestCommit.commit(inventory, List.of(new ItemStack(Items.POTATO, 2), new ItemStack(Items.POISONOUS_POTATO)), () -> { replants.incrementAndGet(); return true; }));
 		assertTrue(inventory.isEmpty()); assertEquals(0, replants.get());
 	}
 
 	@Test void failedReplantNeverInsertsOutput() {
 		SimpleContainer inventory = new SimpleContainer(2);
 		inventory.setItem(0, new ItemStack(Items.POTATO, 60));
-		assertFalse(SettlementCropHarvest.commit(inventory, List.of(new ItemStack(Items.POTATO, 4)), () -> false));
+		assertFalse(SettlementHarvestCommit.commit(inventory, List.of(new ItemStack(Items.POTATO, 4)), () -> false));
 		assertEquals(60, inventory.countItem(Items.POTATO));
 	}
 
 	@Test void exactFitMergesOnlyAfterReplant() {
 		SimpleContainer inventory = new SimpleContainer(1);
 		inventory.setItem(0, new ItemStack(Items.POTATO, 60));
-		assertTrue(SettlementCropHarvest.commit(inventory, List.of(new ItemStack(Items.POTATO, 4)), () -> { assertEquals(60, inventory.countItem(Items.POTATO)); return true; }));
+		assertTrue(SettlementHarvestCommit.commit(inventory, List.of(new ItemStack(Items.POTATO, 4)), () -> { assertEquals(60, inventory.countItem(Items.POTATO)); return true; }));
 		assertEquals(64, inventory.countItem(Items.POTATO));
 	}
 
 	@Test void onlySeedCanReplantWithoutCreatingFood() {
 		var output = SettlementCropHarvest.outputAfterSeed(List.of(new ItemStack(Items.POTATO))).orElseThrow();
 		assertTrue(output.isEmpty());
-		assertTrue(SettlementCropHarvest.commit(new SimpleContainer(0), output, () -> true));
+		assertTrue(SettlementHarvestCommit.commit(new SimpleContainer(0), output, () -> true));
 	}
 
 	@Test void resourceMarksPersistAndExplicitCancellationSurvivesReload() {
@@ -178,7 +178,7 @@ class SettlementCropHarvestTest {
 			state.setSkillsEnabled(simulation);
 			SimpleContainer inventory = new SimpleContainer(2);
 			var output = SettlementCropHarvest.outputAfterSeed(List.of(new ItemStack(Items.POTATO, 5), new ItemStack(Items.POISONOUS_POTATO))).orElseThrow();
-			assertTrue(SettlementCropHarvest.commit(inventory, output, () -> true));
+			assertTrue(SettlementHarvestCommit.commit(inventory, output, () -> true));
 			assertEquals(simulation ? 4 : 0, SettlementSimulationService.recordProduction(data, settlement, actor, inventory, Items.POTATO, 4, "harvest_crop"));
 			assertEquals(1, inventory.countItem(Items.POISONOUS_POTATO));
 			assertEquals(simulation ? 0 : 4, inventory.countItem(Items.POTATO));

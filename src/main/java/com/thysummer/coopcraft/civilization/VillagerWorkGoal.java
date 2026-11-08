@@ -582,10 +582,13 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isTargetValid() {
-		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)
-			|| !level.isLoaded(target) || !level.isPositionEntityTicking(target)) {
+		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
+		if (action == Action.FORAGE) {
+			return SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
+		}
+		if (!level.isLoaded(target) || !level.isPositionEntityTicking(target)) return false;
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
 				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
@@ -594,10 +597,8 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.GATHER) {
 			return isGatherable(target);
 		}
-		if (action == Action.FORAGE || action == Action.HARVEST_CROP) {
-			return action == Action.HARVEST_CROP
-				? SettlementCropHarvest.validTarget(level, settlementData(), settlement, target)
-				: SettlementForaging.isRipe(level.getBlockState(target));
+		if (action == Action.HARVEST_CROP) {
+			return SettlementCropHarvest.validTarget(level, settlementData(), settlement, target);
 		}
 		if (action == Action.BUILD) {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
