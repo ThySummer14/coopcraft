@@ -132,6 +132,7 @@
 - 第十二增量提交 `f971cd1b` 的 [监督重载构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511159559) 已通过292项JUnit，0失败/0跳过，新增10项监督证据恢复测试与4项真实NBT/进食服务链回归；完整编译和jar打包成功。
 - 第十三增量提交 `b09f40a8` 的 [事件查询构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511478234) 已通过297项JUnit，0失败/0跳过，新增5项命令、权限、尾部读取、完整存档只读与翻译组件测试；全编译与jar打包成功。配给检查点另经只读复核，未发现本轮新增阻塞项，13项拒绝/监督专项独立回归通过。
 - 第十四增量提交 `e3465c0d` 的 [取料组件构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511980695) 已通过307项JUnit，0失败/0跳过，新增10项真实容器组件与容量回归；全编译与jar打包成功。该检查点的 [运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42511980695/artifacts/13629543875) 中只安装 `coopcraft-0.1.0.jar`，SHA-256为 `4f8716069cc0e81b491e5652f9714066dfde19cd05f6feaf48e01d37aa85e311`。
+- 存档组合回归提交 `5cfc2a3f` 的 [CI](https://github.com/ThySummer14/coopcraft/actions/runs/42513294425) 已通过310项JUnit，0失败/0跳过，及206行配给实验。新增3组真实NBT测试覆盖多家庭亲缘/技能/信任与分批库存、规范修订/开放提案/转述信息/因果索引、缺可选字段默认；每组反复加载并检查完整存档等价与守恒。没有更改游戏运行代码或存档格式。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
