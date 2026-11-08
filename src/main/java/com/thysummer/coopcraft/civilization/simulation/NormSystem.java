@@ -38,6 +38,17 @@ public final class NormSystem {
 				|| event.actors().size() < 3) {
 				continue;
 			}
+			if (event.context().containsKey(MealAllocationEvidence.KEY)) {
+				try {
+					String camp = MealAllocationEvidence.restoredCamp(world.ledger(), event);
+					for (String supervisor : event.actors().subList(1, event.actors().size())) {
+						chargedSupervision.add(event.day() + ":" + camp + ':' + supervisor);
+					}
+				} catch (IllegalArgumentException | ArithmeticException | NullPointerException invalidEvidence) {
+					// Marked records never fall back to the less specific legacy inference.
+				}
+				continue;
+			}
 			List<SimulationEvent> allocations = event.causalLinks().stream()
 				.map(world.ledger()::event).flatMap(Optional::stream)
 				.filter(cause -> cause.type() == EventType.SHARE)
@@ -230,7 +241,21 @@ public final class NormSystem {
 		return Math.min(requestedUnits, Math.max(0, remaining));
 	}
 
+	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence) {
+		if (!requester.isAlive() || !world.allPeople().contains(requester)) {
+			throw new IllegalArgumentException("Meal requester must be living and registered");
+		}
+		MealAllocationEvidence.validate(world.ledger(), world.day(), requester.id(), requester.campId(), evidence);
+		var meal = evidence.meal();
+		recordCommonAllocation(requester, meal.units(), meal.requestEventId(), meal.allocationEventId(), evidence);
+	}
+
 	public void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId, long allocationEventId) {
+		recordCommonAllocation(requester, allocatedUnits, requestEventId, allocationEventId, null);
+	}
+
+	private void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId,
+		long allocationEventId, SurvivalSystem.MealWithEvidence evidence) {
 		if (allocatedUnits <= 0) {
 			throw new IllegalArgumentException("Allocated quantity must be positive");
 		}
@@ -265,6 +290,7 @@ public final class NormSystem {
 				if (careBonus > 0) {
 					context.put("careBonus", Integer.toString(careBonus));
 				}
+				addMealEvidence(context, causes, evidence);
 				long eventId = world.recordSocialEvent(
 					compliant ? EventType.NORM_ENFORCED : EventType.NORM_VIOLATION, actors, context, causes
 				);
@@ -284,8 +310,16 @@ public final class NormSystem {
 			}
 		}
 		if (careBonus > 0 && (active.isEmpty() || dailyTotal > active.get().allocationUnitCap())) {
-			recordCareAllocation(requester, allocatedUnits, dailyTotal, requestEventId, allocationEventId);
+			recordCareAllocation(requester, allocatedUnits, dailyTotal, requestEventId, allocationEventId, evidence);
 		}
+	}
+
+	private static void addMealEvidence(Map<String, String> context, List<Long> causes,
+		SurvivalSystem.MealWithEvidence evidence) {
+		if (evidence == null) return;
+		context.put(MealAllocationEvidence.KEY, MealAllocationEvidence.VERSION);
+		context.put(MealAllocationEvidence.COUNT, Integer.toString(evidence.allocations().size()));
+		for (var allocation : evidence.allocations()) causes.add(allocation.consumptionEventId());
 	}
 
 	private int careBonus(Person person) {
@@ -303,7 +337,8 @@ public final class NormSystem {
 		int allocatedUnits,
 		int dailyTotal,
 		long requestEventId,
-		long allocationEventId
+		long allocationEventId,
+		SurvivalSystem.MealWithEvidence evidence
 	) {
 		Norm care = world.norm(requester.campId(), Norm.CARE_FIRST_COMMON_STORE).filter(Norm::isActive).orElseThrow();
 		int baseCap = world.norm(requester.campId(), Norm.NEED_FIRST_COMMON_STORE)
@@ -323,16 +358,13 @@ public final class NormSystem {
 		if (!care.revisionHistory().isEmpty()) {
 			causes.add(care.revisionHistory().getLast().eventId());
 		}
+		Map<String, String> context = new LinkedHashMap<>(Map.of(
+			"normId", care.normId(), "allocatedUnits", Integer.toString(allocatedUnits),
+			"cap", Integer.toString(effectiveCap), "careBonus", Integer.toString(care.allocationUnitCap())
+		));
+		addMealEvidence(context, causes, evidence);
 		long eventId = world.recordSocialEvent(
-			compliant ? EventType.NORM_ENFORCED : EventType.NORM_VIOLATION,
-			actors,
-			Map.of(
-				"normId", care.normId(),
-				"allocatedUnits", Integer.toString(allocatedUnits),
-				"cap", Integer.toString(effectiveCap),
-				"careBonus", Integer.toString(care.allocationUnitCap())
-			),
-			causes
+			compliant ? EventType.NORM_ENFORCED : EventType.NORM_VIOLATION, actors, context, causes
 		);
 		if (care.recordPractice(compliant)) {
 			recordDormancy(care, eventId);

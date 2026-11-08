@@ -87,7 +87,8 @@ public final class RequestOrderExperiments {
                 if (allowance == 0) continue; // No zero-limit core call or fabricated refusal.
                 long beforeUnits = units(world), beforeNutrition = world.availableNutrition(COMMON);
                 int beforeHunger = person.hunger(), offset = world.ledger().events().size();
-                var meal = survival.eatFromCommon(person, allowance);
+                var evidence = survival.eatFromCommonWithEvidence(person, allowance);
+                var meal = evidence.meal();
                 calls.merge(id, 1, Integer::sum);
                 List<SimulationEvent> events = List.copyOf(world.ledger().events().subList(offset, world.ledger().events().size()));
                 var flows = events.stream().filter(e -> e.type() == EventType.CONSUME).flatMap(e -> e.inputs().stream()).toList();
@@ -99,10 +100,20 @@ public final class RequestOrderExperiments {
                 if (meal.units() > 0) {
                     check(world.ledger().event(meal.requestEventId()).orElseThrow().type() == EventType.SHARE_REQUEST, "Request evidence missing");
                     check(world.ledger().event(meal.allocationEventId()).orElseThrow().type() == EventType.SHARE, "Allocation evidence missing");
-                    // Match the game service: one record per positive meal, using its returned
-                    // last request/allocation IDs even when the meal spans multiple batches.
+                    // Match the game service: one normative record per whole completed meal.
                     positiveMeals++;
-                    norms.recordCommonAllocation(person, meal.units(), meal.requestEventId(), meal.allocationEventId());
+                    int normOffset = world.ledger().events().size();
+                    norms.recordCommonAllocation(person, evidence);
+                    Set<Long> mealOrigins = evidence.allocations().stream()
+                        .flatMap(part -> world.ledger().traceOrigins(part.consumptionEventId()).stream())
+                        .map(SimulationEvent::eventId).collect(Collectors.toSet());
+                    for (SimulationEvent normEvent : world.ledger().events().subList(normOffset, world.ledger().events().size())) {
+                        if (normEvent.type() != EventType.NORM_ENFORCED && normEvent.type() != EventType.NORM_VIOLATION) continue;
+                        check("meal-consumption-v1".equals(normEvent.context().get("allocationEvidence")), "Whole-meal marker missing");
+                        Set<Long> recordedOrigins = world.ledger().traceOrigins(normEvent.eventId()).stream()
+                            .map(SimulationEvent::eventId).collect(Collectors.toSet());
+                        check(recordedOrigins.containsAll(mealOrigins), "Normative record lost meal origins");
+                    }
                     allocated.merge(id, meal.units(), Integer::sum);
                     nutrition.merge(id, meal.nutrition(), Long::sum);
                     if (round == 1) revisit.merge(id, meal.units(), Integer::sum);

@@ -1,6 +1,9 @@
 package com.thysummer.coopcraft.civilization.simulation;
 
 import java.util.Collection;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 public final class SurvivalSystem {
 	private static final int TARGET_HUNGER = 5;
@@ -32,12 +35,17 @@ public final class SurvivalSystem {
 	}
 
 	public MealResult eatFromCommon(Person person, int maximumUnits) {
+		return eatFromCommonWithEvidence(person, maximumUnits).meal();
+	}
+
+	public MealWithEvidence eatFromCommonWithEvidence(Person person, int maximumUnits) {
 		if (!person.isAlive() || !world.allPeople().contains(person)) {
 			throw new IllegalArgumentException("Only living registered residents can eat");
 		}
 		if (maximumUnits <= 0) {
 			throw new IllegalArgumentException("Meal unit limit must be positive");
 		}
+		List<ConsumedAllocation> allocations = new ArrayList<>();
 		long consumed = 0;
 		int units = 0;
 		long lastRequestEventId = 0;
@@ -59,12 +67,24 @@ public final class SurvivalSystem {
 			);
 			lastAllocationEventId = allocation.eventId();
 			consumed += world.consume(person.id(), allocation.batchId(), quantity, EventType.CONSUME);
+			allocations.add(new ConsumedAllocation(lastRequestEventId, lastAllocationEventId,
+				world.ledger().lastEvent().orElseThrow().eventId(), quantity));
 			units += quantity;
 		}
-		return new MealResult(consumed, units, lastRequestEventId, lastAllocationEventId);
+		return new MealWithEvidence(new MealResult(consumed, units, lastRequestEventId, lastAllocationEventId), allocations);
 	}
 
 	public record MealResult(long nutrition, int units, long requestEventId, long allocationEventId) {
+	}
+
+	public record ConsumedAllocation(long requestEventId, long allocationEventId, long consumptionEventId, int units) {
+	}
+
+	public record MealWithEvidence(MealResult meal, List<ConsumedAllocation> allocations) {
+		public MealWithEvidence {
+			Objects.requireNonNull(meal, "meal");
+			allocations = List.copyOf(allocations);
+		}
 	}
 
 	private static long unitsFor(long nutrition, long nutritionPerUnit) {

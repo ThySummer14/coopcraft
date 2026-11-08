@@ -518,16 +518,16 @@ public final class SettlementSimulationService {
 			recordFoodRefusal(data, state, person);
 			return 0;
 		}
-		SurvivalSystem.MealResult meal = survival(state).eatFromCommon(person, remainingUnits);
+		SurvivalSystem.MealWithEvidence evidence = survival(state).eatFromCommonWithEvidence(person, remainingUnits);
+		SurvivalSystem.MealResult meal = evidence.meal();
 		if (meal.units() > 0) {
+			// Consumption has already changed the world, even if bookkeeping below fails.
+			data.setDirty();
 			state.recordFoodAllocation(personId, meal.units());
 			if (state.normsEnabled()) {
-				state.norms().recordCommonAllocation(
-					person, meal.units(), meal.requestEventId(), meal.allocationEventId()
-				);
+				state.norms().recordCommonAllocation(person, evidence);
 			}
 			syncSatiety(data, settlement, state, villagerId);
-			data.setDirty();
 		}
 		return (int) Math.min(Integer.MAX_VALUE, meal.nutrition());
 	}
