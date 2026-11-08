@@ -525,7 +525,7 @@ public final class SettlementSimulationService {
 			data.setDirty();
 			state.recordFoodAllocation(personId, meal.units());
 			if (state.normsEnabled()) {
-				state.norms().recordCommonAllocation(person, evidence);
+				state.norms().recordCommonAllocation(person, evidence, state.allocatedFoodUnits(personId));
 			}
 			syncSatiety(data, settlement, state, villagerId);
 		}

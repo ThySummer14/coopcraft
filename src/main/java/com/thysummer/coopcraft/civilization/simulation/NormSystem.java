@@ -242,25 +242,44 @@ public final class NormSystem {
 	}
 
 	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence) {
+		recordMealAllocation(requester, evidence, null);
+	}
+
+	/**
+	 * Records this meal using the caller's authoritative current-day allocation total,
+	 * including this meal. Persistent adapters must not infer that total from this cache.
+	 */
+	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence, int dailyTotal) {
+		recordMealAllocation(requester, evidence, dailyTotal);
+	}
+
+	private void recordMealAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence, Integer dailyTotal) {
 		if (!requester.isAlive() || !world.allPeople().contains(requester)) {
 			throw new IllegalArgumentException("Meal requester must be living and registered");
 		}
 		MealAllocationEvidence.validate(world.ledger(), world.day(), requester.id(), requester.campId(), evidence);
 		var meal = evidence.meal();
-		recordCommonAllocation(requester, meal.units(), meal.requestEventId(), meal.allocationEventId(), evidence);
+		if (dailyTotal != null && dailyTotal < (long) meal.units()
+			+ commonAllocations.getOrDefault(world.day() + ":" + requester.id(), 0)) {
+			throw new IllegalArgumentException("Daily allocation total cannot omit this meal or previous recorded meals");
+		}
+		recordCommonAllocation(requester, meal.units(), meal.requestEventId(), meal.allocationEventId(), evidence, dailyTotal);
 	}
 
 	public void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId, long allocationEventId) {
-		recordCommonAllocation(requester, allocatedUnits, requestEventId, allocationEventId, null);
+		recordCommonAllocation(requester, allocatedUnits, requestEventId, allocationEventId, null, null);
 	}
 
 	private void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId,
-		long allocationEventId, SurvivalSystem.MealWithEvidence evidence) {
+		long allocationEventId, SurvivalSystem.MealWithEvidence evidence, Integer authoritativeDailyTotal) {
 		if (allocatedUnits <= 0) {
 			throw new IllegalArgumentException("Allocated quantity must be positive");
 		}
 		Optional<Norm> active = world.norm(requester.campId(), Norm.NEED_FIRST_COMMON_STORE).filter(Norm::isActive);
-		int dailyTotal = commonAllocations.merge(world.day() + ":" + requester.id(), allocatedUnits, Integer::sum);
+		String allocationKey = world.day() + ":" + requester.id();
+		int dailyTotal = authoritativeDailyTotal == null
+			? commonAllocations.merge(allocationKey, allocatedUnits, Integer::sum) : authoritativeDailyTotal;
+		if (authoritativeDailyTotal != null) commonAllocations.put(allocationKey, dailyTotal);
 		int careBonus = careBonus(requester);
 		if (active.isPresent()) {
 			Norm norm = active.get();
