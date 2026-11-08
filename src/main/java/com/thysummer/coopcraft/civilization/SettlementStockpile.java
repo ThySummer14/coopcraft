@@ -109,6 +109,37 @@ public final class SettlementStockpile {
 		return inserted;
 	}
 
+	/**
+	 * Moves real stacks between distinct, non-overlapping standard containers on the server thread.
+	 * Insert copies first, then deduct only accepted items; unaccepted components stay in their source slot.
+	 * As with insert, this relies on normal Container mutation semantics, without reentrant inventory edits.
+	 */
+	static int transferItem(Container source, Container target, Item item, int count) {
+		if (source == target || count <= 0) {
+			return 0;
+		}
+		int transferred = 0;
+		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
+			ItemStack stack = source.getItem(slot);
+			if (stack.isEmpty() || !stack.is(item)) {
+				continue;
+			}
+			ItemStack offered = stack.copy();
+			offered.setCount(Math.min(stack.getCount(), count - transferred));
+			int inserted = insert(target, offered);
+			if (inserted == 0) {
+				continue;
+			}
+			stack.shrink(inserted);
+			source.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+			transferred += inserted;
+		}
+		if (transferred > 0) {
+			source.setChanged();
+		}
+		return transferred;
+	}
+
 	static int depositExcessFood(Container stockpile, Container villagerInventory) {
 		return depositExcessFood(stockpile, villagerInventory, BASIC_FOOD_POINTS);
 	}

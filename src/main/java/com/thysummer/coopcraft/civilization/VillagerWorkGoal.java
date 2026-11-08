@@ -820,10 +820,9 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		if (realAvailable > 0) {
-			int removed = removeItems(stockpile, item, Math.min(missing, realAvailable));
-			int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(item, removed));
-			if (inserted < removed) {
-				SettlementStockpile.insert(stockpile, new ItemStack(item, removed - inserted));
+			int requested = Math.min(missing, realAvailable);
+			int inserted = SettlementStockpile.transferItem(stockpile, villager.getInventory(), item, requested);
+			if (inserted < requested) {
 				return false;
 			}
 			missing -= inserted;
