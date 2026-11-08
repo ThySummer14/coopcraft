@@ -87,6 +87,7 @@
 - 第五增量提交 `004ff1f9` 的 [住房反馈构建](https://github.com/ThySummer14/coopcraft/actions/runs/42506236414) 已通过209项JUnit，0失败/0跳过，含10项住房单测；新增真实床破坏与边界GameTest只编译、不运行。
 - 第六增量提交 `6244dd85` 的 [施工恢复构建](https://github.com/ThySummer14/coopcraft/actions/runs/42506923026) 已通过223项JUnit，0失败/0跳过，含9项只读就绪检查与5项诊断测试；真实施工恢复GameTest只编译、不运行。
 - 第七增量提交 `f6c56a0f` 的 [蓝图契约构建](https://github.com/ThySummer14/coopcraft/actions/runs/42507724289) 已通过238项JUnit，0失败/0跳过，含15项新增蓝图契约与重载快照测试。
+- 第八增量提交 `b4de8f9f` 的 [计划保留构建](https://github.com/ThySummer14/coopcraft/actions/runs/42508311938) 已通过240项JUnit，0失败/0跳过；main/client/test全编译与jar打包完成。最新八轮检查点的 [运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42508311938/artifacts/13628182009) 中只安装 `coopcraft-0.1.0.jar`，SHA-256为 `96ea8bfa9df4d17b5e9f921cdb9c24f0bf97ee95676a7372711bcad21f09039a`。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
