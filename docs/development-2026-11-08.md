@@ -174,6 +174,7 @@
 - 第十五增量提交 `3f8ac293` 的 [整餐来源构建](https://github.com/ThySummer14/coopcraft/actions/runs/42521368618) 已通过326项JUnit，0失败/0跳过，包括7项核心证据测试与9项服务/NBT测试。main/client/test全编译与jar打包成功，本地纯Java80项及旧恢复器源码兼容对照通过；206行配给和48行多人实验结果不变，下载的多人CSV与本地复跑逐字一致。已验证 [运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42521368618/artifacts/13633816106) 内 `coopcraft-0.1.0.jar`，SHA-256为 `846084a7e6f71ece7f9ac9ee0118044c37a91907103b73647bc747297509765e`。
 - 第十六增量提交 `4eba9f55` 的 [照料累计构建](https://github.com/ThySummer14/coopcraft/actions/runs/42522299687) 已通过337项JUnit，0失败/0跳过，新增6项核心总量测试与5项完整NBT/服务对照；main/client/test全编译与jar打包成功。本地纯Java86项全部通过，两组研究结果不变，下载的多人CSV与本地复跑逐字一致。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42522299687/artifacts/13633144628) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `9f49c9a02da49a8aab4296a25841d9fee9fa4608c084b2a8d354939f72d1eef2`。
 - 第十七增量最终提交 `c9eb82ac`（含实现 `dedbb121`）的 [蓝图版本构建](https://github.com/ThySummer14/coopcraft/actions/runs/42524569114) 已通过369项JUnit，0失败/0跳过，新增32项指纹、版本/需求兼容、旧任务接纳、NBT重载与命令权限测试；main/client/test全编译与jar打包成功。新增真实施工接纳恢复GameTest只编译、未运行。206行配给与48行多人实验CSV校验值保持不变。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42524569114/artifacts/13634967094) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `4c69a9d9113836313f1ffccce5c3f9980af5d198adb588a5dde49326af8c52ff`。
+- 第十八增量提交 `671fb113` 的 [配给权威构建](https://github.com/ThySummer14/coopcraft/actions/runs/42525665177) 已通过380项JUnit，0失败/0跳过，新增11项实际公仓tick测试覆盖8种开关组合、5种食物、三居民轮转、开关/完整NBT恢复及显式import→eat的双层守恒；main/client/test全编译与jar打包成功。新增真实箱子/村民GameTest只编译、未运行。两组实验CSV保持206行/48行且SHA-256与上轮相同。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42525665177/artifacts/13634739993) 内 `coopcraft-0.1.0.jar` 的SHA-256为 `9f4963f088d3b3035cbd919b1ba22830e382e836474bb2527d667d02b41aa634`。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
@@ -213,6 +214,8 @@
 ## 暂未覆盖
 
 完全无粮时的专门拒绝理由、跨聚落物流、生态季节、自动羊毛/燃料生产、工具耐久、整套农业和政治制度均不在本次修复中。不能把修复后的原始闭环称为完整文明模拟。
+
+另已识别而尚未修复：真实制作的`craftingMaterialCauses`按同居民/同配方的历史导出推测来源。失败尝试留在共享仓的材料若被他人用掉，原居民后续同配方成功仍可能关联旧导出；这是事件因果归属风险，未发现由此造成数量不守恒。本轮配给修复未改该链，后续应以本次实际制作回执替代历史猜测，并明确已有真实库存来源未知。
 
 ## 研究对照工具
 
