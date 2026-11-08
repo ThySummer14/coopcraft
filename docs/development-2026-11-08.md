@@ -55,6 +55,9 @@
 - 本地完整构建限制：已取得并校验官方Temurin JDK25，Gradle9.7.1/Loom1.18.4可加载；但Loom配置时探测Unix domain socket遭运行环境拒绝（`SocketException: Operation not permitted`）。正常权限审批后相同。未进入Minecraft集成源码编译。
 - 云端已通过：提交 `f4b3932e` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42503573329)，包括main/client/test编译、全部JUnit、jar打包；饱食、储备、浆果、请求去重和施工混合库存新增单测均在这轮内。
 - 第二增量提交 `ee8900d9` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42504108616) 已通过182项JUnit，0失败/0跳过，并生成jar；真实AI觅食/进食、到仓拒绝、建材制作GameTest均只编译、不运行。
+- 第三增量提交 `698eb76e` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42504742696) 已通过191项JUnit，0失败/0跳过。
+- 最终代码提交 `da4437b8` 的 [完整分支构建](https://github.com/ThySummer14/coopcraft/actions/runs/42505053956) 已通过199项JUnit，0失败/0跳过；包括main/client/test编译、发行jar和源码包。可从该构建的 [Artifacts下载](https://github.com/ThySummer14/coopcraft/actions/runs/42505053956/artifacts/13626344188) 获取，安装时只取 `coopcraft-0.1.0.jar`，不要安装sources包，也不要与旧版coopcraft重复放置。
+- 最终运行jar SHA-256：`34a481d6cd9b1628e579299648aff92def2f692eee41e34a5518de2e8d491697`。构建需要JDK25，Minecraft运行使用Java21；Minecraft 1.21.1、Fabric Loader 0.20.1+、Fabric API。先在备份存档统一测试，再用于原世界。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
