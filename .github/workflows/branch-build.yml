@@ -32,6 +32,8 @@ jobs:
           cache-read-only: true
       - name: compile and run unit tests
         run: ./gradlew build
+      - name: run pure Java ration experiments
+        run: tools/analysis/run_ration_experiments.sh "${{ runner.temp }}/coopcraft-ration-experiments.csv"
       # Branch backups are compiled without launching Minecraft or a GameTest server.
       # The existing PR/main workflow retains its separate integration checks.
       - name: capture build artifacts
@@ -46,3 +48,8 @@ jobs:
           name: coopcraft-unit-test-reports
           path: build/reports/tests/
           if-no-files-found: ignore
+      - name: capture ration experiment CSV
+        uses: actions/upload-artifact@v7
+        with:
+          name: coopcraft-ration-experiments
+          path: ${{ runner.temp }}/coopcraft-ration-experiments.csv

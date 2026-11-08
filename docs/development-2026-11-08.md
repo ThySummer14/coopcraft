@@ -131,6 +131,7 @@
 - 第十一增量提交 `c96d6ae9` 的 [拒绝依据构建](https://github.com/ThySummer14/coopcraft/actions/runs/42510788406) 已通过278项JUnit，0失败/0跳过，新增12项事件证据、NBT往返和详情投影测试；本地纯Java模拟63项回归也通过。
 - 第十二增量提交 `f971cd1b` 的 [监督重载构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511159559) 已通过292项JUnit，0失败/0跳过，新增10项监督证据恢复测试与4项真实NBT/进食服务链回归；完整编译和jar打包成功。
 - 第十三增量提交 `b09f40a8` 的 [事件查询构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511478234) 已通过297项JUnit，0失败/0跳过，新增5项命令、权限、尾部读取、完整存档只读与翻译组件测试；全编译与jar打包成功。配给检查点另经只读复核，未发现本轮新增阻塞项，13项拒绝/监督专项独立回归通过。
+- 第十四增量提交 `e3465c0d` 的 [取料组件构建](https://github.com/ThySummer14/coopcraft/actions/runs/42511980695) 已通过307项JUnit，0失败/0跳过，新增10项真实容器组件与容量回归；全编译与jar打包成功。该检查点的 [运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42511980695/artifacts/13629543875) 中只安装 `coopcraft-0.1.0.jar`，SHA-256为 `4f8716069cc0e81b491e5652f9714066dfde19cd05f6feaf48e01d37aa85e311`。
 - 按本轮约定没有启动客户端、服务端或GameTest；第一轮云端构建补齐了集成代码编译与JUnit，但不能代表实机通过。
 - 构建约束来源：[Fabric Loom 1.18.4官方源码](https://maven.fabricmc.net/net/fabricmc/fabric-loom/1.18.4/fabric-loom-1.18.4-sources.jar)。CurrentPlatform初始化直接检测UNIX socket，此版本没有可用于该初始化路径的受支持禁用属性。本轮未修改构建版本或绕过安全限制。
 
@@ -162,3 +163,7 @@
 ## 暂未覆盖
 
 完全无粮时的专门拒绝理由、跨聚落物流、生态季节、自动羊毛/燃料生产、工具耐久、整套农业和政治制度均不在本次修复中。不能把修复后的原始闭环称为完整文明模拟。
+
+## 研究对照工具
+
+在上述游戏代码检查点之外，新增 [配给微型对照实验](ration-experiments.md)：直接调用现有纯Java进食核心，跑206行单日参数对照并核对守恒、件数/营养、实际饥饿缓解、分次等价和确定性重放。分支CI同时保存CSV，不启动Minecraft。它不改变真实游戏政策，不验证存档/路径，也不以单居民结果判定群体公平。
