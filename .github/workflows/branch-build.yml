@@ -1,0 +1,48 @@
+name: branch build
+on:
+  push:
+    branches:
+      - 'feat/**'
+      - 'fix/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@v6
+      - name: validate gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+      - name: setup jdk
+        uses: actions/setup-java@v5
+        with:
+          java-version: '25'
+          distribution: 'microsoft'
+      - name: setup gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-read-only: true
+      - name: compile and run unit tests
+        run: ./gradlew build
+      # Branch backups are compiled without launching Minecraft or a GameTest server.
+      # The existing PR/main workflow retains its separate integration checks.
+      - name: capture build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: coopcraft-branch-artifacts
+          path: build/libs/
+      - name: capture unit test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coopcraft-unit-test-reports
+          path: build/reports/tests/
+          if-no-files-found: ignore
