@@ -887,7 +887,14 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean needsSticks() {
-		return !hasStonePickaxe() && availableItems(Items.STICK) < 2;
+		// Preserve auto-equipping from inventory before classifying the current main hand.
+		boolean hasPickaxe = hasStonePickaxe();
+		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
+		VillagerToolDemand.HandState handState = hasPickaxe
+			? (isPolishedPickaxe(hand) ? VillagerToolDemand.HandState.POLISHED_STONE_PICKAXE
+				: VillagerToolDemand.HandState.STONE_PICKAXE)
+			: (hand.isEmpty() ? VillagerToolDemand.HandState.EMPTY : VillagerToolDemand.HandState.OCCUPIED);
+		return VillagerToolDemand.needsSticks(handState, hasGrindingStation(), availableItems(Items.STICK));
 	}
 
 	private boolean needsCobblestone() {

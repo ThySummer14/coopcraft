@@ -10,6 +10,7 @@ import com.thysummer.coopcraft.civilization.simulation.WorkType;
 
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -21,7 +22,10 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BedPart;
 
 public final class SettlementProductionGameTest implements FabricGameTest {
 	private static final BlockPos BELL = new BlockPos(2, 0, 2);
@@ -377,6 +381,194 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		restored.world().assertConservation();
 		villager.kill();
 		helper.succeed();
+	}
+
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
+	public void workGoalReplenishesUpgradeSticksWithProductionEnabled(GameTestHelper helper) {
+		assertWorkGoalReplenishesUpgradeSticks(helper, true);
+	}
+
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
+	public void workGoalReplenishesUpgradeSticksWithProductionDisabled(GameTestHelper helper) {
+		assertWorkGoalReplenishesUpgradeSticks(helper, false);
+	}
+
+	private static void assertWorkGoalReplenishesUpgradeSticks(GameTestHelper helper, boolean productionEnabled) {
+		helper.setBlock(CHEST, Blocks.CHEST);
+		helper.setBlock(CRAFTING_TABLE, Blocks.CRAFTING_TABLE);
+		helper.setBlock(GRINDING_STATION, Blocks.STONECUTTER);
+		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		BlockPos bell = helper.absolutePos(BELL);
+		// Run with an isolated settlement: getOrCreate reuses any existing settlement within 48 blocks.
+		// Do not reset shared SavedData here or let another test's residents, stock or jobs affect this scenario.
+		helper.assertTrue(data.find(bell).isEmpty(),
+			"Tool upgrade regression requires an isolated settlement with no other settlement within 48 blocks");
+		Settlement settlement = data.getOrCreate(bell, "Tool upgrade workshop", 0);
+		data.setStockpile(settlement, helper.absolutePos(CHEST));
+		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
+		data.setGrindingStation(settlement, helper.absolutePos(GRINDING_STATION));
+		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
+		villager.setNoAi(true);
+		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
+		data.setSatiety(settlement, villager.getUUID(), 100);
+
+		// Suppress both hearth and housing demand, rather than letting either steal the only log.
+		BlockPos bed = helper.absolutePos(new BlockPos(0, 1, 0));
+		var bedState = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+		helper.getLevel().setBlock(bed.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		helper.getLevel().setBlock(bed.east().below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		helper.getLevel().setBlock(bed, bedState.setValue(BedBlock.PART, BedPart.FOOT), Block.UPDATE_CLIENTS);
+		helper.getLevel().setBlock(bed.east(), bedState.setValue(BedBlock.PART, BedPart.HEAD), Block.UPDATE_ALL);
+		helper.assertValueEqual(SettlementHousing.RegistrationResult.ADDED,
+			SettlementHousing.registerBed(helper.getLevel(), data, settlement, bed), "The workshop resident needs a real complete bed");
+		helper.assertTrue(ConstructionPlanner.materialDemands(data, settlement).isEmpty(),
+			"Neither hearth nor housing production may compete with tool upgrading");
+		helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "The workshop must not have an active build");
+
+		SettlementSimulationService.setSurvivalEnabled(helper.getLevel(), data, settlement, true);
+		SettlementSimulationService.setProductionEnabled(data, settlement, productionEnabled);
+		// Keep skill logging active in both modes so real-only crafts also have completion receipts.
+		SettlementSimulationService.setSkillsEnabled(data, settlement, true);
+		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
+		String personId = state.residentId(villager.getUUID()).orElseThrow();
+		SettlementStockpile.insert(chest, new ItemStack(Items.COBBLESTONE, 3));
+		SettlementStockpile.insert(chest, new ItemStack(Items.STICK, 2));
+		if (productionEnabled) {
+			helper.assertValueEqual(3, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.STONE, 3), "Import exactly the first pickaxe's stone");
+			helper.assertValueEqual(2, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.STICK, 2), "Import exactly the first pickaxe's sticks");
+			// A full resident still forages for an empty communal reserve; keep neighboring bushes out of this test.
+			SettlementStockpile.insert(chest, new ItemStack(Items.SWEET_BERRIES, 3));
+			helper.assertValueEqual(3, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.WILD_FRUIT, 3), "Import a real food reserve above one resident's target");
+		}
+		VillagerWorkGoal goal = new VillagerWorkGoal(villager);
+		runWorkshopAction(helper, goal, "craft", CRAFTING_TABLE);
+		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The first craft must equip a real stone pickaxe");
+		helper.assertTrue(chest.isEmpty() && villager.getInventory().isEmpty(), "The first pickaxe must consume all real inputs");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
+			"No spare sticks may remain after making the first pickaxe");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.COBBLESTONE),
+			"The first pickaxe must consume exactly three stone");
+		var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+		helper.assertValueEqual(0,
+			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
+			"The first pickaxe must still need polishing");
+
+		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG));
+		SettlementStockpile.insert(chest, new ItemStack(Items.SMOOTH_STONE, 3));
+		if (productionEnabled) {
+			helper.assertValueEqual(1, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.WOOD, 1), "Import only one log for replacement sticks");
+			helper.assertValueEqual(3, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.SMOOTH_STONE, 3), "Import only three smooth stones for polishing");
+		}
+
+		// No recipe or tool is injected: the same Goal must select stick making while already holding its pickaxe.
+		runWorkshopAction(helper, goal, "craft", CRAFTING_TABLE);
+		helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK)
+			+ (int) SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
+			"An exhausted pickaxe crafter must autonomously turn one log into eight upgrade sticks");
+		helper.assertValueEqual(0, chest.countItem(Items.OAK_LOG) + villager.getInventory().countItem(Items.OAK_LOG),
+			"The replenishment must consume the only real log");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
+			"The replenishment must consume the only abstract log");
+		runWorkshopAction(helper, goal, "polish", GRINDING_STATION);
+		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The upgraded tool must remain a real stone pickaxe");
+		helper.assertValueEqual(1,
+			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
+			"The autonomous upgrade must apply Efficiency I");
+		helper.assertValueEqual(1,
+			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)),
+			"The autonomous upgrade must apply Unbreaking I");
+		helper.assertTrue(chest.isEmpty(), "All supplied real workshop ingredients must be consumed or imported");
+		helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume three real smooth stones");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SMOOTH_STONE),
+			"Polishing must consume three abstract smooth stones");
+		helper.assertValueEqual(productionEnabled ? 0 : 6, villager.getInventory().countItem(Items.STICK),
+			"Production off must leave exactly six real sticks; production on must not duplicate them");
+		helper.assertValueEqual(productionEnabled ? 6L : 0L,
+			SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
+			"Production on must leave exactly six abstract sticks after consuming two for the upgrade");
+		helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "The upgrade must not start construction");
+
+		List<SimulationEvent> completions = state.world().ledger().events().stream()
+			.filter(event -> event.type() == EventType.CRAFT_COMPLETED).toList();
+		helper.assertValueEqual(List.of("stone_pickaxe", "sticks", "polished_stone_pickaxe"),
+			completions.stream().map(event -> event.context().get("recipe")).toList(),
+			"Exactly one initial tool, one replacement stick batch and one upgrade must complete, in order");
+		for (SimulationEvent completed : completions) {
+			String recipe = completed.context().get("recipe");
+			helper.assertValueEqual(List.of(personId), completed.actors(), "Each completion must identify the actual crafter");
+			helper.assertValueEqual("current_attempt_direct_exports", completed.context().get("provenanceScope"),
+				"Completion provenance must be bounded to the current synchronous attempt");
+			helper.assertValueEqual("unknown", completed.context().get("preexistingInventoryProvenance"),
+				"The carried tool and other preexisting inventory must not acquire invented ancestry");
+			List<Long> withdrawals = state.world().ledger().events().stream()
+				.filter(event -> event.type() == EventType.EXTERNAL_EXPORT)
+				.filter(event -> "craft".equals(event.context().get("activity")))
+				.filter(event -> recipe.equals(event.context().get("recipe")))
+				.map(SimulationEvent::eventId).toList();
+			helper.assertValueEqual(productionEnabled ? (recipe.equals("sticks") ? 1 : 2) : 0, withdrawals.size(),
+				"Only production-backed ingredients may supply material withdrawal evidence");
+			helper.assertValueEqual(withdrawals, completed.causalLinks(), "Completion must link exactly its own withdrawals");
+			helper.assertValueEqual(List.of(completed.eventId()), craftingPractice(state, recipe).causalLinks(),
+				"Crafting practice must link to this completed action");
+		}
+		if (productionEnabled) {
+			helper.assertValueEqual(3L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SWEET_BERRIES),
+				"The food reserve must remain untouched throughout the tool upgrade");
+			ResourceBatch sticks = state.world().batchesAt(state.campOwner()).stream()
+				.filter(batch -> batch.resourceType() == ResourceType.STICK).findFirst().orElseThrow();
+			SimulationEvent product = state.world().ledger().event(sticks.originEventId()).orElseThrow();
+			helper.assertValueEqual(6L, sticks.quantity(), "The same replenishment batch must retain its six unused sticks");
+			helper.assertValueEqual(List.of(craftingCompletion(state, "sticks").eventId()), product.causalLinks(),
+				"The replacement stick product must link to its own completed craft");
+			var upgradeOrigins = state.world().ledger().traceOrigins(craftingCompletion(state, "polished_stone_pickaxe").eventId());
+			helper.assertTrue(upgradeOrigins.stream().anyMatch(event -> event.eventId() == product.eventId()),
+				"Polishing must trace through the autonomously replenished stick batch");
+			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == completions.getFirst().eventId()),
+				"Polishing must not borrow completion evidence from the earlier carried pickaxe");
+		} else {
+			helper.assertTrue(state.world().batches().isEmpty(), "Production off must keep all resources real");
+		}
+
+		// Add fuel for an unwanted extra craft only after verifying all exact tool costs and the empty chest.
+		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG));
+		if (productionEnabled) {
+			helper.assertValueEqual(1, SettlementSimulationService.importFromStockpile(
+				data, settlement, chest, ResourceType.WOOD, 1), "Import one spare log for the no-demand regression");
+		}
+		List<SimulationEvent> completedLedger = List.copyOf(state.world().ledger().events());
+		helper.assertFalse(goal.canUse(), "A finished workshop must not make more sticks even with another log available");
+		helper.assertValueEqual(productionEnabled ? 0 : 1,
+			chest.countItem(Items.OAK_LOG) + villager.getInventory().countItem(Items.OAK_LOG),
+			"The spare real log must remain unused when there is no tool demand");
+		helper.assertValueEqual(productionEnabled ? 1L : 0L,
+			SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
+			"The spare abstract log must remain unused when there is no tool demand");
+		helper.assertValueEqual(6L, villager.getInventory().countItem(Items.STICK)
+			+ SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
+			"No-demand selection must not create any extra sticks");
+		helper.assertValueEqual(completedLedger, state.world().ledger().events(),
+			"No-demand selection must not append crafting or material events");
+		state.world().assertConservation();
+		villager.kill();
+		helper.succeed();
+	}
+
+	private static void runWorkshopAction(GameTestHelper helper, VillagerWorkGoal goal, String action, BlockPos station) {
+		helper.assertTrue(goal.canUse(), "The next autonomous workshop action must be selectable: " + action);
+		helper.assertValueEqual(action, goal.status().action(), "The Goal must choose the expected workshop action");
+		helper.assertValueEqual(helper.absolutePos(station), goal.status().target(), "The action must use the real registered station");
+		goal.start();
+		for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) {
+			goal.tick();
+		}
+		helper.assertFalse(goal.canContinueToUse(), "The workshop action must finish within its work budget");
 	}
 
 	private static SimulationEvent craftingEvent(SettlementSimulationState state, String recipe) {
