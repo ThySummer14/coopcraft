@@ -44,13 +44,12 @@ public final class ConstructionSystem {
 			}
 		}
 
+		// A missing plan or out-of-range index pauses the saved job without discarding progress.
 		ConstructionPlan plan = BlueprintManager.get(job.blueprintId());
 		if (plan == null) {
-			data.cancelConstruction(settlement);
 			return Optional.empty();
 		}
 		if (job.nextIndex() < 0 || job.nextIndex() >= plan.instructions().size()) {
-			data.cancelConstruction(settlement);
 			return Optional.empty();
 		}
 
