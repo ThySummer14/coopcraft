@@ -11,16 +11,19 @@ import com.thysummer.coopcraft.civilization.simulation.WorkType;
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -457,6 +460,14 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(0,
 			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
 			"The first pickaxe must still need polishing");
+		// Legal existing-tool state: upgrading is not repair or replacement with a fresh stack.
+		ItemStack originalTool = villager.getMainHandItem();
+		originalTool.set(DataComponents.CUSTOM_NAME, Component.literal("Workshop pickaxe"));
+		originalTool.setDamageValue(17);
+		originalTool.set(DataComponents.REPAIR_COST, 4);
+		CompoundTag toolMarker = new CompoundTag();
+		toolMarker.putString("workshop", "preserve-original-tool");
+		originalTool.set(DataComponents.CUSTOM_DATA, CustomData.of(toolMarker));
 
 		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG));
 		SettlementStockpile.insert(chest, new ItemStack(Items.SMOOTH_STONE, 3));
@@ -484,6 +495,16 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(1,
 			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)),
 			"The autonomous upgrade must apply Unbreaking I");
+		helper.assertValueEqual(Component.literal("Workshop pickaxe"), villager.getMainHandItem().get(DataComponents.CUSTOM_NAME),
+			"Polishing must preserve the original tool name");
+		helper.assertValueEqual(17, villager.getMainHandItem().getDamageValue(), "Polishing must not repair the old tool");
+		helper.assertValueEqual(4, villager.getMainHandItem().get(DataComponents.REPAIR_COST),
+			"Polishing must preserve the original repair cost");
+		helper.assertValueEqual(CustomData.of(toolMarker), villager.getMainHandItem().get(DataComponents.CUSTOM_DATA),
+			"Polishing must preserve arbitrary existing tool data");
+		helper.assertValueEqual(0,
+			originalTool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
+			"Preparing the upgraded copy must not mutate the old stack object");
 		helper.assertTrue(chest.isEmpty(), "All supplied real workshop ingredients must be consumed or imported");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume three real smooth stones");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SMOOTH_STONE),

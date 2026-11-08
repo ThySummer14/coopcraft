@@ -746,6 +746,7 @@ public class VillagerWorkGoal extends Goal {
 	private boolean canPolishPickaxe() {
 		return hasGrindingStation()
 			&& hasStonePickaxe()
+			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& availableItems(Items.SMOOTH_STONE) >= 3
 			&& availableItems(Items.STICK) >= 2;
@@ -754,6 +755,7 @@ public class VillagerWorkGoal extends Goal {
 	private boolean canGrindSmoothStone() {
 		return hasGrindingStation()
 			&& hasStonePickaxe()
+			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& availableItems(Items.SMOOTH_STONE) < 3
 			&& availableItems(Items.COBBLESTONE) >= 1
@@ -762,6 +764,12 @@ public class VillagerWorkGoal extends Goal {
 
 	private void craftPolishedPickaxe() {
 		if (!canPolishPickaxe()) return;
+		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+		Optional<ItemStack> polished = SettlementToolUpgrade.polish(
+			villager.getItemInHand(InteractionHand.MAIN_HAND),
+			enchantments.getHolderOrThrow(Enchantments.EFFICIENCY),
+			enchantments.getHolderOrThrow(Enchantments.UNBREAKING));
+		if (polished.isEmpty()) return;
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"polished_stone_pickaxe", Items.STONE_PICKAXE, 1);
 		if (!withdrawItems(Items.SMOOTH_STONE, 3) || !withdrawItems(Items.STICK, 2)) {
@@ -769,11 +777,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		removeItems(villager.getInventory(), Items.SMOOTH_STONE, 3);
 		removeItems(villager.getInventory(), Items.STICK, 2);
-		ItemStack polished = new ItemStack(Items.STONE_PICKAXE);
-		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
-		polished.enchant(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), 1);
-		polished.enchant(enchantments.getHolderOrThrow(Enchantments.UNBREAKING), 1);
-		villager.setItemInHand(InteractionHand.MAIN_HAND, polished);
+		villager.setItemInHand(InteractionHand.MAIN_HAND, polished.get());
 		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
 	}
 
@@ -890,7 +894,7 @@ public class VillagerWorkGoal extends Goal {
 		// Preserve auto-equipping from inventory before classifying the current main hand.
 		boolean hasPickaxe = hasStonePickaxe();
 		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
-		VillagerToolDemand.HandState handState = hasPickaxe
+		VillagerToolDemand.HandState handState = hasPickaxe && SettlementToolUpgrade.supportsPolishing(hand)
 			? (isPolishedPickaxe(hand) ? VillagerToolDemand.HandState.POLISHED_STONE_PICKAXE
 				: VillagerToolDemand.HandState.STONE_PICKAXE)
 			: (hand.isEmpty() ? VillagerToolDemand.HandState.EMPTY : VillagerToolDemand.HandState.OCCUPIED);
