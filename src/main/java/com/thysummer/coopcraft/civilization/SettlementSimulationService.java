@@ -1,5 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.ArrayList;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +18,7 @@ import com.thysummer.coopcraft.civilization.simulation.SimulationEvent;
 import com.thysummer.coopcraft.civilization.simulation.SurvivalSystem;
 import com.thysummer.coopcraft.civilization.simulation.WorkType;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -345,82 +348,132 @@ public final class SettlementSimulationService {
 		return moved;
 	}
 
-	public static boolean recordCrafting(
-		Villager villager,
-		SettlementSavedData data,
-		Settlement settlement,
-		String recipe
-	) {
+	/** Ephemeral boundary for one synchronous server-thread crafting operation, never persisted. */
+	public static final class CraftingAttempt {
+		private final SettlementSimulationState state;
+		private final com.thysummer.coopcraft.civilization.simulation.SimulationWorld world;
+		private final UUID actor;
+		private final String personId;
+		private final String recipe;
+		private final Item output;
+		private final int produced;
+		private final long watermark;
+		private boolean completed;
+
+		private CraftingAttempt(SettlementSimulationState state, UUID actor, String personId,
+			String recipe, Item output, int produced) {
+			this.state = state;
+			this.world = state == null ? null : state.world();
+			this.actor = actor;
+			this.personId = personId;
+			this.recipe = recipe;
+			this.output = output;
+			this.produced = produced;
+			this.watermark = world == null ? 0 : world.ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		}
+	}
+
+	/** Unforgeable in-memory receipt; product import must use this exact completion. */
+	public static final class CraftingCompletion {
+		private final CraftingAttempt attempt;
+		private final long eventId;
+		private boolean imported;
+
+		private CraftingCompletion(CraftingAttempt attempt, long eventId) {
+			this.attempt = attempt;
+			this.eventId = eventId;
+		}
+
+		public long eventId() {
+			return eventId;
+		}
+	}
+
+	public static CraftingAttempt beginCrafting(SettlementSavedData data, Settlement settlement,
+		UUID actor, String recipe, Item output, int produced) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
-		if (state == null || !state.survivalEnabled() || !state.productionEnabled() && !state.skillsEnabled()) {
+		String personId = state == null ? null : state.residentId(actor).orElse(null);
+		if (state == null || !state.survivalEnabled() || (!state.productionEnabled() && !state.skillsEnabled())
+			|| personId == null || !state.world().person(personId).isAlive()
+			|| !data.isMember(settlement, actor) || recipe == null || recipe.isBlank() || output == null || produced <= 0) {
+			state = null;
+		}
+		return new CraftingAttempt(state, actor, personId, recipe, output, produced);
+	}
+
+	private static boolean validCraftingAttempt(SettlementSavedData data, Settlement settlement,
+		UUID actor, CraftingAttempt attempt) {
+		if (attempt == null || attempt.state == null || !attempt.actor.equals(actor)) {
 			return false;
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		if (personId == null) {
-			return false;
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		return state == attempt.state && state.world() == attempt.world && state.survivalEnabled()
+			&& (state.productionEnabled() || state.skillsEnabled()) && data.isMember(settlement, actor)
+			&& state.residentId(actor).filter(attempt.personId::equals).isPresent()
+			&& state.world().person(attempt.personId).isAlive();
+	}
+
+	public static Optional<CraftingCompletion> recordCrafting(Villager villager, SettlementSavedData data,
+		Settlement settlement, CraftingAttempt attempt) {
+		return villager.isAlive() ? recordCrafting(data, settlement, villager.getUUID(), attempt) : Optional.empty();
+	}
+
+	static Optional<CraftingCompletion> recordCrafting(SettlementSavedData data, Settlement settlement,
+		UUID actor, CraftingAttempt attempt) {
+		if (!validCraftingAttempt(data, settlement, actor, attempt) || attempt.completed) {
+			return Optional.empty();
 		}
-		List<Long> materialCauses = craftingMaterialCauses(state.world().ledger().events(), personId, recipe);
-		long completed = state.world().recordCrafting(
-			personId, recipe, Map.of("activity", "craft", "villagerId", villager.getUUID().toString()), materialCauses
-		);
-		boolean practiced = state.skillsEnabled() && knowledge(state).practice(
-			state.world().person(personId), WorkType.CRAFT,
-			Map.of("activity", "craft", "recipe", recipe, "villagerId", villager.getUUID().toString()),
-			List.of(completed)
-		);
+		SettlementSimulationState state = attempt.state;
+		List<Long> causes = new ArrayList<>();
+		long end = state.world().ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		// Only direct exports after this attempt began. Pre-existing real inventory has unknown provenance.
+		for (long id = attempt.watermark + 1; id <= end; id++) {
+			SimulationEvent event = state.world().ledger().event(id).orElseThrow();
+			if (event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT
+				&& event.actors().equals(List.of(attempt.personId))
+				&& "craft".equals(event.context().get("activity"))
+				&& attempt.recipe.equals(event.context().get("recipe"))) {
+				causes.add(id);
+			}
+		}
+		long completed = state.world().recordCrafting(attempt.personId, attempt.recipe, Map.of(
+			"activity", "craft", "villagerId", actor.toString(),
+			"provenanceScope", "current_attempt_direct_exports", "preexistingInventoryProvenance", "unknown",
+			"outputItem", BuiltInRegistries.ITEM.getKey(attempt.output).toString(),
+			"outputCount", Integer.toString(attempt.produced)), causes);
+		attempt.completed = true;
 		data.setDirty();
-		return practiced;
+		if (state.skillsEnabled()) {
+			knowledge(state).practice(state.world().person(attempt.personId), WorkType.CRAFT,
+				Map.of("activity", "craft", "recipe", attempt.recipe, "villagerId", actor.toString()), List.of(completed));
+		}
+		return Optional.of(new CraftingCompletion(attempt, completed));
 	}
 
-	static List<Long> craftingMaterialCauses(List<SimulationEvent> events, String personId, String recipe) {
-		// Completion, not optional skill practice, closes one batch of recipe inputs.
-		long previousCompletion = events.stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.CRAFT_COMPLETED)
-			.filter(event -> event.actors().equals(List.of(personId)))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.mapToLong(SimulationEvent::eventId).max().orElse(0);
-		return events.stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT)
-			.filter(event -> event.eventId() > previousCompletion)
-			.filter(event -> event.actors().contains(personId))
-			.filter(event -> "craft".equals(event.context().get("activity")))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.map(SimulationEvent::eventId).toList();
+	public static int recordCraftedProduct(Villager villager, SettlementSavedData data, Settlement settlement,
+		CraftingCompletion completion, Item item, int inserted) {
+		return villager.isAlive() ? recordCraftedProduct(data, settlement, villager.getUUID(),
+			villager.getInventory(), completion, item, inserted) : 0;
 	}
 
-	public static int recordCraftedProduct(
-		Villager villager,
-		SettlementSavedData data,
-		Settlement settlement,
-		String recipe,
-		Item item,
-		int inserted
-	) {
-		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
-		if (state == null || !state.survivalEnabled() || !state.productionEnabled() || inserted <= 0) {
+	static int recordCraftedProduct(SettlementSavedData data, Settlement settlement, UUID actor,
+		Container inventory, CraftingCompletion completion, Item item, int inserted) {
+		if (completion == null || completion.imported || !validCraftingAttempt(data, settlement, actor, completion.attempt)) {
 			return 0;
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (personId == null || resourceType == null) {
+		CraftingAttempt attempt = completion.attempt;
+		if (inventory == null || !attempt.state.productionEnabled() || item != attempt.output || inserted <= 0 || inserted > attempt.produced) {
 			return 0;
 		}
-		long completed = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.CRAFT_COMPLETED)
-			.filter(event -> event.actors().equals(List.of(personId)))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.mapToLong(SimulationEvent::eventId)
-			.max().orElse(-1);
-		if (completed < 0) {
+		ResourceType type = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
+		if (type == null) {
 			return 0;
 		}
-		int moved = MinecraftStockpileAdapter.importToSimulation(
-			villager.getInventory(), state.world(), state.campOwner(), resourceType, inserted,
-			List.of(personId), Map.of(
-				"activity", "craft", "recipe", recipe, "villagerId", villager.getUUID().toString()
-			),
-			List.of(completed)
-		);
+		// Consume before handoff: a zero move or failure cannot authorize a later unrelated inventory.
+		completion.imported = true;
+		int moved = MinecraftStockpileAdapter.importToSimulation(inventory, attempt.world, attempt.state.campOwner(),
+			type, inserted, List.of(attempt.personId),
+			Map.of("activity", "craft", "recipe", attempt.recipe, "villagerId", actor.toString()), List.of(completion.eventId));
 		if (moved > 0) {
 			data.setDirty();
 		}

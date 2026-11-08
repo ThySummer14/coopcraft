@@ -370,6 +370,7 @@ public final class Civilization {
 			}
 		}
 		addDetail(details, "recipe", recipeLabel);
+		addCraftingDetails(details, event);
 		if ("build".equals(event.context().get("activity"))) {
 			addDetail(details, "project", event.context().get("blueprint"));
 			addDetail(details, "construction_step", event.context().get("index"));
@@ -410,6 +411,30 @@ public final class Civilization {
 		addDetail(details, "reason", event.context().containsKey("reason")
 			? "coopcraft.simulation.reason." + event.context().get("reason") : null);
 		return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType, quantity, details);
+	}
+
+	/** Historical facts only: direct export links do not describe pre-existing real inventory. */
+	private static void addCraftingDetails(
+		List<SettlementOverviewPayload.SimulationEventDetail> details,
+		SimulationEvent event
+	) {
+		if (event.type() != EventType.CRAFT_COMPLETED) return;
+		if ("current_attempt_direct_exports".equals(event.context().get("provenanceScope"))) {
+			addDetail(details, "crafting_evidence", "coopcraft.simulation.crafting.current_attempt_direct_exports");
+		}
+		if ("unknown".equals(event.context().get("preexistingInventoryProvenance"))) {
+			addDetail(details, "preexisting_inventory", "coopcraft.simulation.crafting.provenance_unknown");
+		}
+		String item = event.context().get("outputItem");
+		String count = event.context().get("outputCount");
+		if (item == null || item.isBlank() || count == null || !count.matches("[0-9]+")) return;
+		try {
+			if (Integer.parseInt(count) <= 0) return;
+		} catch (NumberFormatException ignored) {
+			return;
+		}
+		String output = item + " × " + count;
+		if (output.length() <= 96) addDetail(details, "crafting_output", output);
 	}
 
 	private static List<String> positions(NormProposal proposal, NormProposal.Position position) {

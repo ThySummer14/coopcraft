@@ -363,10 +363,13 @@ public class VillagerWorkGoal extends Goal {
 			return;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile != null && SettlementMaterialCrafting.craft(stockpile,
+		if (stockpile == null) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			currentMaterialRecipe.id(), currentMaterialRecipe.output(), currentMaterialRecipe.count());
+		if (SettlementMaterialCrafting.craft(stockpile,
 			settlementData().simulationOf(settlement).orElse(null), currentMaterialRecipe,
 			villager.getUUID(), settlementData()::setDirty)) {
-			SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, currentMaterialRecipe.id());
+			SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
 		}
 	}
 
@@ -695,7 +698,10 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private void craftPickaxe() {
-		if (!canCraftPickaxe() || !withdrawItems(Items.COBBLESTONE, 3) || !withdrawItems(Items.STICK, 2)) {
+		if (!canCraftPickaxe()) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			"stone_pickaxe", Items.STONE_PICKAXE, 1);
+		if (!withdrawItems(Items.COBBLESTONE, 3) || !withdrawItems(Items.STICK, 2)) {
 			return;
 		}
 		if (removeItems(villager.getInventory(), Items.COBBLESTONE, 3) != 3
@@ -703,21 +709,23 @@ public class VillagerWorkGoal extends Goal {
 			return;
 		}
 		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_PICKAXE));
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "stone_pickaxe");
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
 	}
 
 	private void craftSticks() {
-		if (!canCraftSticks() || !withdrawOneLog() || !removeOneLog(villager.getInventory())) {
+		if (!canCraftSticks()) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			"sticks", Items.STICK, 8);
+		if (!withdrawOneLog() || !removeOneLog(villager.getInventory())) {
 			return;
 		}
 		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.STICK, 8));
 		if (inserted < 8) {
 			villager.spawnAtLocation(new ItemStack(Items.STICK, 8 - inserted));
 		}
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "sticks");
-		SettlementSimulationService.recordCraftedProduct(
-			villager, settlementData(), settlement, "sticks", Items.STICK, inserted
-		);
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
+			SettlementSimulationService.recordCraftedProduct(
+				villager, settlementData(), settlement, completed, Items.STICK, inserted));
 	}
 
 	private boolean canCraftPickaxe() {
@@ -753,7 +761,10 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private void craftPolishedPickaxe() {
-		if (!canPolishPickaxe() || !withdrawItems(Items.SMOOTH_STONE, 3) || !withdrawItems(Items.STICK, 2)) {
+		if (!canPolishPickaxe()) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			"polished_stone_pickaxe", Items.STONE_PICKAXE, 1);
+		if (!withdrawItems(Items.SMOOTH_STONE, 3) || !withdrawItems(Items.STICK, 2)) {
 			return;
 		}
 		removeItems(villager.getInventory(), Items.SMOOTH_STONE, 3);
@@ -763,11 +774,14 @@ public class VillagerWorkGoal extends Goal {
 		polished.enchant(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), 1);
 		polished.enchant(enchantments.getHolderOrThrow(Enchantments.UNBREAKING), 1);
 		villager.setItemInHand(InteractionHand.MAIN_HAND, polished);
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "polished_stone_pickaxe");
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
 	}
 
 	private void grindSmoothStone() {
-		if (!canGrindSmoothStone() || !withdrawItems(Items.COBBLESTONE, 1)
+		if (!canGrindSmoothStone()) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			"smooth_stone", Items.SMOOTH_STONE, 1);
+		if (!withdrawItems(Items.COBBLESTONE, 1)
 			|| removeItems(villager.getInventory(), Items.COBBLESTONE, 1) != 1) {
 			return;
 		}
@@ -775,10 +789,9 @@ public class VillagerWorkGoal extends Goal {
 		if (inserted < 1) {
 			villager.spawnAtLocation(new ItemStack(Items.SMOOTH_STONE));
 		}
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "smooth_stone");
-		SettlementSimulationService.recordCraftedProduct(
-			villager, settlementData(), settlement, "smooth_stone", Items.SMOOTH_STONE, inserted
-		);
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
+			SettlementSimulationService.recordCraftedProduct(
+				villager, settlementData(), settlement, completed, Items.SMOOTH_STONE, inserted));
 	}
 
 	private String craftingRecipe() {
