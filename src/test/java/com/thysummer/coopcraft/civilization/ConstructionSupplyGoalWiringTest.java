@@ -67,7 +67,10 @@ class ConstructionSupplyGoalWiringTest {
 		assertFalse(stop.contains("ConstructionSupply"));
 		assertTrue(methods.get("chooseAction").startsWith("{if(settlementData().getStockpile(settlement).isEmpty())returnnull;"));
 		assertTrue(methods.get("findWorkSettlement").contains("ConstructionSupply.hasAny(villager.getInventory())"));
-		assertTrue(methods.get("findWorkSettlement").contains(".filter(next->!next.instruction().consume()).isPresent()"));
+		String lookup = methods.get("findWorkSettlement");
+		// Javac's AST printer may parenthesize an inferred single lambda parameter.
+		assertTrue(lookup.contains(".filter(next->!next.instruction().consume()).isPresent()")
+			|| lookup.contains(".filter((next)->!next.instruction().consume()).isPresent()"));
 		assertTrue(methods.get("tickBuildSupply").contains("if(hasReturnableSupply())deferBuildSupply()"));
 		assertTrue(methods.get("tickStoreTravel").contains("cargoApproach.attempt("));
 		assertTrue(methods.get("tickStoreTravel").contains("this::navigationSearchRegionLoaded"));
