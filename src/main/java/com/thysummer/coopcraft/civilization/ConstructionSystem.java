@@ -44,6 +44,7 @@ public final class ConstructionSystem {
 		var readiness = ConstructionStepReadiness.inspect(job, plan, stepProbe(level), false);
 		if (!readiness.ready()) return Optional.empty();
 		BlockPos position = readiness.position();
+		if (!instruction.consume()) return Optional.of(new BuildTarget(job, instruction, position));
 		Container stockpile = loadedStockpile(level, data, settlement);
 		if (stockpile == null || (instruction.consume() && ConstructionMaterials.available(stockpile, data.simulationOf(settlement).orElse(null), instruction.item()) < 1)) {
 			return Optional.empty();
@@ -134,10 +135,10 @@ public final class ConstructionSystem {
 		ConstructionInstruction instruction = target.instruction();
 		// Re-read pair and completion-bed state even when the work claim was valid earlier.
 		if (!placeIfReady(current, plan, stepProbe(level), () -> {
-			Container stockpile = loadedStockpile(level, data, settlement);
+			Container stockpile = instruction.consume() ? loadedStockpile(level, data, settlement) : null;
 			boolean firstPart = instruction.consume()
 				&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
-			return ConstructionMaterials.place(stockpile, data.simulationOf(settlement).orElse(null),
+			return ConstructionMaterials.place(stockpile, instruction.consume() ? data.simulationOf(settlement).orElse(null) : null,
 				instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
 				() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
 		})) return false;

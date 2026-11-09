@@ -384,23 +384,66 @@ public final class SimulationWorld {
 		Map<String, String> context,
 		List<Long> causalLinks
 	) {
-		validateStorageOwner(holder);
-		if (quantity <= 0) {
-			throw new IllegalArgumentException("External import must have a positive quantity");
-		}
+		validateExternalImport(resourceType, quantity, holder, actors, context, causalLinks);
 		long eventId = ledger.nextEventId();
 		ResourceBatch batch = new ResourceBatch(
-			newBatchId(), resourceType, quantity, resourceType.nutritionPerUnit(), 50, holder, holder.location(),
+			"batch-" + nextBatchId, resourceType, quantity, resourceType.nutritionPerUnit(), 50, holder, holder.location(),
 			null, eventId, Set.of(), day, expiryDay(resourceType, day), eventId
 		);
-		batches.put(batch.batchId(), batch);
 		ResourceFlow output = batchFlow(batch, quantity, null, batch.location());
 		Map<String, String> eventContext = new LinkedHashMap<>(context);
 		eventContext.put("holder", holder.toString());
-		ledger.append(new SimulationEvent(
+		SimulationEvent event = new SimulationEvent(
 			eventId, day, EventType.EXTERNAL_IMPORT, actors, List.of(), List.of(output), eventContext, causalLinks
-		));
+		);
+		ledger.append(event);
+		batches.put(batch.batchId(), batch);
+		nextBatchId++;
 		return batch;
+	}
+
+	/** Read-only preflight; the actual import validates again on the world's owning thread. */
+	public void validateExternalImport(
+		ResourceType resourceType, long quantity, StorageOwner holder,
+		List<String> actors, Map<String, String> context, List<Long> causalLinks
+	) {
+		if (resourceType == null || quantity <= 0 || holder == null) {
+			throw new IllegalArgumentException("External import requires a resource, positive quantity and storage owner");
+		}
+		validateStorageOwner(holder);
+		if (nextBatchId <= 0 || nextBatchId == Long.MAX_VALUE || batches.containsKey("batch-" + nextBatchId)) {
+			throw new IllegalArgumentException("External import requires an available batch ID");
+		}
+		validateExternalNutrition(quantity, resourceType.nutritionPerUnit());
+		validateExternalEvent(actors, context, causalLinks);
+	}
+
+	private void validateExternalNutrition(long quantity, long nutritionPerUnit) {
+		try {
+			Math.multiplyExact(quantity, nutritionPerUnit);
+		} catch (ArithmeticException exception) {
+			throw new IllegalArgumentException("External transfer exceeds representable nutrition", exception);
+		}
+	}
+
+	private void validateExternalEvent(List<String> actors, Map<String, String> context, List<Long> causalLinks) {
+		long eventId = ledger.nextEventId();
+		if (eventId <= 0 || eventId == Long.MAX_VALUE || day < 0
+			|| ledger.lastEvent().map(event -> event.day() > day).orElse(false)) {
+			throw new IllegalArgumentException("External transfer requires an available event ID and nondecreasing time");
+		}
+		// External producers are legitimate actors and need not be registered people.
+		if (actors == null || actors.stream().anyMatch(actor -> actor == null || actor.isBlank())) {
+			throw new IllegalArgumentException("External transfer actors must be nonblank");
+		}
+		if (context == null || context.entrySet().stream().anyMatch(entry ->
+			entry.getKey() == null || entry.getKey().isBlank() || entry.getValue() == null)) {
+			throw new IllegalArgumentException("External transfer context requires nonblank keys and nonnull values");
+		}
+		if (causalLinks == null || causalLinks.stream().anyMatch(link ->
+			link == null || link <= 0 || link >= eventId || ledger.event(link).isEmpty())) {
+			throw new IllegalArgumentException("External transfer causal links must reference existing earlier events");
+		}
 	}
 
 	/**
@@ -490,26 +533,41 @@ public final class SimulationWorld {
 		List<String> actors,
 		Map<String, String> context
 	) {
+		validateExternalExport(expectedHolder, batchId, quantity, actors, context);
 		ResourceBatch batch = batch(batchId);
-		if (!batch.holder().equals(expectedHolder) || quantity <= 0 || quantity > batch.quantity()) {
-			throw new IllegalArgumentException("External export exceeds the holder's batch authority");
-		}
 		long eventId = ledger.nextEventId();
 		long cause = batch.lastEventId();
 		ResourceFlow input = batchFlow(batch, quantity, batch.location(), null);
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("batchId", batchId);
+		eventContext.put("holder", expectedHolder.toString());
+		SimulationEvent event = new SimulationEvent(
+			eventId, day, EventType.EXTERNAL_EXPORT, actors, List.of(input), List.of(), eventContext, List.of(cause)
+		);
+		ledger.append(event);
 		batch.remove(quantity);
 		if (batch.quantity() == 0) {
 			batches.remove(batchId);
 		} else {
 			batch.recordEvent(eventId);
 		}
-		Map<String, String> eventContext = new LinkedHashMap<>(context);
-		eventContext.put("batchId", batchId);
-		eventContext.put("holder", expectedHolder.toString());
-		ledger.append(new SimulationEvent(
-			eventId, day, EventType.EXTERNAL_EXPORT, actors, List.of(input), List.of(), eventContext, List.of(cause)
-		));
 		return quantity;
+	}
+
+	/** Read-only preflight before external delivery; export validates again before writing. */
+	public void validateExternalExport(
+		StorageOwner expectedHolder, String batchId, long quantity, List<String> actors, Map<String, String> context
+	) {
+		if (expectedHolder == null || batchId == null || batchId.isBlank()) {
+			throw new IllegalArgumentException("External export requires a storage owner and batch ID");
+		}
+		validateStorageOwner(expectedHolder);
+		ResourceBatch batch = batch(batchId);
+		if (!batch.holder().equals(expectedHolder) || quantity <= 0 || quantity > batch.quantity()) {
+			throw new IllegalArgumentException("External export exceeds the holder's batch authority");
+		}
+		validateExternalNutrition(quantity, batch.nutritionPerUnit());
+		validateExternalEvent(actors, context, List.of(batch.lastEventId()));
 	}
 
 	public Optional<ResourceBatch> harvest(

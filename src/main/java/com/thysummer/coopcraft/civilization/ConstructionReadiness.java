@@ -17,6 +17,8 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 		var target = ConstructionStepReadiness.inspect(job, plan, probe, true);
 		BlockPos position = target.position();
 		if (!target.ready()) return result(job, total, position, target.blocker());
+		// A validated free continuation does not depend on the stockpile still existing.
+		if (!instruction.consume()) return result(job, total, position, "ready");
 		Container stockpile = probe.stockpile();
 		if (stockpile == null) {
 			return result(job, total, position, "stockpile_unavailable");

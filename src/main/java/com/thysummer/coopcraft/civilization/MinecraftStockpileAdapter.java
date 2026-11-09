@@ -14,6 +14,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+/** Single-thread, non-reentrant standard-container handoffs. Core validation happens before item mutation.
+ * Container callbacks that change world state and cross-file process crashes are outside this boundary. */
 public final class MinecraftStockpileAdapter {
 	private static final Map<Item, ResourceType> ITEM_TYPES = Map.of(
 		Items.SWEET_BERRIES, ResourceType.WILD_FRUIT,
@@ -72,6 +74,8 @@ public final class MinecraftStockpileAdapter {
 		if (requested <= 0) {
 			throw new IllegalArgumentException("Import quantity must be positive");
 		}
+		// Reject invalid ledger metadata/IDs before even inspecting the source inventory.
+		world.validateExternalImport(resourceType, requested, camp, actors, context, causalLinks);
 		int removed = removeSupportedItems(container, resourceType, requested);
 		if (removed == 0) {
 			return 0;
@@ -120,6 +124,8 @@ public final class MinecraftStockpileAdapter {
 		// A bare SimulationWorld cannot identify that clock across saves or dimensions.
 		if (resourceType.isFood()) throw new IllegalArgumentException("Food export requires MinecraftFoodAgeAdapter");
 		int amount = (int) Math.min(requested, batch.quantity());
+		// Core export validates again at commit; a rejected preflight must not rearrange the chest.
+		world.validateExternalExport(camp, batchId, amount, actors, context);
 		int inserted = SettlementStockpile.insert(container, new ItemStack(itemFor(resourceType), amount));
 		if (inserted == 0) {
 			return 0;
@@ -155,7 +161,7 @@ public final class MinecraftStockpileAdapter {
 	}
 
 	private static void validateCamp(SimulationWorld world, StorageOwner camp) {
-		if (camp.scope() != StorageOwner.Scope.CAMP) {
+		if (world == null || camp == null || camp.scope() != StorageOwner.Scope.CAMP) {
 			throw new IllegalArgumentException("Minecraft handoff requires a camp storage owner");
 		}
 		world.camp(camp.id());

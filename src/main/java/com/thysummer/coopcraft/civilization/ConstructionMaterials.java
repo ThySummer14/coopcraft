@@ -40,6 +40,10 @@ public final class ConstructionMaterials {
 		Container stockpile, SettlementSimulationState state, Item item, boolean consume,
 		ConstructionJob job, UUID villagerId, Runnable markDirty, BooleanSupplier placement
 	) {
+		// The paired first half has already paid; readiness is checked by the caller.
+		if (!consume) {
+			return placement.getAsBoolean();
+		}
 		if (stockpile == null) {
 			return false;
 		}
