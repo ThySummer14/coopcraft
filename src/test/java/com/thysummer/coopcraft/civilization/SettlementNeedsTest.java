@@ -7,6 +7,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
@@ -53,8 +55,8 @@ class SettlementNeedsTest {
 	@Test
 	void decaysEveryEligibleMemberOncePerPeriodRegardlessOfUuid() {
 		for (long settlementBits : new long[] {0, 1, -1, 599, 600, Long.MIN_VALUE, Long.MAX_VALUE}) {
-			SettlementSavedData data = new SettlementSavedData();
 			Settlement settlement = new Settlement(new UUID(0, settlementBits), BlockPos.ZERO, "Test", 0);
+			SettlementSavedData data = dataContaining(settlement);
 			List<UUID> members = List.of(new UUID(0, 0), new UUID(0, 1), new UUID(1, -1),
 				new UUID(0, Long.MIN_VALUE), new UUID(0, Long.MAX_VALUE));
 			members.forEach(id -> data.registerMember(settlement, id, 0));
@@ -101,8 +103,8 @@ class SettlementNeedsTest {
 
 	@Test
 	void simulationSurvivalDisablesRealDecayAndCanBeTurnedOff() {
-		SettlementSavedData data = new SettlementSavedData();
 		Settlement settlement = new Settlement(new UUID(0, 0), BlockPos.ZERO, "Test", 0);
+		SettlementSavedData data = dataContaining(settlement);
 		UUID member = new UUID(0, 1);
 		data.registerMember(settlement, member, 0);
 		SettlementSimulationState simulation = data.getOrCreateSimulation(settlement);
@@ -140,5 +142,14 @@ class SettlementNeedsTest {
 		assertEquals(needs, MemberNeeds.load(needs.save()));
 		assertEquals(80, MemberNeeds.DEFAULT.satiety());
 		assertThrows(IllegalArgumentException.class, () -> new MemberNeeds(101));
+	}
+
+	/** Preserve the exact UUID scheduling fixture while making it an actual registered settlement. */
+	private static SettlementSavedData dataContaining(Settlement settlement) {
+		CompoundTag tag = new SettlementSavedData().save(new CompoundTag(), null);
+		ListTag settlements = new ListTag();
+		settlements.add(settlement.save());
+		tag.put("Settlements", settlements);
+		return SettlementSavedData.load(tag, null);
 	}
 }

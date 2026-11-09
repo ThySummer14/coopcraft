@@ -140,7 +140,7 @@
 	"coopcraft.settlement.child": "%s (child)",
 	"coopcraft.settlement.more": "... and %s more resident(s)",
 	"coopcraft.settlement.empty": "No loaded villagers nearby",
-	"coopcraft.settlement.need_villagers": "At least 2 villagers within 32 blocks are required to found a settlement",
+	"coopcraft.settlement.need_villagers": "At least 2 living villagers within 32 blocks who do not belong to any settlement are required to found a settlement",
 	"coopcraft.settlement.created": "Founded %s. Right-click the bell to view its ledger.",
 	"coopcraft.settlement.created_stage": "Founded %s (%s)",
 	"coopcraft.settlement.client_required": "CoopCraft must be installed on the client to view the settlement ledger",

@@ -25,7 +25,6 @@ public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
 	private static final int DATA_VERSION = 19;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
-	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
 		SettlementSavedData::new,
 		SettlementSavedData::load,
@@ -122,29 +121,30 @@ public final class SettlementSavedData extends SavedData {
 		}
 	}
 
+	/** Retains the existing public entry point for callers that do not need the accepted roster. */
 	public void registerLoadedResidents(ServerLevel level, Settlement settlement, List<Villager> villagers) {
-		long day = level.getDayTime() / Level.TICKS_PER_DAY;
-		boolean changed = false;
-		for (Villager villager : villagers) {
-			SettlementMember existing = members.get(villager.getUUID());
-			if (existing == null || !existing.settlementId().equals(settlement.id())) {
-				members.put(villager.getUUID(), new SettlementMember(villager.getUUID(), settlement.id(), day));
-				changed = true;
-			}
-		}
+		registerAndGetLoadedResidents(level, settlement, villagers);
+	}
 
-		for (SettlementMember member : new ArrayList<>(members.values())) {
-			if (!member.settlementId().equals(settlement.id())) {
-				continue;
-			}
-			if (level.getEntity(member.villagerId()) instanceof Villager loaded
-				&& loaded.distanceToSqr(settlement.center().getCenter()) > MEMBER_RADIUS_SQUARED) {
-				members.remove(member.villagerId());
-				changed = true;
+	/** Returns only confirmed local members; scans never remove or reassign existing membership. */
+	List<Villager> registerAndGetLoadedResidents(ServerLevel level, Settlement settlement, List<Villager> villagers) {
+		if (level == null || settlement == null || villagers == null) return List.of();
+		long day = level.getDayTime() / Level.TICKS_PER_DAY;
+		List<SettlementMembership.Candidate> candidates = new ArrayList<>();
+		Map<UUID, Villager> loaded = new LinkedHashMap<>();
+		for (Villager villager : villagers) {
+			SettlementMembership.Candidate candidate = SettlementMembership.observe(level, settlement.center(), villager);
+			candidates.add(candidate);
+			if (candidate != null && candidate.loaded()) {
+				loaded.put(candidate.villagerId(), villager);
 			}
 		}
+		List<Villager> accepted = SettlementMembership.registerCandidates(this, settlement, candidates, day).stream()
+			.map(loaded::get).toList();
+		if (accepted.isEmpty()) return accepted;
+		boolean changed = false;
 		if (leaderOf(settlement).isEmpty()) {
-			Optional<Villager> leader = villagers.stream()
+			Optional<Villager> leader = accepted.stream()
 				.filter(villager -> !villager.isBaby() && isMember(settlement, villager.getUUID()))
 				.max(Comparator.comparingInt((Villager villager) -> personalityOf(settlement, villager.getUUID()).leadershipScore())
 					.thenComparingInt(villager -> personalityOf(settlement, villager.getUUID()).diligence())
@@ -155,7 +155,7 @@ public final class SettlementSavedData extends SavedData {
 			}
 		}
 		SettlementSimulationState simulation = getOrCreateSimulation(settlement);
-		for (Villager villager : villagers) {
+		for (Villager villager : accepted) {
 			changed |= simulation.mapResident(
 				villager.getUUID(), villager.isBaby(), needsOf(settlement, villager.getUUID()).satiety()
 			);
@@ -164,6 +164,7 @@ public final class SettlementSavedData extends SavedData {
 		if (changed) {
 			setDirty();
 		}
+		return accepted;
 	}
 
 	public SettlementSimulationState getOrCreateSimulation(Settlement settlement) {
@@ -177,10 +178,36 @@ public final class SettlementSavedData extends SavedData {
 		return Optional.ofNullable(simulations.get(settlement.id()));
 	}
 
-	void registerMember(Settlement settlement, UUID villagerId, long joinedDay) {
-		foodRequests.cancelResident(villagerId);
+	enum MemberRegistrationResult {
+		ADDED, ALREADY_REGISTERED, OTHER_SETTLEMENT, INVALID;
+
+		boolean accepted() { return this == ADDED || this == ALREADY_REGISTERED; }
+	}
+
+	/** Read-only preflight, also used before recording a birth in the simulation. */
+	MemberRegistrationResult memberRegistrationResult(Settlement settlement, UUID villagerId, long joinedDay) {
+		if (settlement == null || villagerId == null || joinedDay < 0
+				|| !settlement.equals(settlements.get(settlement.center()))) {
+			return MemberRegistrationResult.INVALID;
+		}
+		SettlementMember existing = members.get(villagerId);
+		if (existing == null) return MemberRegistrationResult.ADDED;
+		return existing.settlementId().equals(settlement.id())
+			? MemberRegistrationResult.ALREADY_REGISTERED : MemberRegistrationResult.OTHER_SETTLEMENT;
+	}
+
+	/** Join only. Repeated registration preserves identity, needs, and outstanding work tickets. */
+	MemberRegistrationResult registerMember(Settlement settlement, UUID villagerId, long joinedDay) {
+		MemberRegistrationResult result = memberRegistrationResult(settlement, villagerId, joinedDay);
+		if (result != MemberRegistrationResult.ADDED) return result;
 		members.put(villagerId, new SettlementMember(villagerId, settlement.id(), joinedDay));
 		setDirty();
+		return result;
+	}
+
+	/** Includes claims whose settlement record is missing; read-only and dimension-local. */
+	public boolean isRegistered(UUID villagerId) {
+		return villagerId != null && members.containsKey(villagerId);
 	}
 
 	public boolean isMember(Settlement settlement, UUID villagerId) {

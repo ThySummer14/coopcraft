@@ -167,25 +167,45 @@ public final class SettlementSimulationService {
 	}
 
 	public static boolean recordBirth(ServerLevel level, Villager firstParent, Villager secondParent, Villager child) {
-		if (firstParent.isBaby() || secondParent.isBaby() || !child.isBaby()) {
+		if (level == null || firstParent == null || secondParent == null || child == null
+				|| firstParent.level() != level || secondParent.level() != level || child.level() != level
+				|| !firstParent.isAlive() || firstParent.isRemoved() || !secondParent.isAlive() || secondParent.isRemoved()
+				|| !child.isAlive() || child.isRemoved() || firstParent.isBaby() || secondParent.isBaby() || !child.isBaby()) {
 			return false;
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
-		Settlement settlement = data.all().stream()
-			.filter(candidate -> data.isMember(candidate, firstParent.getUUID()))
-			.filter(candidate -> data.isMember(candidate, secondParent.getUUID()))
-			.findFirst()
+		Settlement settlement = data.findSettlementForVillager(firstParent.getUUID())
 			.orElse(null);
-		if (settlement == null) {
+		if (!recordBirth(data, settlement, firstParent.getUUID(), secondParent.getUUID(), child.getUUID(), currentDay(level))) {
 			return false;
 		}
-		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		if (!state.mapResidentWithParents(child.getUUID(), data.needsOf(settlement, child.getUUID()).satiety(),
-			firstParent.getUUID(), secondParent.getUUID())) {
-			return false;
-		}
-		data.registerMember(settlement, child.getUUID(), currentDay(level));
 		VillagerNames.assignIfAbsent(data, settlement, child);
+		return true;
+	}
+
+	/** Only an unregistered newborn may enter here; never invent kinship for an existing claim. */
+	static boolean recordBirth(SettlementSavedData data, Settlement settlement, UUID firstParentId,
+			UUID secondParentId, UUID childId, long joinedDay) {
+		if (data == null || firstParentId == null || secondParentId == null || childId == null
+				|| firstParentId.equals(secondParentId) || childId.equals(firstParentId) || childId.equals(secondParentId)
+				|| data.memberRegistrationResult(settlement, childId, joinedDay) != SettlementSavedData.MemberRegistrationResult.ADDED
+				|| !data.isMember(settlement, firstParentId) || !data.isMember(settlement, secondParentId)) {
+			return false;
+		}
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || state.residentId(childId).isPresent()) return false;
+		String firstPersonId = state.residentId(firstParentId).orElse(null);
+		String secondPersonId = state.residentId(secondParentId).orElse(null);
+		if (firstPersonId == null || secondPersonId == null
+				|| !state.world().person(firstPersonId).canMakeDecisions()
+				|| !state.world().person(secondPersonId).canMakeDecisions()) {
+			return false;
+		}
+		// The server-thread preflight above covers both join rejection and all mapping preconditions.
+		if (!state.mapResidentWithParents(childId, data.needsOf(settlement, childId).satiety(), firstParentId, secondParentId)) {
+			return false;
+		}
+		data.registerMember(settlement, childId, joinedDay);
 		data.setDirty();
 		return true;
 	}

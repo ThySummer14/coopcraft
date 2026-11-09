@@ -175,15 +175,17 @@ public final class Civilization {
 		if (existing.isPresent()) {
 			settlement = existing.get();
 		} else {
-			if (findResidents(serverLevel, pos, FOUNDING_RADIUS).size() < MIN_FOUNDERS) {
+			List<SettlementMembership.Candidate> candidates = findResidents(serverLevel, pos, FOUNDING_RADIUS).stream()
+				.map(villager -> SettlementMembership.observe(serverLevel, pos, villager)).toList();
+			if (SettlementMembership.unclaimedFounders(data, candidates).size() < MIN_FOUNDERS) {
 				serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.need_villagers"), true);
 				return InteractionResult.SUCCESS;
 			}
 			settlement = data.getOrCreate(serverLevel, pos);
 		}
 
-		List<Villager> residents = findResidents(serverLevel, settlement.center(), RESIDENT_RADIUS);
-		data.registerLoadedResidents(serverLevel, settlement, residents);
+		List<Villager> residents = data.registerAndGetLoadedResidents(serverLevel, settlement,
+			findResidents(serverLevel, settlement.center(), RESIDENT_RADIUS));
 		SettlementStage stage = SettlementStages.initialize(serverLevel, data, settlement, residents);
 		if (created) {
 			serverPlayer.sendSystemMessage(Component.translatable(

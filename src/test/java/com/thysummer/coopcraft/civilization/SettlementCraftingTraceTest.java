@@ -220,6 +220,7 @@ class SettlementCraftingTraceTest {
 		assertTrue(f.events().isEmpty());
 		f.state.setSurvivalEnabled(true, 0);
 		Settlement another = f.data.getOrCreate(new BlockPos(1000, 0, 0), "Another", 0);
+		f.data.removeMember(ALICE);
 		f.data.registerMember(another, ALICE, 0);
 		assertTrue(SettlementSimulationService.recordCrafting(f.data, f.settlement, ALICE, attempt).isEmpty());
 		assertTrue(f.events().isEmpty());

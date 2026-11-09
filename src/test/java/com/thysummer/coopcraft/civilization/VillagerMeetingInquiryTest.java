@@ -203,7 +203,10 @@ class VillagerMeetingInquiryTest {
 				case "negative-day" -> day = -1;
 				case "missing-member" -> f.data.removeMember(resident);
 				case "missing-mapping" -> { resident = id(99); f.data.registerMember(f.settlement, resident, 0); }
-				case "wrong-membership" -> f.data.registerMember(f.data.getOrCreate(new BlockPos(500, 0, 0), "Other", 0), resident, 0);
+				case "wrong-membership" -> {
+					f.data.removeMember(resident);
+					f.data.registerMember(f.data.getOrCreate(new BlockPos(500, 0, 0), "Other", 0), resident, 0);
+				}
 				case "stale-settlement" -> target = new Settlement(f.settlement.id(), f.settlement.center(), "Stale copy", 0);
 			}
 			CompoundTag saved = save(f);

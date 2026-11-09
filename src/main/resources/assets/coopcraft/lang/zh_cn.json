@@ -140,7 +140,7 @@
 	"coopcraft.settlement.child": "%s（幼年）",
 	"coopcraft.settlement.more": "……以及另外 %s 位居民",
 	"coopcraft.settlement.empty": "附近暂时没有已加载的村民",
-	"coopcraft.settlement.need_villagers": "附近 32 格内至少需要 2 名村民才能建立聚落",
+	"coopcraft.settlement.need_villagers": "附近 32 格内至少需要 2 名尚未归属任何聚落的存活村民才能建立聚落",
 	"coopcraft.settlement.created": "已建立聚落：%s。右击钟可查看名册。",
 	"coopcraft.settlement.created_stage": "已建立聚落：%s（%s）",
 	"coopcraft.settlement.client_required": "需要安装 CoopCraft 客户端才能查看聚落名册",
