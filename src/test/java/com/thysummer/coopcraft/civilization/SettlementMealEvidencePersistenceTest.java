@@ -1,5 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.AbstractCollection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -213,16 +215,20 @@ class SettlementMealEvidencePersistenceTest {
 	void failedNormRecordingStillMarksAlreadyConsumedFoodForSaving() {
 		Fixture f = fixture(false);
 		stock(f, ResourceType.FISH, 1, ResourceType.TUBERS, 2);
-		// Controlled invalid norm fixture: supervisor lookup fails inside norm recording,
-		// after the real meal and quota update, without mocking any production API.
-		Set<String> missingSupervisor = Set.of("missing-meal-supervisor");
-		f.state().world().registerNorm(new Norm(Norm.NEED_FIRST_COMMON_STORE, f.state().campOwner().id(), 3,
-			missingSupervisor, Set.of(), missingSupervisor, 50, Norm.Status.ACTIVE, List.of()));
+		// Fail candidate traversal inside norm recording, after the real meal and quota update.
+		// Missing supporter IDs are safely ignored and must not be used to inject this fault.
+		var failingCandidates = new AbstractCollection<Person>() {
+			@Override public int size() { return 1; }
+			@Override public Iterator<Person> iterator() {
+				throw new IllegalStateException("controlled candidate traversal failure");
+			}
+		};
 		int before = f.events().size();
 		f.data().setDirty(false);
 		assertFalse(f.data().isDirty());
-		IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> f.eat(REQUESTER));
-		assertTrue(error.getMessage().contains("missing-meal-supervisor"));
+		IllegalStateException error = assertThrows(IllegalStateException.class,
+			() -> SettlementSimulationService.eat(f.data(), f.settlement(), REQUESTER, failingCandidates));
+		assertEquals("controlled candidate traversal failure", error.getMessage());
 		assertTrue(f.data().isDirty());
 		assertEquals(before + 6, f.events().size());
 		assertEquals(2, f.events().stream().filter(event -> event.type() == EventType.CONSUME).count());
@@ -232,6 +238,29 @@ class SettlementMealEvidencePersistenceTest {
 		assertEquals(0, f.state().world().availableNutrition(f.state().campOwner()));
 		f.state().world().assertConservation();
 		// This is persistence protection, not transactional rollback or completion of syncSatiety.
+	}
+
+	@Test
+	void missingSupporterDoesNotExecuteOrInterruptConsumedMealPersistence() {
+		Fixture f = fixture(false);
+		stock(f, ResourceType.FISH, 1, ResourceType.TUBERS, 2);
+		Set<String> supporters = Set.of(f.person(SUPERVISOR).id(), "missing-meal-supervisor");
+		f.state().world().registerNorm(new Norm(Norm.NEED_FIRST_COMMON_STORE, f.state().campOwner().id(), 3,
+			supporters, Set.of(), supporters, 50, Norm.Status.ACTIVE, List.of()));
+		f.data().setDirty(false);
+		assertEquals(68, f.eat(REQUESTER));
+		assertTrue(f.data().isDirty());
+		assertTrue(f.normEvents().isEmpty());
+		assertEquals(0, f.person(SUPERVISOR).socialHours());
+		assertEquals(50, f.state().world().norm(f.state().campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
+			.orElseThrow().stability());
+		assertEquals(68, f.data().needsOf(f.settlement(), REQUESTER).satiety());
+		assertEquals(32, f.person(REQUESTER).hunger());
+		assertEquals(3, f.state().allocatedFoodUnits(f.person(REQUESTER).id()));
+		assertEquals(2, f.events().stream().filter(event -> event.type() == EventType.CONSUME).count());
+		assertEquals(0, f.state().world().availableNutrition(f.state().campOwner()));
+		f.state().world().assertConservation();
+		reloadUnchanged(f);
 	}
 
 	private static Fixture fixture(boolean child) {
