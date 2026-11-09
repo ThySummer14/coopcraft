@@ -366,3 +366,7 @@
 - 身份与取消：绑定data/state、成员对象、居民映射、核心日/游戏日、模式版本、仓库重绑定token和真实单双箱结构/方块实体；桶盖开合例外。模式关开、仓库A→B→A、成员移出再登记、卸载/重载均不能续用旧票。邀请者离线、死亡、换维度或离开聚落范围亦取消。新token与ticket均不写NBT，DataVersion仍19。
 - 导航边界：赴会start停止遗留导航，创建路径前预检搜索区域已加载，路径要求可达且节点loaded/entity-ticking，旅行或站位失效取消而不传送。普通stop保留尚待执行的邀请，ATTEND停止或被抢占取消；不改变普通工作的原有优先级/健康政策。没有自动全村召集、自动召开、现场监管或玩家代投票。
 - 自动化针对共享核心/实体门禁、固定时限、取消与身份失效、完整NBT/dirty/守恒及知情/工时不变、双语状态；它不执行真实World、交互回调、Villager Goal/Brain或路径。实际墙体阻路、工作完成后赴会、进食优先、箱体/区块变化和多人到场仍按聚落命令文档统一实测。未启动Minecraft客户端、服务器或GameTest。
+
+- 导航静态核查：使用[Mojang官方1.21.1元数据](https://piston-meta.mojang.com/v1/packages/82ba6501da174a665c1787775f946487422f2432/1.21.1.json)对应server jar与mappings，只读取字节码，未运行游戏。原版createPath(BlockPos,int)搜索半径为 `(int)((float)FOLLOW_RANGE + 8)`，以居民位置为中心，现前检 `ceil(FOLLOW_RANGE)+16` 在有限0–256属性范围内覆盖。PathNavigationRegion与GroundPathNavigation调用getChunkNow，服务端实现读取已有FULL chunk而不创建；这只确认原版调用链，不保证第三方导航/mixin或所有间接世界回调。实际寻路仍须游戏验收。
+
+- 验证完成：代码提交 `9cced73f` 的[赴会邀请构建](https://github.com/ThySummer14/coopcraft/actions/runs/42549532966)已通过完整build和602项JUnit，0失败/0跳过，新增20项邀请生命周期回归全过。206行配给与48行多人顺序CSV同最终源码的本地独立复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42549532966/artifacts/13644658280)内 `coopcraft-0.1.0.jar` 为741200字节，SHA-256 `dbad56b50efeed22b730abfe3cd476773c27394960b7cd9d45dabe4ae8a9ad8e`。没有启动Minecraft客户端、服务器或GameTest；上述JUnit只验证共享生命周期与门禁，真实实体寻路、Goal/Brain竞争、现场交互及聊天显示仍待用户统一验收。
