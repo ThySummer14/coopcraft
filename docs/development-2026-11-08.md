@@ -416,3 +416,5 @@
 - 审查发现并修正关闭revision不递增导致客户端忽略CLOSE，以及未来/倒退ack、可变/隐形超大Component和等待文案遮挡。静态API与单元接缝不能代替实际Mixin、渲染或联机时序；没有启动Minecraft客户端、服务器或GameTest。
 
 - 新增28项JUnit源码：6项服务端会话/Registry、5项场景与成员门禁/真实赠粮服务守恒、6项codec、8项客户端接收状态机、3项明确邀请。服务端实际包handler、Screen绘制和真实World仍不由这些纯接缝代验；本地两组纯Java实验再次复跑，最终完整build/JUnit以下方CI记录为准。
+
+- 验证完成：代码提交 `3910edd1` 的[独立居民GUI构建](https://github.com/ThySummer14/coopcraft/actions/runs/42557603689)已通过完整build和671项JUnit，0失败/0跳过，新增28项回归全过。206行配给与48行多人顺序CSV同最终核心源码本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42557603689/artifacts/13647344061)内 `coopcraft-0.1.0.jar` 为818924字节，SHA-256 `6d264e44a03d5a78bb4f419ea453a15d1863932113b72e0965d535cccd835e58`。没有启动Minecraft客户端、服务器或GameTest；实际窗口排版、Mixin应用、服务端包handler与联机时序、重要物品和非成员原版交互仍待用户统一验收。
