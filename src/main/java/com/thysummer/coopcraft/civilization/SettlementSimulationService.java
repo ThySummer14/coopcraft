@@ -641,6 +641,8 @@ public final class SettlementSimulationService {
 			// Consumption has already changed the world, even if bookkeeping below fails.
 			data.setDirty();
 			state.recordFoodAllocation(personId, meal.units());
+			com.thysummer.coopcraft.civilization.simulation.CommonMealInterruption.recordIfNeeded(
+				state.world(), person, evidence, state.allocatedFoodUnits(personId), state.dailyFoodUnitCap(personId));
 			if (state.normsEnabled()) {
 				state.norms().recordCommonAllocation(person, evidence, state.allocatedFoodUnits(personId));
 			}

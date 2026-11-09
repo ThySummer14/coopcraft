@@ -82,11 +82,20 @@ final class ResidentMeetingView {
 			lines.add(command("meeting_day_pending"));
 		lines.add(SettlementCommands.rationMessage(new SettlementCommands.RationRow(name, row)));
 		lines.add(command("rations_explanation"));
-		SettlementFoodAccess.inspect(data, settlement, resident, gameDay).ifPresent(access -> {
+		var refusal = SettlementFoodAccess.inspect(data, settlement, resident, gameDay);
+		refusal.ifPresent(access -> {
 			lines.add(message("quota_refusal", access.coreDay(), access.refusalEventId(),
 				access.refusedAllocatedUnits(), access.refusedCap()));
 			lines.add(message("quota_refusal_context", access.refusedHunger(), access.refusedAvailableNutrition()));
 			lines.add(message("quota_retry_" + access.status().name().toLowerCase(Locale.ROOT)));
+		});
+		// Keep the existing three-line evidence budget; a recorded quota refusal takes precedence.
+		if (refusal.isEmpty()) SettlementFoodRestock.inspect(data, settlement, resident, gameDay).ifPresent(access -> {
+			var evidence = access.evidence();
+			lines.add(message("meal_interrupted", evidence.coreDay(), evidence.eventId(),
+				evidence.allocatedUnits(), evidence.cap()));
+			lines.add(message("meal_interrupted_context", evidence.hunger()));
+			lines.add(message("meal_retry_" + access.status().name().toLowerCase(Locale.ROOT)));
 		});
 		lines.addAll(foodDayHistory(data, settlement, resident));
 		return List.copyOf(lines);

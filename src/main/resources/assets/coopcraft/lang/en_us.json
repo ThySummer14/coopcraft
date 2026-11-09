@@ -498,5 +498,14 @@
 	"coopcraft.resident_dialog.quota_retry_allowance_spent": "The enlarged daily allowance is also exhausted. The old refusal cannot grant repeated extra meals.",
 	"coopcraft.resident_dialog.quota_retry_no_food": "The allowance is larger, but the common store has no available food nutrition. Another attempt awaits food.",
 	"coopcraft.resident_dialog.food_day_history": "Through observed core day %s, %s consecutive day ends still met the eating threshold (hunger ≥ %s). Absent or paused days are not filled in.",
-	"coopcraft.resident_dialog.current_grievance": "Current grievance: %s/100. It contributes to existing proposals and opinions; it does not fix a vote."
+	"coopcraft.resident_dialog.current_grievance": "Current grievance: %s/100. It contributes to existing proposals and opinions; it does not fix a vote.",
+	"coopcraft.resident_dialog.meal_interrupted": "Same core day %s, interrupted meal #%s: %s/%s daily units had been allocated, with allowance still available.",
+	"coopcraft.resident_dialog.meal_interrupted_context": "Frozen evidence: hunger was %s and common food ran out after eating. This is not a quota refusal and does not itself change trust or grievance.",
+	"coopcraft.resident_dialog.meal_retry_ready": "Food is available again and the recorded meal is unfinished. A trip may resume under the current allowance; arrival, queue and final stock checks still apply.",
+	"coopcraft.resident_dialog.meal_retry_day_pending": "Continuation awaits settlement of the current game day. An old core-day meal cannot grant early food.",
+	"coopcraft.resident_dialog.meal_retry_survival_disabled": "Survival mapping is off. This interrupted meal does not trigger an eating attempt.",
+	"coopcraft.resident_dialog.meal_retry_satisfied": "The eating target is already met. This old interruption does not trigger more eating.",
+	"coopcraft.resident_dialog.meal_retry_allocation_changed": "Allocations have changed since this interrupted meal. Its old evidence cannot trigger another attempt.",
+	"coopcraft.resident_dialog.meal_retry_allowance_spent": "No current allowance remains. Restocking does not create additional daily units.",
+	"coopcraft.resident_dialog.meal_retry_no_food": "The common store still has no food nutrition. The unfinished meal awaits a real restock."
 }

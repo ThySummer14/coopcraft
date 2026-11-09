@@ -498,5 +498,14 @@
 	"coopcraft.resident_dialog.quota_retry_allowance_spent": "提高后的当日份额也已用尽，不能凭旧拒绝记录反复补领。",
 	"coopcraft.resident_dialog.quota_retry_no_food": "当前份额已有增加，但公仓没有可用食物营养；有粮后才会再次尝试。",
 	"coopcraft.resident_dialog.food_day_history": "截至观察核心日%s，记录中连续%s个相邻日终仍达到主动进食阈值（饥饿≥%s）；缺席或暂停的日子不补算。",
-	"coopcraft.resident_dialog.current_grievance": "当前不满%s/100，参与既有提案与意见计算；这不是固定投票结果。"
+	"coopcraft.resident_dialog.current_grievance": "当前不满%s/100，参与既有提案与意见计算；这不是固定投票结果。",
+	"coopcraft.resident_dialog.meal_interrupted": "同一核心日 %s，中断餐 #%s：当时已领 %s/%s 件，仍有日额度。",
+	"coopcraft.resident_dialog.meal_interrupted_context": "冻结记录：餐后饥饿为 %s，公粮已耗尽。这不是额度拒绝，本身不改变信任或不满。",
+	"coopcraft.resident_dialog.meal_retry_ready": "公粮已有补充，这餐仍未完成，可按当前额度重新出发；仍须到仓、排队并通过最终库存检查。",
+	"coopcraft.resident_dialog.meal_retry_day_pending": "须先完成当前游戏日的日结，旧核心日的餐不能提前领取新一天食物。",
+	"coopcraft.resident_dialog.meal_retry_survival_disabled": "生存映射已关闭，这条中断记录不会触发进食。",
+	"coopcraft.resident_dialog.meal_retry_satisfied": "已达到进食目标，这条旧中断记录不会触发额外进食。",
+	"coopcraft.resident_dialog.meal_retry_allocation_changed": "已领数量已改变，这条旧餐记录不能再触发补吃。",
+	"coopcraft.resident_dialog.meal_retry_allowance_spent": "当前已无剩余额度，补货不会增加每日可领件数。",
+	"coopcraft.resident_dialog.meal_retry_no_food": "公仓仍无可用食物营养，这餐需等待实际补货。"
 }

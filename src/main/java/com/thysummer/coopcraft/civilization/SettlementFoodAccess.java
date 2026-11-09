@@ -17,7 +17,9 @@ final class SettlementFoodAccess {
 		long gameDay, int satiety, boolean foodAvailable) {
 		return (satiety <= SettlementNeeds.HUNGRY_AT && foodAvailable)
 			|| SettlementSimulationService.hasPendingFoodRefusal(data, settlement, residentId)
-			|| (foodAvailable && inspect(data, settlement, residentId, gameDay).map(Snapshot::canResume).orElse(false));
+			|| (foodAvailable && (inspect(data, settlement, residentId, gameDay).map(Snapshot::canResume).orElse(false)
+				|| SettlementFoodRestock.inspect(data, settlement, residentId, gameDay)
+					.map(SettlementFoodRestock.Snapshot::canResume).orElse(false)));
 	}
 
 	static Optional<Snapshot> inspect(SettlementSavedData data, Settlement settlement, UUID residentId, long gameDay) {
