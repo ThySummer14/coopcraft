@@ -140,6 +140,31 @@ class SettlementConstructionCommandsTest {
 	}
 
 	@Test
+	void pairBlockersAreRenderedReadOnlyAndHaveBothTranslations() throws Exception {
+		var statuses = List.of("pair_invalid", "target_out_of_bounds", "pair_out_of_bounds",
+			"pair_not_ticking", "pair_occupied", "pair_changed");
+		for (String status : statuses) {
+			var snapshot = new ConstructionReadiness(ConstructionPlanner.TIMBER_SIDE_PORCH_CABIN,
+				99, 154, new BlockPos(10, 65, 3), status);
+			var args = translation(SettlementCommands.constructionMessage(snapshot)).getArgs();
+			assertEquals(99, args[1]);
+			assertEquals(154, args[2]);
+			assertEquals("10, 65, 3", args[3]);
+			assertEquals("coopcraft.interaction.blocker.construction_" + status,
+				translation((Component) args[4]).getKey());
+			for (String language : List.of("en_us", "zh_cn")) {
+				try (var input = getClass().getResourceAsStream("/assets/coopcraft/lang/" + language + ".json")) {
+					assertNotNull(input);
+					var json = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
+					String text = json.get("coopcraft.interaction.blocker.construction_" + status).getAsString();
+					assertFalse(text.isBlank());
+					assertFalse(text.contains("%s"));
+				}
+			}
+		}
+	}
+
+	@Test
 	void allConstructionMessagesHaveBothTranslationsAndCorrectArgumentCounts() throws Exception {
 		for (String language : List.of("en_us", "zh_cn")) {
 			try (var input = getClass().getResourceAsStream("/assets/coopcraft/lang/" + language + ".json")) {

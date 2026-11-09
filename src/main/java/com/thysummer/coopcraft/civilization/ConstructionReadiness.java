@@ -14,17 +14,9 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 			return result(job, total, null, compatibility);
 		}
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
-		BlockPos position = job.origin().offset(instruction.offset());
-		// Do not probe block states, entities or containers before the target is known to be ticking.
-		if (!probe.ticking(position)) {
-			return result(job, total, position, "target_not_ticking");
-		}
-		if (!probe.air(position)) {
-			return result(job, total, position, "target_occupied");
-		}
-		if (probe.entityObstructed(position)) {
-			return result(job, total, position, "entity_obstructed");
-		}
+		var target = ConstructionPairReadiness.inspect(job, plan, probe, true);
+		BlockPos position = target.position();
+		if (!target.ready()) return result(job, total, position, target.blocker());
 		Container stockpile = probe.stockpile();
 		if (stockpile == null) {
 			return result(job, total, position, "stockpile_unavailable");
@@ -64,10 +56,7 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 	}
 
 	/** Read operations only, allowing the ordering and short-circuit behavior to be tested without a level. */
-	interface Probe {
-		boolean ticking(BlockPos position);
-		boolean air(BlockPos position);
-		boolean entityObstructed(BlockPos position);
+	interface Probe extends ConstructionPairReadiness.Probe {
 		Container stockpile();
 		SettlementSimulationState simulation();
 	}

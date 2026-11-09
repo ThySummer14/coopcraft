@@ -52,11 +52,9 @@ public final class ConstructionSystem {
 		}
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
-		BlockPos position = job.origin().offset(instruction.offset());
-		if (!level.isLoaded(position) || !level.isPositionEntityTicking(position)
-			|| !level.getBlockState(position).isAir()) {
-			return Optional.empty();
-		}
+		var readiness = ConstructionPairReadiness.inspect(job, plan, pairProbe(level), false);
+		if (!readiness.ready()) return Optional.empty();
+		BlockPos position = readiness.position();
 		Container stockpile = loadedStockpile(level, data, settlement);
 		if (stockpile == null || (instruction.consume() && ConstructionMaterials.available(stockpile, data.simulationOf(settlement).orElse(null), instruction.item()) < 1)) {
 			return Optional.empty();
@@ -73,13 +71,18 @@ public final class ConstructionSystem {
 		return data.getConstructionJob(settlement).map(job -> ConstructionReadiness.inspect(
 			job, BlueprintManager.get(job.blueprintId()), new ConstructionReadiness.Probe() {
 				@Override
+				public boolean inBounds(BlockPos position) {
+					return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
+				}
+
+				@Override
 				public boolean ticking(BlockPos position) {
 					return level.isLoaded(position) && level.isPositionEntityTicking(position);
 				}
 
 				@Override
-				public boolean air(BlockPos position) {
-					return level.getBlockState(position).isAir();
+				public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
+					return level.getBlockState(position);
 				}
 
 				@Override
@@ -118,24 +121,15 @@ public final class ConstructionSystem {
 			return false;
 		}
 		ConstructionInstruction instruction = target.instruction();
-		if (!level.isLoaded(target.position()) || !level.isPositionEntityTicking(target.position())
-			|| !level.getEntitiesOfClass(LivingEntity.class, new AABB(target.position()),
-				entity -> entity.isAlive() && !entity.isSpectator()).isEmpty()) {
-			return false;
-		}
-		// Player blocks, even identical states, pause the existing job without consuming or skipping.
-		if (!level.getBlockState(target.position()).isAir()) {
-			return false;
-		}
-
-		Container stockpile = loadedStockpile(level, data, settlement);
-		boolean firstPart = instruction.consume()
-			&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
-		if (!ConstructionMaterials.place(stockpile, data.simulationOf(settlement).orElse(null),
-			instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
-			() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL))) {
-			return false;
-		}
+		// Re-read pair state on execution, even when the work claim was valid earlier.
+		if (!placeIfReady(current, plan, pairProbe(level), () -> {
+			Container stockpile = loadedStockpile(level, data, settlement);
+			boolean firstPart = instruction.consume()
+				&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
+			return ConstructionMaterials.place(stockpile, data.simulationOf(settlement).orElse(null),
+				instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
+				() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
+		})) return false;
 		if (current.nextIndex() + 1 >= plan.instructions().size()) {
 			data.completeConstruction(settlement);
 			for (ConstructionInstruction part : plan.instructions()) {
@@ -179,6 +173,30 @@ public final class ConstructionSystem {
 				new ConstructionJob(job.blueprintId(), job.origin(), job.nextIndex(), plan.fingerprint()));
 		}
 		return result;
+	}
+
+	/** Shared test seam around the actual material transaction, not a cached claim. */
+	static boolean placeIfReady(ConstructionJob job, ConstructionPlan plan, ConstructionPairReadiness.Probe probe,
+		java.util.function.BooleanSupplier placement) {
+		return ConstructionPairReadiness.inspect(job, plan, probe, true).ready() && placement.getAsBoolean();
+	}
+
+	private static ConstructionPairReadiness.Probe pairProbe(ServerLevel level) {
+		return new ConstructionPairReadiness.Probe() {
+			public boolean inBounds(BlockPos position) {
+				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
+			}
+			public boolean ticking(BlockPos position) {
+				return level.isLoaded(position) && level.isPositionEntityTicking(position);
+			}
+			public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
+				return level.getBlockState(position);
+			}
+			public boolean entityObstructed(BlockPos position) {
+				return !level.getEntitiesOfClass(LivingEntity.class, new AABB(position),
+					entity -> entity.isAlive() && !entity.isSpectator()).isEmpty();
+			}
+		};
 	}
 
 	private static Container loadedStockpile(ServerLevel level, SettlementSavedData data, Settlement settlement) {

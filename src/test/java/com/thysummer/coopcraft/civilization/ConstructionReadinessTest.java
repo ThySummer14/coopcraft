@@ -39,7 +39,10 @@ class ConstructionReadinessTest {
 		SettlementSimulationState state;
 		int worldReads;
 		public boolean ticking(BlockPos position) { return ticking; }
-		public boolean air(BlockPos position) { worldReads++; return air; }
+		public boolean inBounds(BlockPos position) { return true; }
+		public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
+			worldReads++; return (air ? Blocks.AIR : Blocks.STONE).defaultBlockState();
+		}
 		public boolean entityObstructed(BlockPos position) { worldReads++; return entity; }
 		public Container stockpile() { worldReads++; return stockpile; }
 		public SettlementSimulationState simulation() { return state; }
