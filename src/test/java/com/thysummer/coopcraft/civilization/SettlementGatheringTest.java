@@ -63,8 +63,8 @@ class SettlementGatheringTest {
 		a.simulation().world().assertConservation();
 		assertTrue(a.simulation().world().batchesAt(a.simulation().campOwner()).isEmpty());
 		a.data.toggleResource(a.settlement, a.pos); a.afterLoot = () -> {};
-		assertEquals(3, a.run(3)); assertEquals(1, a.destroys); assertTrue(a.inventory.isEmpty());
-		assertEquals(3, a.simulation().world().batchesAt(a.simulation().campOwner()).stream().mapToLong(b -> b.quantity()).sum());
+		assertEquals(3, a.run(3)); assertEquals(1, a.destroys); assertEquals(3, a.inventory.countItem(Items.COBBLESTONE));
+		assertEquals(0, a.simulation().world().batchesAt(a.simulation().campOwner()).stream().mapToLong(b -> b.quantity()).sum());
 		a.simulation().world().assertConservation();
 		assertFalse(a.data.resourcesOf(a.settlement).contains(a.pos));
 	}
@@ -154,12 +154,12 @@ class SettlementGatheringTest {
 		Attempt a = new Attempt(); a.inventory.setItem(0, new ItemStack(Items.COBBLESTONE, 60));
 		assertEquals(8, a.run(4, 4)); assertEquals(64, a.inventory.countItem(Items.COBBLESTONE)); assertEquals(4, a.spilled);
 	}
-	@Test void productionImportsEachDropBeforeNextInsertionWithoutArtificialOverflow() {
+	@Test void productionKeepsRealDropsAndOriginalOverflowPolicy() {
 		Attempt a = new Attempt(); a.enableSimulation();
 		a.inventory.setItem(0, new ItemStack(Items.COBBLESTONE, 60));
-		assertEquals(8, a.run(4, 4)); assertEquals(60, a.inventory.countItem(Items.COBBLESTONE));
-		assertEquals(0, a.spilled);
-		assertEquals(8, a.simulation().world().batchesAt(a.simulation().campOwner()).stream().mapToLong(b -> b.quantity()).sum());
+		assertEquals(8, a.run(4, 4)); assertEquals(64, a.inventory.countItem(Items.COBBLESTONE));
+		assertEquals(4, a.spilled);
+		assertEquals(0, a.simulation().world().batchesAt(a.simulation().campOwner()).stream().mapToLong(b -> b.quantity()).sum());
 		a.simulation().world().assertConservation();
 	}
 

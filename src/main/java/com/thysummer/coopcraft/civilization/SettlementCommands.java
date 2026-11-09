@@ -54,6 +54,16 @@ public final class SettlementCommands {
 		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
+		settlement.then(LiteralArgumentBuilder.<S>literal("cargo")
+			.executes(ctx -> handler.run(ctx, "cargo", ""))
+			.then(LiteralArgumentBuilder.<S>literal("recover")
+				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "cargo", "recover"))))
+			.then(LiteralArgumentBuilder.<S>literal("stranded").requires(admin)
+				.executes(ctx -> handler.run(ctx, "cargo", "stranded")))
+			.then(LiteralArgumentBuilder.<S>literal("rescue").requires(admin)
+				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "cargo", "rescue")))));
 		settlement.then(LiteralArgumentBuilder.<S>literal("meeting")
 			.executes(ctx -> handler.run(ctx, "meeting", ""))
 			.then(LiteralArgumentBuilder.<S>literal("hold").executes(ctx -> handler.run(ctx, "meeting", "hold"))));
@@ -103,6 +113,9 @@ public final class SettlementCommands {
 		if (!level.getServer().isSameThread()) {
 			throw new IllegalStateException("Settlement commands require the server thread");
 		}
+		// Remnants remain at the death location even after the resident's membership is removed.
+		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
+			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement settlement = nearest(data.all(), player.position()).orElse(null);
 		if (settlement == null) {

@@ -1,7 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -9,19 +8,16 @@ import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.ChestBlock;
 
 public final class SettlementStockpile {
 	private static final long WORK_INTERVAL_TICKS = 40;
 	private static final int BASIC_FOOD_POINTS = 12;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
-	private static final Set<Item> COMMUNAL_RESOURCES = Set.of(Items.COBBLESTONE, Items.STICK, Items.SMOOTH_STONE);
 
 	private SettlementStockpile() {
 	}
@@ -65,7 +61,7 @@ public final class SettlementStockpile {
 				depositExcessFood(stockpile, inventory, member.personality().foodRetentionPoints(BASIC_FOOD_POINTS));
 				distributeBasicFood(stockpile, inventory, member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
 			}
-			depositGatheredResources(stockpile, inventory);
+			// Material cargo is delivered only after physical arrival through SettlementCargoDelivery.
 		}
 	}
 
@@ -235,10 +231,11 @@ public final class SettlementStockpile {
 	}
 
 	static int depositGatheredResources(Container stockpile, Container villagerInventory) {
+		if (stockpile == null || villagerInventory == null || stockpile == villagerInventory) return 0;
 		int insertedTotal = 0;
 		for (int slot = 0; slot < villagerInventory.getContainerSize(); slot++) {
 			ItemStack stack = villagerInventory.getItem(slot);
-			if (!stack.is(ItemTags.LOGS) && !COMMUNAL_RESOURCES.contains(stack.getItem())) {
+			if (!SettlementCargo.isMaterial(stack)) {
 				continue;
 			}
 
@@ -247,9 +244,7 @@ public final class SettlementStockpile {
 				continue;
 			}
 			stack.shrink(inserted);
-			if (stack.isEmpty()) {
-				villagerInventory.setItem(slot, ItemStack.EMPTY);
-			}
+			villagerInventory.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
 			insertedTotal += inserted;
 		}
 
@@ -293,7 +288,7 @@ public final class SettlementStockpile {
 		int total = 0;
 		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
 			ItemStack stack = stockpile.getItem(slot);
-			if (stack.is(ItemTags.LOGS) || COMMUNAL_RESOURCES.contains(stack.getItem())) {
+			if (SettlementCargo.isMaterial(stack)) {
 				total += stack.getCount();
 			}
 		}

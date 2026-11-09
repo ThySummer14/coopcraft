@@ -99,8 +99,8 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 			for (long time = 0; time < 160; time++) SettlementStockpile.tick(level, data, settlement, time);
 			helper.assertValueEqual(16, chest.countItem(Items.POTATO), "Leave pending imports in the real common store");
 			helper.assertValueEqual(2, villager.getInventory().countItem(Items.POTATO), "Do not apply a second food policy");
-			helper.assertValueEqual(3, chest.countItem(Items.COBBLESTONE), "Keep ordinary material deposits working");
-			helper.assertValueEqual(0, villager.getInventory().countItem(Items.COBBLESTONE), "Do not duplicate deposited resources");
+			helper.assertValueEqual(0, chest.countItem(Items.COBBLESTONE), "Background food scheduling must not deliver material cargo");
+			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Material cargo must remain in the backpack until physical delivery");
 
 			var loaded = SettlementSavedData.load(data.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
 			var current = loaded.find(settlement.center()).orElseThrow();
@@ -108,6 +108,8 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 			int events = simulation.world().ledger().events().size();
 			for (long time = 160; time < 320; time++) SettlementStockpile.tick(level, loaded, current, time);
 			helper.assertValueEqual(16, chest.countItem(Items.POTATO), "Reload must retain the active food authority");
+			helper.assertValueEqual(0, chest.countItem(Items.COBBLESTONE), "Reload must not restore the old material deposit bypass");
+			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Reload must retain all undelivered physical cargo");
 			helper.assertValueEqual(events, simulation.world().ledger().events().size(), "Stockpile visits do not invent rations or imports");
 			helper.assertValueEqual(8, SettlementSimulationService.importFromStockpile(loaded, current, chest, ResourceType.TUBERS, 8), "Only explicit import moves food into simulation");
 			helper.assertValueEqual(72, SettlementNeeds.eat(level, loaded, current, villager), "Abstract rations still feed the resident");
@@ -120,6 +122,9 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 			for (long time = 320; time < 480; time++) SettlementStockpile.tick(level, loaded, current, time);
 			helper.assertTrue(villager.getInventory().countItem(Items.POTATO) > 2, "Legacy food handoff resumes after disabling survival");
 			helper.assertValueEqual(10, chest.countItem(Items.POTATO) + villager.getInventory().countItem(Items.POTATO), "Mode switching conserves real food");
+			helper.assertValueEqual(0, chest.countItem(Items.COBBLESTONE), "Disabling survival must not resume background material deposits");
+			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Food mode switching conserves all physical cargo in its backpack");
+			helper.assertValueEqual(0L, simulation.world().inventoryTotals().getOrDefault(ResourceType.STONE, 0L), "Food scheduling must not convert cargo into abstract stone");
 			simulation.world().assertConservation();
 		} finally {
 			villager.kill();

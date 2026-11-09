@@ -63,7 +63,7 @@ class SettlementPersonalCraftingIntegrationTest {
 		var attempt = SettlementSimulationService.beginCrafting(f.data, f.settlement, ACTOR, recipe, output, count);
 		assertTrue(SettlementPersonalCrafting.craft(backpack, ingredient, new ItemStack(output, count)));
 		var completion = SettlementSimulationService.recordCrafting(f.data, f.settlement, ACTOR, attempt).orElseThrow();
-		assertEquals(f.state().productionEnabled() ? count : 0,
+		assertEquals(0,
 			SettlementSimulationService.recordCraftedProduct(f.data, f.settlement, ACTOR, backpack, completion, output, count));
 		assertEquals(0, backpack.countItem(input));
 		assertEquals(7 * 64, backpack.countItem(Items.DIRT));
@@ -121,10 +121,10 @@ class SettlementPersonalCraftingIntegrationTest {
 		var completion = SettlementSimulationService.recordCrafting(f.data, f.settlement, ACTOR, retry).orElseThrow();
 		assertTrue(f.state().world().ledger().event(completion.eventId()).orElseThrow().causalLinks().isEmpty(),
 			"Input from the failed attempt is preexisting inventory, not a current direct export");
-		assertEquals(8, SettlementSimulationService.recordCraftedProduct(
+		assertEquals(0, SettlementSimulationService.recordCraftedProduct(
 			f.data, f.settlement, ACTOR, backpack, completion, Items.STICK, 8));
-		assertTrue(backpack.isEmpty());
-		assertEquals(8, quantity(f, ResourceType.STICK));
+		assertEquals(8, backpack.countItem(Items.STICK));
+		assertEquals(0, quantity(f, ResourceType.STICK));
 		assertEquals(1, eventCount(f, EventType.EXTERNAL_EXPORT));
 		assertEquals(1, eventCount(f, EventType.CRAFT_COMPLETED));
 		assertEquals(1, eventCount(f, EventType.SKILL_PRACTICED));

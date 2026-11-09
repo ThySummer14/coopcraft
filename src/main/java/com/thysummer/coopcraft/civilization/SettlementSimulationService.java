@@ -397,7 +397,7 @@ public final class SettlementSimulationService {
 		int moved = 0;
 		long productionEventId = -1;
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (state.productionEnabled() && resourceType != null) {
+		if (state.productionEnabled() && resourceType != null && resourceType.isFood()) {
 			moved = MinecraftStockpileAdapter.importToSimulation(
 				inventory, state.world(), state.campOwner(), resourceType, inserted,
 				List.of(personId), Map.of("activity", activity, "villagerId", actor.toString())
@@ -543,6 +543,8 @@ public final class SettlementSimulationService {
 		}
 		// Consume before handoff: a zero move or failure cannot authorize a later unrelated inventory.
 		completion.imported = true;
+		// Only food is imported automatically, independently of runtime material tags.
+		if (!type.isFood()) return 0;
 		int moved = MinecraftStockpileAdapter.importToSimulation(inventory, attempt.world, attempt.state.campOwner(),
 			type, inserted, List.of(attempt.personId),
 			Map.of("activity", "craft", "recipe", attempt.recipe, "villagerId", actor.toString()), List.of(completion.eventId));

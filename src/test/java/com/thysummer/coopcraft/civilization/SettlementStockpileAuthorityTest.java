@@ -67,7 +67,7 @@ class SettlementStockpileAuthorityTest {
 	}
 
 	@Test
-	void survivalKeepsExcessBackpackFoodButStillDepositsGatheredMaterials() {
+	void survivalKeepsFoodAndMaterialsInBackpackUntilDelivery() {
 		Fixture f = fixture(true);
 		f.inventory().setItem(0, new ItemStack(Items.POTATO, 64));
 		f.inventory().setItem(1, new ItemStack(Items.COBBLESTONE, 17));
@@ -78,15 +78,15 @@ class SettlementStockpileAuthorityTest {
 
 		assertEquals(64, f.inventory().countItem(Items.POTATO));
 		assertEquals(0, f.stockpile().countItem(Items.POTATO));
-		assertEquals(17, f.stockpile().countItem(Items.COBBLESTONE));
-		assertEquals(9, f.stockpile().countItem(Items.STICK));
-		assertEquals(0, f.inventory().countItem(Items.COBBLESTONE));
-		assertEquals(0, f.inventory().countItem(Items.STICK));
+		assertEquals(0, f.stockpile().countItem(Items.COBBLESTONE));
+		assertEquals(0, f.stockpile().countItem(Items.STICK));
+		assertEquals(17, f.inventory().countItem(Items.COBBLESTONE));
+		assertEquals(9, f.inventory().countItem(Items.STICK));
 		assertEquals(before, f.state().save());
 	}
 
 	@Test
-	void scheduledRotationVisitsEveryResidentAndDepositsOnlyTheirMaterials() {
+	void scheduledRotationVisitsEveryResidentWithoutMovingMaterials() {
 		Fixture f = fixture(true);
 		Map<UUID, SimpleContainer> inventories = new LinkedHashMap<>();
 		Map<UUID, Integer> visits = new LinkedHashMap<>();
@@ -115,11 +115,11 @@ class SettlementStockpileAuthorityTest {
 		}
 		for (UUID resident : inventories.keySet()) {
 			assertEquals(3, visits.get(resident).intValue());
-			assertTrue(inventories.get(resident).isEmpty(), "Food must not replace gathered materials");
+			assertTrue(SettlementCargo.hasCargo(inventories.get(resident)), "Materials require physical delivery");
 		}
 		assertEquals(64, f.stockpile().countItem(Items.POTATO));
-		assertEquals(6, f.stockpile().countItem(Items.COBBLESTONE));
-		assertEquals(9, f.stockpile().countItem(Items.STICK));
+		assertEquals(0, f.stockpile().countItem(Items.COBBLESTONE));
+		assertEquals(0, f.stockpile().countItem(Items.STICK));
 		assertEquals(before, f.data().save(new CompoundTag(), null));
 		assertEquals(0L, abstractPotatoes(f));
 	}

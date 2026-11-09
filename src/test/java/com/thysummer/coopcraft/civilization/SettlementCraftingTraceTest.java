@@ -107,36 +107,36 @@ class SettlementCraftingTraceTest {
 	}
 
 	@Test
-	void explicitOlderCompletionWinsOverNewerSameRecipeAndCannotBeImportedTwice() {
+	void materialCompletionsNeverImportOrChangeLaterInventory() {
 		Fixture f = fixture(true, false);
 		CraftingCompletion first = f.complete(ALICE, f.begin(ALICE, "sticks"));
 		CraftingCompletion second = f.complete(ALICE, f.begin(ALICE, "sticks"));
 		assertNotEquals(first.eventId(), second.eventId());
 		SimpleContainer inventory = new SimpleContainer(new ItemStack(Items.STICK, 8));
-		assertEquals(4, f.importProduct(ALICE, inventory, first, 4));
-		assertEquals(List.of(first.eventId()), f.events().getLast().causalLinks());
+		assertEquals(0, f.importProduct(ALICE, inventory, first, 4));
+		assertEquals(second.eventId(), f.events().getLast().eventId());
 		List<SimulationEvent> snapshot = f.events();
 		assertEquals(0, f.importProduct(ALICE, inventory, first, 4));
-		assertEquals(4, inventory.countItem(Items.STICK));
+		assertEquals(8, inventory.countItem(Items.STICK));
 		assertEquals(snapshot, f.events());
-		assertEquals(4, f.importProduct(ALICE, inventory, second, 4));
+		assertEquals(0, f.importProduct(ALICE, inventory, second, 4));
 		f.state.world().assertConservation();
 	}
 
 	@Test
-	void partialProductImportAlsoConsumesWholeReceipt() {
+	void partialMaterialProductReportKeepsWholeBackpack() {
 		Fixture f = fixture(true, false);
 		CraftingCompletion completion = f.complete(ALICE, f.begin(ALICE, "sticks"));
 		SimpleContainer inventory = new SimpleContainer(new ItemStack(Items.STICK, 4));
-		assertEquals(2, f.importProduct(ALICE, inventory, completion, 2));
+		assertEquals(0, f.importProduct(ALICE, inventory, completion, 2));
 		List<SimulationEvent> after = f.events();
 		assertEquals(0, f.importProduct(ALICE, inventory, completion, 2));
-		assertEquals(2, inventory.countItem(Items.STICK));
+		assertEquals(4, inventory.countItem(Items.STICK));
 		assertEquals(after, f.events());
 	}
 
 	@Test
-	void invalidProductRequestsDoNotConsumeInventoryOrReceiptOrLedger() {
+	void invalidAndMaterialProductRequestsNeverConsumeInventoryOrLedger() {
 		Fixture f = fixture(true, false);
 		CraftingCompletion completion = f.complete(ALICE, f.begin(ALICE, "sticks"));
 		SimpleContainer inventory = new SimpleContainer(new ItemStack(Items.STICK, 8), new ItemStack(Items.SMOOTH_STONE, 4));
@@ -157,7 +157,7 @@ class SettlementCraftingTraceTest {
 		assertTrue(other.events().isEmpty());
 		assertEquals(8, inventory.countItem(Items.STICK));
 		assertEquals(4, inventory.countItem(Items.SMOOTH_STONE));
-		assertEquals(4, f.importProduct(ALICE, inventory, completion, 4));
+		assertEquals(0, f.importProduct(ALICE, inventory, completion, 4));
 	}
 
 	@Test

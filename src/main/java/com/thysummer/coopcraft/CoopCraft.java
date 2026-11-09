@@ -3,6 +3,7 @@ package com.thysummer.coopcraft;
 import com.thysummer.coopcraft.automation.Automation;
 import com.thysummer.coopcraft.civilization.Civilization;
 import com.thysummer.coopcraft.civilization.SettlementSavedData;
+import com.thysummer.coopcraft.civilization.SettlementCargoRecovery;
 import com.thysummer.coopcraft.net.CoopNetworking;
 import com.thysummer.coopcraft.waypoint.Waypoints;
 import com.thysummer.coopcraft.waystation.Waystations;
@@ -11,6 +12,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.npc.Villager;
@@ -35,6 +37,14 @@ public class CoopCraft implements ModInitializer {
 				CoopNetworking.broadcastDeathPoint(player);
 			}
 			if (entity instanceof Villager villager && entity.level() instanceof ServerLevel serverLevel) {
+				int preservedCount = SettlementCargoRecovery.captureDeath(serverLevel, villager);
+				if (preservedCount > 0) {
+					Component notice = Component.translatable("coopcraft.command.settlement.cargo_death",
+						villager.getName(), villager.blockPosition().toShortString(), preservedCount);
+					for (ServerPlayer nearbyPlayer : serverLevel.players()) {
+						if (nearbyPlayer.distanceToSqr(villager.position()) <= 64.0 * 64.0) nearbyPlayer.sendSystemMessage(notice);
+					}
+				}
 				SettlementSavedData.removeObservedDeadMember(serverLevel, villager.getUUID());
 			}
 		});

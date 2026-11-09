@@ -3,7 +3,6 @@ package com.thysummer.coopcraft.civilization;
 import java.util.List;
 
 import com.thysummer.coopcraft.civilization.simulation.EventType;
-import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 import com.thysummer.coopcraft.civilization.simulation.SimulationEvent;
 import com.thysummer.coopcraft.civilization.simulation.WorkType;
@@ -79,7 +78,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 	}
 
 	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 1000)
-	public void realGatherBecomesOneAbstractBatch(GameTestHelper helper) {
+	public void realGatherStaysPhysicalUntilDelivery(GameTestHelper helper) {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
@@ -108,15 +107,9 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		}
 
 		helper.assertTrue(helper.getLevel().getBlockState(stone).isAir(), "The real stone must be gathered");
-		helper.assertValueEqual(0, villager.getInventory().countItem(Items.COBBLESTONE), "Gathered stock must not be duplicated in the real inventory");
-		ResourceBatch batch = state.world().batches().stream()
-			.filter(candidate -> candidate.resourceType() == ResourceType.STONE).findFirst().orElseThrow();
-		helper.assertValueEqual(ResourceType.STONE, batch.resourceType(), "The real drop must become abstract stone");
-		helper.assertValueEqual(1L, batch.quantity(), "One real block must produce exactly one abstract unit");
-		SimulationEvent production = state.world().ledger().event(batch.originEventId()).orElseThrow();
-		helper.assertValueEqual(EventType.EXTERNAL_IMPORT, production.type(), "Production must have a material import origin");
-		helper.assertValueEqual(List.of(personId), production.actors(), "The actual gatherer must be recorded");
-		helper.assertValueEqual("gather", production.context().get("activity"), "The activity must be recorded");
+		helper.assertValueEqual(1, villager.getInventory().countItem(Items.COBBLESTONE), "Gathered material must stay in the real backpack");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.COBBLESTONE),
+			"Gathering must not fabricate an abstract stone batch");
 		double gatherSkill = state.world().person(personId).skill(WorkType.GATHER);
 		helper.assertTrue(Math.abs(gatherSkill - 1.01) < 0.000001, "Real gathering must practice the core gather skill");
 		helper.assertValueEqual(
@@ -131,7 +124,16 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual("GATHER", practice.context().get("workType"), "The practiced work type must be recorded");
 		helper.assertValueEqual("1.0", practice.context().get("skillBefore"), "The initial skill must be recorded");
 		helper.assertValueEqual("1.01", practice.context().get("skillAfter"), "The practiced skill must be recorded");
-		helper.assertValueEqual(List.of(production.eventId()), practice.causalLinks(), "Practice must link to the actual gathering event");
+		helper.assertTrue(practice.causalLinks().isEmpty(), "Physical gathering practice must not invent an abstract import cause");
+		Container store = SettlementStockpile.getStockpile(helper.getLevel(), data, settlement);
+		var delivery = SettlementCargoDelivery.prepare(data, settlement, villager.getUUID(), villager.getInventory(),
+			() -> villager.isAlive() && SettlementStockpile.getStockpile(helper.getLevel(), data, settlement) == store);
+		villager.setPos(helper.absolutePos(CHEST).getX() + 0.5, helper.absolutePos(CHEST).getY(), helper.absolutePos(CHEST).getZ() + 0.5);
+		helper.assertValueEqual(1, SettlementCargoDelivery.finish(delivery, data, settlement, villager.getUUID(),
+			villager.getInventory(), store, () -> villager.distanceToSqr(helper.absolutePos(CHEST).getCenter()) <= 4).moved(),
+			"Arrival must transfer exactly one physical stone");
+		helper.assertValueEqual(0, villager.getInventory().countItem(Items.COBBLESTONE), "Delivered stone must leave the backpack");
+		helper.assertValueEqual(1, SettlementStockpile.communalResourceCount(store), "The real store must receive exactly one stone");
 
 		CompoundTag saved = data.save(new CompoundTag(), helper.getLevel().registryAccess());
 		SettlementSavedData reloaded = SettlementSavedData.load(saved, helper.getLevel().registryAccess());
@@ -144,7 +146,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			"The practiced skill must survive reload"
 		);
 		helper.assertTrue(restored.world().ledger().event(practice.eventId()).isPresent(), "The practice event must survive reload");
-		helper.assertValueEqual(1L, restored.world().batch(batch.batchId()).quantity(), "The produced batch must survive reload");
+		helper.assertValueEqual(0L, restored.world().inventoryTotals().getOrDefault(ResourceType.STONE, 0L), "Reload must not create an abstract material batch");
 		restored.world().assertConservation();
 		villager.kill();
 		helper.succeed();
@@ -200,25 +202,21 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertTrue(goal.canUse(), "Abstract wood must allow the villager to choose stick crafting");
 		goal.start();
 		for (int tick = 0; tick < 240
-			&& SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK) < 8
+			&& villager.getInventory().countItem(Items.STICK) < 8
 			&& goal.canContinueToUse(); tick++) {
 			goal.tick();
 		}
 
-		helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK),
-			"Crafted sticks must leave the real inventory when production mapping is enabled");
-		helper.assertValueEqual(8L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
-			"One abstract log must craft eight abstract sticks");
+		helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK), "One exported log must craft eight real sticks");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
+			"Personal crafting must not import a new abstract stick batch");
+		deliverCargoAtStore(helper, data, settlement, villager, chest, 8);
+		helper.assertValueEqual(8, chest.countItem(Items.STICK), "All crafted sticks must arrive in the real store");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.OAK_LOG), "The crafting input must be consumed");
 		helper.assertValueEqual(
 			0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
 			"The abstract log must be consumed exactly once"
 		);
-		ResourceBatch stickBatch = state.world().batchesAt(state.campOwner()).stream()
-			.filter(batch -> batch.resourceType() == ResourceType.STICK).findFirst().orElseThrow();
-		SimulationEvent sticksProduct = state.world().ledger().event(stickBatch.originEventId()).orElseThrow();
-		helper.assertValueEqual("craft", sticksProduct.context().get("activity"), "The stick batch must come from real crafting");
-		helper.assertValueEqual("sticks", sticksProduct.context().get("recipe"), "The stick batch must identify its recipe");
 		SimulationEvent sticksWithdrawal = craftingEvent(state, "sticks");
 		helper.assertValueEqual(List.of(personId), sticksWithdrawal.actors(), "The real crafter must be recorded");
 		helper.assertValueEqual(woodBatchId, sticksWithdrawal.context().get("batchId"), "The stick recipe must use the wood batch");
@@ -232,11 +230,8 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			List.of(sticksWithdrawal.eventId()), sticksCompleted.causalLinks(),
 			"The completed craft must link to its actual material withdrawal"
 		);
-		helper.assertValueEqual(List.of(sticksCompleted.eventId()), sticksProduct.causalLinks(),
-			"The abstract stick product must link to the completed real craft");
-		helper.assertTrue(state.world().ledger().traceOrigins(sticksProduct.eventId()).stream()
-			.anyMatch(event -> event.eventId() == woodOriginEventId),
-			"The abstract stick product must trace back to the original wood import");
+		helper.assertTrue(state.world().ledger().traceOrigins(sticksCompleted.eventId()).stream()
+			.anyMatch(event -> event.eventId() == woodOriginEventId), "The completed stick craft retains its actual wood export ancestry");
 		SimulationEvent sticksPractice = craftingPractice(state, "sticks");
 		helper.assertValueEqual("CRAFT", sticksPractice.context().get("workType"), "Stick making must practice crafting");
 		helper.assertValueEqual("1.0", sticksPractice.context().get("skillBefore"), "Crafting must start at skill one");
@@ -251,7 +246,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			"Improved crafting skill must reduce real crafting duration"
 		);
 
-		helper.assertTrue(goal.canUse(), "Abstract stone and abstract sticks must allow pickaxe crafting");
+		helper.assertTrue(goal.canUse(), "Abstract stone and delivered real sticks must allow pickaxe crafting");
 		goal.start();
 		for (int tick = 0; tick < 240 && !villager.getMainHandItem().is(Items.STONE_PICKAXE) && goal.canContinueToUse(); tick++) {
 			goal.tick();
@@ -260,8 +255,8 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The crafted pickaxe must remain a real held tool");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK),
 			"Exported sticks must be consumed by the real pickaxe recipe");
-		helper.assertValueEqual(6L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
-			"The pickaxe recipe must consume exactly two abstract sticks");
+		helper.assertValueEqual(6, chest.countItem(Items.STICK), "The pickaxe must consume exactly two delivered real sticks");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK), "Sticks must remain exclusively real");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.COBBLESTONE), "The exported stone must be consumed");
 		helper.assertValueEqual(
 			0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.COBBLESTONE),
@@ -275,21 +270,13 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 				.anyMatch(event -> event.eventId() == stoneOriginEventId),
 			"The pickaxe material withdrawal must retain its import origin"
 		);
-		SimulationEvent stickWithdrawal = state.world().ledger().events().stream()
-			.filter(event -> event.type() == EventType.EXTERNAL_EXPORT)
-			.filter(event -> "stone_pickaxe".equals(event.context().get("recipe")))
-			.filter(event -> event.inputs().stream().anyMatch(flow -> flow.resourceType() == ResourceType.STICK))
-			.findFirst().orElseThrow();
-		helper.assertValueEqual(stickBatch.batchId(), stickWithdrawal.context().get("batchId"),
-			"The pickaxe must consume the batch created by real stick crafting");
-		helper.assertTrue(state.world().ledger().traceOrigins(stickWithdrawal.eventId()).stream()
-			.anyMatch(event -> event.eventId() == sticksProduct.eventId()),
-			"The pickaxe must retain the crafted stick batch in its ancestry");
 		SimulationEvent pickaxeCompleted = craftingCompletion(state, "stone_pickaxe");
-		helper.assertValueEqual(
-			List.of(pickaxeWithdrawal.eventId(), stickWithdrawal.eventId()), pickaxeCompleted.causalLinks(),
-			"Pickaxe completion must link to both actual material withdrawals"
-		);
+		helper.assertValueEqual(List.of(pickaxeWithdrawal.eventId()), pickaxeCompleted.causalLinks(),
+			"Only the actual abstract stone export supplies a direct withdrawal cause");
+		helper.assertFalse(state.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.EXTERNAL_EXPORT
+			&& "stone_pickaxe".equals(event.context().get("recipe"))
+			&& event.inputs().stream().anyMatch(flow -> flow.resourceType() == ResourceType.STICK)),
+			"Physical sticks must not acquire fabricated export evidence");
 		SimulationEvent pickaxePractice = craftingPractice(state, "stone_pickaxe");
 		helper.assertValueEqual("CRAFT", pickaxePractice.context().get("workType"), "Pickaxe making must practice crafting");
 		helper.assertValueEqual("1.01", pickaxePractice.context().get("skillBefore"), "The second craft must build on prior practice");
@@ -312,17 +299,13 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		data.setGrindingStation(settlement, helper.absolutePos(GRINDING_STATION));
 		var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
 		VillagerWorkGoal polishGoal = new VillagerWorkGoal(villager);
-		helper.assertTrue(polishGoal.canUse(), "Abstract cobblestone must allow smooth-stone grinding");
-		polishGoal.start();
-		for (int tick = 0; tick < 800
-			&& (villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)) < 1
-				|| villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)) < 1); tick++) {
-			if (!polishGoal.canContinueToUse()) {
-				helper.assertTrue(polishGoal.canUse(), "The next grinding or polishing action must be selectable");
-				polishGoal.start();
-			}
-			polishGoal.tick();
+		for (int batch = 0; batch < 3; batch++) {
+			runWorkshopAction(helper, polishGoal, "grind", GRINDING_STATION);
+			helper.assertValueEqual(1, villager.getInventory().countItem(Items.SMOOTH_STONE), "Each grind must leave one real product in the backpack");
+			deliverCargoAtStore(helper, data, settlement, villager, chest, 1);
+			helper.assertValueEqual(batch + 1, chest.countItem(Items.SMOOTH_STONE), "Each explicit service delivery adds one real smooth stone");
 		}
+		runWorkshopAction(helper, polishGoal, "polish", GRINDING_STATION);
 
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Polishing must retain a real stone pickaxe");
 		helper.assertValueEqual(1,
@@ -334,32 +317,28 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE),
 			"Abstract smooth stone must not be duplicated in the real inventory");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SMOOTH_STONE),
-			"Polishing must consume all three abstract smooth stones");
+			"No new smooth-stone product may appear in abstract inventory");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.COBBLESTONE),
 			"Grinding must consume all three abstract cobblestones");
-		helper.assertValueEqual(4L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
-			"Polishing must consume two more abstract sticks");
-		List<SimulationEvent> smoothProducts = state.world().ledger().events().stream()
-			.filter(event -> event.type() == EventType.EXTERNAL_IMPORT)
-			.filter(event -> "smooth_stone".equals(event.context().get("recipe")))
-			.filter(event -> event.outputs().stream().anyMatch(flow -> flow.resourceType() == ResourceType.SMOOTH_STONE))
-			.toList();
-		helper.assertValueEqual(3, smoothProducts.size(), "Each real grinding action must create one abstract smooth stone");
-		for (SimulationEvent product : smoothProducts) {
-			helper.assertValueEqual(1, product.causalLinks().size(), "A smooth-stone product needs one completion cause");
-			helper.assertValueEqual(EventType.CRAFT_COMPLETED,
-				state.world().ledger().event(product.causalLinks().getFirst()).orElseThrow().type(),
-				"Each smooth-stone product must link to its real completion");
+		helper.assertValueEqual(4, chest.countItem(Items.STICK), "Polishing must consume two more real sticks");
+		helper.assertValueEqual(0, chest.countItem(Items.SMOOTH_STONE), "Polishing must consume all three delivered smooth stones");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK), "No crafted sticks become abstract");
+		List<SimulationEvent> grindingCompletions = state.world().ledger().events().stream()
+			.filter(event -> event.type() == EventType.CRAFT_COMPLETED && "smooth_stone".equals(event.context().get("recipe"))).toList();
+		helper.assertValueEqual(3, grindingCompletions.size(), "Exactly three real grinding actions must complete");
+		for (SimulationEvent completed : grindingCompletions) {
+			helper.assertValueEqual(1, completed.causalLinks().size(), "Each grind links its actual stone withdrawal");
+			helper.assertTrue(state.world().ledger().traceOrigins(completed.eventId()).stream()
+				.anyMatch(event -> event.eventId() == polishStoneOrigin), "Grinding completion retains its original stone import ancestry");
+			helper.assertTrue(state.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.SKILL_PRACTICED
+				&& event.causalLinks().equals(List.of(completed.eventId()))), "Each grind has its own skill receipt");
 		}
-		helper.assertTrue(state.world().ledger().traceOrigins(smoothProducts.getLast().eventId()).stream()
-			.anyMatch(event -> event.eventId() == polishStoneOrigin),
-			"Smooth-stone products must trace back to their cobblestone import");
+		helper.assertFalse(state.world().ledger().events().stream().anyMatch(event -> event.type() == EventType.EXTERNAL_IMPORT
+			&& "smooth_stone".equals(event.context().get("recipe"))), "No grinding product may be implicitly imported");
 		SimulationEvent polishedCompleted = craftingCompletion(state, "polished_stone_pickaxe");
-		helper.assertValueEqual(4, polishedCompleted.causalLinks().size(),
-			"Polishing must link three smooth-stone withdrawals and one stick withdrawal");
-		helper.assertTrue(state.world().ledger().traceOrigins(polishedCompleted.eventId()).stream()
-			.anyMatch(event -> event.eventId() == smoothProducts.getLast().eventId()),
-			"The polished tool must retain the crafted smooth-stone ancestry");
+		helper.assertTrue(polishedCompleted.causalLinks().isEmpty(), "Real delivered ingredients do not invent abstract export causes");
+		helper.assertValueEqual(List.of(polishedCompleted.eventId()), craftingPractice(state, "polished_stone_pickaxe").causalLinks(),
+			"Polishing practice links its actual completion");
 		double craftSkillBeforeSave = state.world().person(personId).skill(WorkType.CRAFT);
 		state.world().assertConservation();
 
@@ -368,12 +347,10 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementSimulationState restored = reloaded.simulationOf(reloaded.find(bell).orElseThrow()).orElseThrow();
 		helper.assertValueEqual(0L, restored.world().inventoryTotals().get(ResourceType.WOOD), "Reload must not restore consumed wood");
 		helper.assertValueEqual(0L, restored.world().inventoryTotals().get(ResourceType.STONE), "Reload must not restore consumed stone");
-		helper.assertValueEqual(0L, restored.world().inventoryTotals().get(ResourceType.SMOOTH_STONE),
+		helper.assertValueEqual(0L, restored.world().inventoryTotals().getOrDefault(ResourceType.SMOOTH_STONE, 0L),
 			"Reload must not restore consumed smooth stone");
-		helper.assertValueEqual(4L, restored.world().inventoryTotals().get(ResourceType.STICK),
-			"Reload must preserve exactly the four unconsumed crafted sticks");
-		helper.assertValueEqual(4L, restored.world().batch(stickBatch.batchId()).quantity(),
-			"Reload must preserve the original crafted stick batch");
+		helper.assertValueEqual(0L, restored.world().inventoryTotals().getOrDefault(ResourceType.STICK, 0L), "Reload must not create an abstract stick batch");
+		helper.assertValueEqual(4, chest.countItem(Items.STICK), "Settlement reload must leave all four real sticks intact");
 		helper.assertValueEqual(
 			state.world().ledger().events(), restored.world().ledger().events(), "Crafting withdrawals must survive reload"
 		);
@@ -487,6 +464,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			"The replenishment must consume the only real log");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
 			"The replenishment must consume the only abstract log");
+		deliverCargoAtStore(helper, data, settlement, villager, chest, 8);
 		runWorkshopAction(helper, goal, "polish", GRINDING_STATION);
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The upgraded tool must remain a real stone pickaxe");
 		helper.assertValueEqual(1,
@@ -505,15 +483,13 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(0,
 			originalTool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
 			"Preparing the upgraded copy must not mutate the old stack object");
-		helper.assertTrue(chest.isEmpty(), "All supplied real workshop ingredients must be consumed or imported");
+		helper.assertValueEqual(6, chest.countItem(Items.STICK), "Exactly six delivered sticks must remain after polishing");
+		helper.assertValueEqual(6, SettlementStockpile.communalResourceCount(chest), "No other real materials may remain");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume three real smooth stones");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SMOOTH_STONE),
 			"Polishing must consume three abstract smooth stones");
-		helper.assertValueEqual(productionEnabled ? 0 : 6, villager.getInventory().countItem(Items.STICK),
-			"Production off must leave exactly six real sticks; production on must not duplicate them");
-		helper.assertValueEqual(productionEnabled ? 6L : 0L,
-			SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
-			"Production on must leave exactly six abstract sticks after consuming two for the upgrade");
+		helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK), "Delivered sticks must not remain in the backpack");
+		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK), "New stick products remain real in both production modes");
 		helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "The upgrade must not start construction");
 
 		List<SimulationEvent> completions = state.world().ledger().events().stream()
@@ -533,7 +509,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 				.filter(event -> "craft".equals(event.context().get("activity")))
 				.filter(event -> recipe.equals(event.context().get("recipe")))
 				.map(SimulationEvent::eventId).toList();
-			helper.assertValueEqual(productionEnabled ? (recipe.equals("sticks") ? 1 : 2) : 0, withdrawals.size(),
+			helper.assertValueEqual(productionEnabled ? (recipe.equals("stone_pickaxe") ? 2 : 1) : 0, withdrawals.size(),
 				"Only production-backed ingredients may supply material withdrawal evidence");
 			helper.assertValueEqual(withdrawals, completed.causalLinks(), "Completion must link exactly its own withdrawals");
 			helper.assertValueEqual(List.of(completed.eventId()), craftingPractice(state, recipe).causalLinks(),
@@ -542,22 +518,16 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		if (productionEnabled) {
 			helper.assertValueEqual(3L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SWEET_BERRIES),
 				"The food reserve must remain untouched throughout the tool upgrade");
-			ResourceBatch sticks = state.world().batchesAt(state.campOwner()).stream()
-				.filter(batch -> batch.resourceType() == ResourceType.STICK).findFirst().orElseThrow();
-			SimulationEvent product = state.world().ledger().event(sticks.originEventId()).orElseThrow();
-			helper.assertValueEqual(6L, sticks.quantity(), "The same replenishment batch must retain its six unused sticks");
-			helper.assertValueEqual(List.of(craftingCompletion(state, "sticks").eventId()), product.causalLinks(),
-				"The replacement stick product must link to its own completed craft");
 			var upgradeOrigins = state.world().ledger().traceOrigins(craftingCompletion(state, "polished_stone_pickaxe").eventId());
-			helper.assertTrue(upgradeOrigins.stream().anyMatch(event -> event.eventId() == product.eventId()),
-				"Polishing must trace through the autonomously replenished stick batch");
+			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == craftingCompletion(state, "sticks").eventId()),
+				"Delivered real sticks do not acquire synthetic abstract ancestry");
 			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == completions.getFirst().eventId()),
 				"Polishing must not borrow completion evidence from the earlier carried pickaxe");
 		} else {
 			helper.assertTrue(state.world().batches().isEmpty(), "Production off must keep all resources real");
 		}
 
-		// Add fuel for an unwanted extra craft only after verifying all exact tool costs and the empty chest.
+		// Add fuel for an unwanted extra craft only after verifying all exact tool costs and the six remaining real sticks.
 		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG));
 		if (productionEnabled) {
 			helper.assertValueEqual(1, SettlementSimulationService.importFromStockpile(
@@ -571,7 +541,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(productionEnabled ? 1L : 0L,
 			SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
 			"The spare abstract log must remain unused when there is no tool demand");
-		helper.assertValueEqual(6L, villager.getInventory().countItem(Items.STICK)
+		helper.assertValueEqual(6L, chest.countItem(Items.STICK) + villager.getInventory().countItem(Items.STICK)
 			+ SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
 			"No-demand selection must not create any extra sticks");
 		helper.assertValueEqual(completedLedger, state.world().ledger().events(),
@@ -579,6 +549,23 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		state.world().assertConservation();
 		villager.kill();
 		helper.succeed();
+	}
+
+	/** Explicit service arrival fixture; this does not claim to exercise Goal navigation. */
+	private static void deliverCargoAtStore(GameTestHelper helper, SettlementSavedData data, Settlement settlement,
+		Villager villager, Container store, int expected) {
+		var original = villager.position();
+		BlockPos pos = data.getStockpile(settlement).orElseThrow();
+		var ticket = SettlementCargoDelivery.prepare(data, settlement, villager.getUUID(), villager.getInventory(),
+			() -> villager.isAlive() && SettlementStockpile.getStockpile(helper.getLevel(), data, settlement) == store);
+		try {
+			villager.setPos(pos.getX() + 0.5, pos.getY() + 1, pos.getZ() + 0.5);
+			helper.assertValueEqual(expected, SettlementCargoDelivery.finish(ticket, data, settlement, villager.getUUID(),
+				villager.getInventory(), store, () -> villager.distanceToSqr(pos.getCenter()) <= 4).moved(),
+				"The explicit arrived service fixture must transfer exactly the real cargo");
+		} finally {
+			villager.setPos(original.x, original.y, original.z);
+		}
 	}
 
 	private static void runWorkshopAction(GameTestHelper helper, VillagerWorkGoal goal, String action, BlockPos station) {
