@@ -456,5 +456,9 @@
 	"coopcraft.interaction.meeting.inquiry.factor_large_allocation": "有余粮时的高配额顾虑－",
 	"coopcraft.interaction.meeting.hint": "主手空手潜行右键可邀请一位居民赴会，再次点击可取消自己的邀请。邀请最多60秒，到仓后最多等候30秒；拿食物潜行仍是赠粮。",
 	"coopcraft.interaction.action.attend_meeting": "前往公仓赴会",
-	"coopcraft.interaction.action.meeting_wait": "在公仓旁等候讨论"
+	"coopcraft.interaction.action.meeting_wait": "在公仓旁等候讨论",
+	"coopcraft.interaction.membership.orphan": "%s 的居民档案仍在，但找不到所属聚落记录。修复档案前，居民操作和原版交易暂不可用。",
+	"coopcraft.interaction.membership.conflict": "%s 在不同维度有冲突的居民归属记录。解决冲突前，居民操作和原版交易暂不可用。",
+	"coopcraft.interaction.membership.unavailable": "暂时无法核实 %s 在当前服务器维度中的居民归属。居民操作和原版交易暂不可用。",
+	"coopcraft.interaction.membership.away": "%s 属于 %s（家园维度：%s），当前在异地维度 %s。返回家园后可查看当地工作和储备、赠送食物或发出邀请；原版交易不可用。"
 }

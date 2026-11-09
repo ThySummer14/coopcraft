@@ -6,6 +6,8 @@
 	"mixins": [
 		"PlayerAdvancementsMixin",
 		"VillagerMakeLoveMixin",
+		"VillagerInteractionMixin",
+		"MerchantMenuMixin",
 		"MobAccessor"
 	],
 	"injectors": {

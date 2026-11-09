@@ -392,3 +392,14 @@
 - 新增13项登记回归：重复扫描幂等、外营/残缺归属拒绝、有效候选及32/64格边界、旧存档缺项、票据保留与明确移除重入、连续两次NBT往返、出生前置拒绝和单次出生。三份旧测试夹具改为真实入库或明确移除后登记，原权限与UUID极值断言保留。纯Java配给与请求顺序实验复跑通过，完整Minecraft依赖JUnit由分支CI验证。
 
 - 验证完成：代码提交 `61f6a884` 的[稳定成员登记构建](https://github.com/ThySummer14/coopcraft/actions/runs/42553817618)已通过完整build和630项JUnit，0失败/0跳过，新增13项回归全过。206行配给与48行多人顺序CSV同最终核心源码的本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42553817618/artifacts/13646148125)内 `coopcraft-0.1.0.jar` 为758406字节，SHA-256 `36ba9c9c647d85ecdaaf58504d360cab5ce1733f7972fa7dce6198ea5d089468`。没有启动Minecraft客户端、服务器或GameTest；真实钟扫描、命名、阶段显示、远行回归和原版交易数据仍待用户统一验收。
+
+
+## 第三十三增量：聊天式居民互动与原版交易隔离
+
+- 交付范围先收敛为聊天式初版，不是独立GUI：主手查看、潜行赠粮和空手邀请统一在原版重要物品处理后的Villager.mobInteract分流；成员副手不重复执行，非成员沿原版。没有新增市场、货币、按钮、窗口或C2S授权状态。
+- 全局只读claim同时接入创始人数、钟扫描、出生父母/孩子及交互。唯一异地只读身份，孤立/冲突/明确来源异常拒绝自动选择归属；不建全局索引，不改NBT格式或DataVersion19。真实死亡仅按唯一原始claim路由原removeMember，保留核心历史，不从卸载/传送推断死亡。
+- MerchantMenu.stillValid在官方选配方和点击变更前拒绝成员菜单，原版下一玩家tick正常关窗并返还输入。没有清报价/职业/经验、改结果槽或手工补偿。普通关窗清除顾客临时折扣属于原版生命周期。
+- 官方1.21.1 jar静态核对：Player.interactOn不因潜行跳过Mob.interact，名称牌和SpawnEgg先处理，普通食物不在该重要交互分支。handleSelectTrade和handleContainerClick先stillValid后变更，ServerPlayer.tick关闭失效菜单，MerchantMenu.removed只返还付款槽0/1及正常携带物，不发结果预览；Shift-click先移商品再onTake，故不能用晚取消代替前置守卫。
+- 范围限制：不扫描移除维度，不修复旧重复归属/资产迁移/转化UUID；原版DimensionDataStorage吞掉损坏文件异常并返回空数据时不能靠外层catch识别旧claim。交易保护不承诺覆盖第三方直接调用菜单内部方法。未启动Minecraft客户端、服务器或GameTest；真正Mixin应用、物品交互、交易返还与聊天体验待用户统一验收。
+
+- 新增13项JUnit：5项全局claim/来源/登记/死亡回归、1项全局出生与重复扫描票据保持、7项独立互动路由/模式组合/NBT/双语/Mixin注册回归。两组纯Java实验再次复跑保持原结果；完整build和JUnit以如下CI最终记录为准，不把共享逻辑测试当作Mixin执行或实际交易验收。

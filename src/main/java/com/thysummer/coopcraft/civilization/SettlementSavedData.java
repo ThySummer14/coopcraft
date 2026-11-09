@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.Level;
@@ -139,7 +140,8 @@ public final class SettlementSavedData extends SavedData {
 				loaded.put(candidate.villagerId(), villager);
 			}
 		}
-		List<Villager> accepted = SettlementMembership.registerCandidates(this, settlement, candidates, day).stream()
+		List<Villager> accepted = SettlementMembership.registerCandidates(
+			SettlementMembershipClaims.sources(level), level.dimension(), this, settlement, candidates, day).stream()
 			.map(loaded::get).toList();
 		if (accepted.isEmpty()) return accepted;
 		boolean changed = false;
@@ -196,7 +198,7 @@ public final class SettlementSavedData extends SavedData {
 			? MemberRegistrationResult.ALREADY_REGISTERED : MemberRegistrationResult.OTHER_SETTLEMENT;
 	}
 
-	/** Join only. Repeated registration preserves identity, needs, and outstanding work tickets. */
+	/** Same-dimension join primitive. Production callers must first pass the global claim gate. */
 	MemberRegistrationResult registerMember(Settlement settlement, UUID villagerId, long joinedDay) {
 		MemberRegistrationResult result = memberRegistrationResult(settlement, villagerId, joinedDay);
 		if (result != MemberRegistrationResult.ADDED) return result;
@@ -206,6 +208,10 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	/** Includes claims whose settlement record is missing; read-only and dimension-local. */
+	Optional<SettlementMember> rawMember(UUID villagerId) {
+		return Optional.ofNullable(members.get(villagerId));
+	}
+
 	public boolean isRegistered(UUID villagerId) {
 		return villagerId != null && members.containsKey(villagerId);
 	}
@@ -261,6 +267,21 @@ public final class SettlementSavedData extends SavedData {
 		return settlements.values().stream()
 			.filter(settlement -> settlement.id().equals(member.settlementId()))
 			.findFirst();
+	}
+
+	/** Called only for an observed death, never absence, unloading or a dimension transfer. */
+	public static boolean removeObservedDeadMember(ServerLevel level, UUID villagerId) {
+		return removeObservedDeadMember(SettlementMembershipClaims.sources(level),
+			level == null ? null : level.dimension(), villagerId);
+	}
+
+	static boolean removeObservedDeadMember(List<SettlementMembershipClaims.Source> sources,
+			ResourceKey<Level> dimension, UUID villagerId) {
+		var claims = SettlementMembershipClaims.resolve(sources, dimension, villagerId);
+		if (claims.status() != SettlementMembershipClaims.Status.UNIQUE
+				&& claims.status() != SettlementMembershipClaims.Status.ORPHAN) return false;
+		claims.claims().getFirst().data().removeMember(villagerId);
+		return true;
 	}
 
 	public void removeMember(UUID villagerId) {

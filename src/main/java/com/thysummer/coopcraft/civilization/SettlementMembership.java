@@ -5,10 +5,12 @@ import java.util.List;
 import java.util.UUID;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.Level;
 
-/** Join-only membership within one dimension's saved data; never relocates existing claims. */
+/** Join-only membership; production adapters require a complete global claim preflight. */
 final class SettlementMembership {
 	static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	static final double FOUNDING_RADIUS_SQUARED = 32.0 * 32.0;
@@ -36,7 +38,7 @@ final class SettlementMembership {
 			&& candidate.distanceSquared() <= radiusSquared;
 	}
 
-	/** Immutable accepted identities only. Out-of-range or absent members keep their records. */
+	/** Same-dimension primitive for recovery tests; production scans must use the global overload. */
 	static List<UUID> registerCandidates(SettlementSavedData data, Settlement settlement,
 			List<Candidate> candidates, long joinedDay) {
 		if (data == null || candidates == null) return List.of();
@@ -50,7 +52,45 @@ final class SettlementMembership {
 		return List.copyOf(accepted);
 	}
 
-	/** Raw claims include orphan records, which cannot be adopted by founding another camp. */
+	/** Production scan gate, before registration, mapping, naming or leader selection. */
+	static List<UUID> registerCandidates(List<SettlementMembershipClaims.Source> sources,
+			ResourceKey<Level> dimension,
+			SettlementSavedData data, Settlement settlement, List<Candidate> candidates, long joinedDay) {
+		if (data == null || settlement == null || candidates == null) return List.of();
+		var accepted = new LinkedHashSet<UUID>();
+		for (Candidate candidate : candidates) {
+			if (!eligible(candidate, MEMBER_RADIUS_SQUARED) || accepted.contains(candidate.villagerId())) continue;
+			var claims = SettlementMembershipClaims.resolve(sources, dimension, candidate.villagerId());
+			// Also verify that the supplied local write target really is the current source.
+			if (claims.status() == SettlementMembershipClaims.Status.UNAVAILABLE
+					|| sources.stream().noneMatch(source -> source.dimension().equals(dimension) && source.data() == data)) continue;
+			if ((claims.status() == SettlementMembershipClaims.Status.NONE
+					|| SettlementMembershipClaims.belongsTo(claims, dimension, data, settlement))
+					&& data.registerMember(settlement, candidate.villagerId(), joinedDay).accepted()) {
+				accepted.add(candidate.villagerId());
+			}
+		}
+		return List.copyOf(accepted);
+	}
+
+	static List<UUID> unclaimedFoundersGlobally(ServerLevel level, List<Candidate> candidates) {
+		return unclaimedFoundersGlobally(SettlementMembershipClaims.sources(level),
+			level == null ? null : level.dimension(), candidates);
+	}
+
+	static List<UUID> unclaimedFoundersGlobally(List<SettlementMembershipClaims.Source> sources,
+			ResourceKey<Level> dimension, List<Candidate> candidates) {
+		if (candidates == null) return List.of();
+		var founders = new LinkedHashSet<UUID>();
+		for (Candidate candidate : candidates) {
+			if (eligible(candidate, FOUNDING_RADIUS_SQUARED)
+					&& SettlementMembershipClaims.resolve(sources, dimension, candidate.villagerId()).status()
+						== SettlementMembershipClaims.Status.NONE) founders.add(candidate.villagerId());
+		}
+		return List.copyOf(founders);
+	}
+
+	/** Same-dimension primitive. Production founding must use unclaimedFoundersGlobally. */
 	static List<UUID> unclaimedFounders(SettlementSavedData data, List<Candidate> candidates) {
 		if (data == null || candidates == null) return List.of();
 		var founders = new LinkedHashSet<UUID>();

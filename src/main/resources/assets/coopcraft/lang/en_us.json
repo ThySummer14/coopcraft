@@ -456,5 +456,9 @@
 	"coopcraft.interaction.meeting.inquiry.factor_large_allocation": "high cap with surplus −",
 	"coopcraft.interaction.meeting.hint": "Sneak-use one resident with an empty main hand to invite them; repeat to cancel your own invitation. Invitations last up to 60 seconds, with up to 30 seconds waiting after arrival. Sneak-use with food still offers a gift.",
 	"coopcraft.interaction.action.attend_meeting": "Travelling to the meeting",
-	"coopcraft.interaction.action.meeting_wait": "Waiting for discussion at the store"
+	"coopcraft.interaction.action.meeting_wait": "Waiting for discussion at the store",
+	"coopcraft.interaction.membership.orphan": "%s has a resident record, but its home settlement record cannot be found. Resident actions and vanilla trading are unavailable until the record is repaired.",
+	"coopcraft.interaction.membership.conflict": "%s has conflicting resident records across dimensions. Resident actions and vanilla trading are unavailable until the conflict is resolved.",
+	"coopcraft.interaction.membership.unavailable": "Cannot verify %s’s resident records in the current server dimensions. Resident actions and vanilla trading are temporarily unavailable.",
+	"coopcraft.interaction.membership.away": "%s belongs to %s in %s and is currently away in %s. Return them home to inspect local work and reserves, offer food, or invite them. Vanilla trading is unavailable."
 }

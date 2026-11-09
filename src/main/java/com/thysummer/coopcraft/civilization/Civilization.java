@@ -177,7 +177,7 @@ public final class Civilization {
 		} else {
 			List<SettlementMembership.Candidate> candidates = findResidents(serverLevel, pos, FOUNDING_RADIUS).stream()
 				.map(villager -> SettlementMembership.observe(serverLevel, pos, villager)).toList();
-			if (SettlementMembership.unclaimedFounders(data, candidates).size() < MIN_FOUNDERS) {
+			if (SettlementMembership.unclaimedFoundersGlobally(serverLevel, candidates).size() < MIN_FOUNDERS) {
 				serverPlayer.displayClientMessage(Component.translatable("coopcraft.settlement.need_villagers"), true);
 				return InteractionResult.SUCCESS;
 			}

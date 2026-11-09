@@ -35,7 +35,7 @@ public class CoopCraft implements ModInitializer {
 				CoopNetworking.broadcastDeathPoint(player);
 			}
 			if (entity instanceof Villager villager && entity.level() instanceof ServerLevel serverLevel) {
-				SettlementSavedData.get(serverLevel).removeMember(villager.getUUID());
+				SettlementSavedData.removeObservedDeadMember(serverLevel, villager.getUUID());
 			}
 		});
 

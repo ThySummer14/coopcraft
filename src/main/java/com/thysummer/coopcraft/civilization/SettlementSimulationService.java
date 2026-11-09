@@ -19,6 +19,7 @@ import com.thysummer.coopcraft.civilization.simulation.SurvivalSystem;
 import com.thysummer.coopcraft.civilization.simulation.WorkType;
 
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -176,14 +177,27 @@ public final class SettlementSimulationService {
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement settlement = data.findSettlementForVillager(firstParent.getUUID())
 			.orElse(null);
-		if (!recordBirth(data, settlement, firstParent.getUUID(), secondParent.getUUID(), child.getUUID(), currentDay(level))) {
+		if (!recordBirth(SettlementMembershipClaims.sources(level), level.dimension(), data, settlement,
+				firstParent.getUUID(), secondParent.getUUID(), child.getUUID(), currentDay(level))) {
 			return false;
 		}
 		VillagerNames.assignIfAbsent(data, settlement, child);
 		return true;
 	}
 
-	/** Only an unregistered newborn may enter here; never invent kinship for an existing claim. */
+	/** Global preflight precedes every simulation/person/event write. */
+	static boolean recordBirth(List<SettlementMembershipClaims.Source> sources,
+			ResourceKey<Level> dimension, SettlementSavedData data, Settlement settlement,
+			UUID firstParentId, UUID secondParentId, UUID childId, long joinedDay) {
+		if (SettlementMembershipClaims.resolve(sources, dimension, childId).status() != SettlementMembershipClaims.Status.NONE
+				|| !SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(sources, dimension, firstParentId),
+					dimension, data, settlement)
+				|| !SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(sources, dimension, secondParentId),
+					dimension, data, settlement)) return false;
+		return recordBirth(data, settlement, firstParentId, secondParentId, childId, joinedDay);
+	}
+
+	/** Same-dimension primitive; production births must pass the global overload before any core write. */
 	static boolean recordBirth(SettlementSavedData data, Settlement settlement, UUID firstParentId,
 			UUID secondParentId, UUID childId, long joinedDay) {
 		if (data == null || firstParentId == null || secondParentId == null || childId == null

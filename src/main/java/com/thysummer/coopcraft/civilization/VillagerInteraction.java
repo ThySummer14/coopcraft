@@ -1,10 +1,9 @@
 package com.thysummer.coopcraft.civilization;
 
-import java.util.Optional;
-
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
@@ -14,6 +13,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.EntityHitResult;
 
@@ -24,38 +24,90 @@ public final class VillagerInteraction {
 	private VillagerInteraction() {
 	}
 
+	/** Compatibility callback: Mob.interact must handle important items before our mobInteract hook. */
 	public static InteractionResult onUseEntity(
-		Player player,
-		Level level,
-		InteractionHand hand,
-		Entity entity,
-		EntityHitResult hitResult
+		Player player, Level level, InteractionHand hand, Entity entity, EntityHitResult hitResult
 	) {
-		if (hand != InteractionHand.MAIN_HAND || !(entity instanceof Villager villager)) {
-			return InteractionResult.PASS;
-		}
-		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
-			return InteractionResult.PASS;
-		}
-		SettlementSavedData data = SettlementSavedData.get(serverLevel);
-		Optional<Settlement> settlement = data.findSettlementForVillager(villager.getUUID());
-		if (settlement.isEmpty()) {
-			return InteractionResult.PASS;
-		}
-		if (player.isShiftKeyDown() && isFood(serverPlayer.getMainHandItem())) {
-			offerFood(serverPlayer, villager, settlement.get(), data);
-			return InteractionResult.SUCCESS;
-		}
-		if (player.isShiftKeyDown() && serverPlayer.getMainHandItem().isEmpty()) {
-			String result = VillagerWorkGoal.inviteToMeeting(serverPlayer, villager, data, settlement.get());
-			serverPlayer.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting." + result, nameOf(villager)));
-			return InteractionResult.SUCCESS;
-		}
-		if (!player.isShiftKeyDown()) {
-			describe(serverPlayer, villager, settlement.get(), data);
-		}
 		return InteractionResult.PASS;
 	}
+
+	/** Server-only entry, called after vanilla important-item interactions (name tags/spawn eggs).
+	 * Vanilla interaction packets enforce reach; gift/invitation services retain their distance checks. */
+	public static InteractionResult onMobInteract(Villager villager, Player player, InteractionHand hand) {
+		if (!(villager.level() instanceof ServerLevel level)) return InteractionResult.PASS;
+		var membership = SettlementMembershipClaims.resolve(level, villager.getUUID());
+		boolean eligible = player instanceof ServerPlayer && player.level() == level
+			&& level.getEntity(villager.getUUID()) == villager
+			&& villager.isAlive() && !villager.isRemoved() && player.isAlive() && !player.isRemoved()
+			&& !player.isSpectator() && !villager.isSleeping() && !villager.isTrading();
+		ItemStack held = player.getItemInHand(hand);
+		Route route = route(membership, level.dimension(), hand, held.is(Items.VILLAGER_SPAWN_EGG),
+			eligible, player.isShiftKeyDown(), isFood(held), held.isEmpty());
+		if (route == Route.PASS) return InteractionResult.PASS;
+		if (route == Route.SILENT) return InteractionResult.CONSUME;
+		ServerPlayer serverPlayer = (ServerPlayer) player;
+		if (route == Route.ORPHAN || route == Route.CONFLICT || route == Route.UNAVAILABLE) {
+			serverPlayer.sendSystemMessage(diagnostic(route, nameOf(villager)));
+			return InteractionResult.CONSUME;
+		}
+		var claim = membership.uniqueClaim().orElseThrow();
+		if (route == Route.AWAY) {
+			serverPlayer.sendSystemMessage(awayMessage(nameOf(villager), claim, level.dimension()));
+			return InteractionResult.CONSUME;
+		}
+		// Only a unique claim in this actual dimension may reach local world/inventory operations.
+		switch (route) {
+			case GIFT -> offerFood(serverPlayer, villager, claim.settlement(), claim.data());
+			case INVITE -> {
+				String result = VillagerWorkGoal.inviteToMeeting(serverPlayer, villager, claim.data(), claim.settlement());
+				serverPlayer.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting." + result, nameOf(villager)));
+			}
+			case DESCRIBE -> describe(serverPlayer, villager, claim.settlement(), claim.data());
+			default -> throw new IllegalStateException("Unexpected resident interaction route: " + route);
+		}
+		return InteractionResult.CONSUME;
+	}
+
+	/** Identity is independent of hand, distance, stage, survival and production settings. */
+	public static boolean blocksVanillaTrade(SettlementMembershipClaims.Resolution membership) {
+		return membership.status() != SettlementMembershipClaims.Status.NONE;
+	}
+
+	/** Shared production decision seam. PASS is only safe for nonmembers or vanilla's egg exception. */
+	static Route route(SettlementMembershipClaims.Resolution membership, ResourceKey<Level> currentDimension,
+		InteractionHand hand, boolean villagerSpawnEgg, boolean eligible, boolean sneaking, boolean food, boolean empty) {
+		if (!blocksVanillaTrade(membership) || villagerSpawnEgg) return Route.PASS;
+		if (hand != InteractionHand.MAIN_HAND || !eligible) return Route.SILENT;
+		return switch (membership.status()) {
+			case NONE -> Route.PASS;
+			case ORPHAN -> Route.ORPHAN;
+			case CONFLICT -> Route.CONFLICT;
+			case UNAVAILABLE -> Route.UNAVAILABLE;
+			case UNIQUE -> membership.uniqueClaim().map(claim -> {
+				if (!claim.dimension().equals(currentDimension)) return Route.AWAY;
+				if (!sneaking) return Route.DESCRIBE;
+				if (food) return Route.GIFT;
+				return empty ? Route.INVITE : Route.SILENT;
+			}).orElse(Route.UNAVAILABLE);
+		};
+	}
+
+	static Component diagnostic(Route route, Component name) {
+		String key = switch (route) {
+			case ORPHAN -> "orphan";
+			case CONFLICT -> "conflict";
+			case UNAVAILABLE -> "unavailable";
+			default -> throw new IllegalArgumentException("Not a membership diagnostic: " + route);
+		};
+		return Component.translatable("coopcraft.interaction.membership." + key, name);
+	}
+
+	static Component awayMessage(Component name, SettlementMembershipClaims.Claim claim, ResourceKey<Level> currentDimension) {
+		return Component.translatable("coopcraft.interaction.membership.away", name, claim.settlement().name(),
+			claim.dimension().location().toString(), currentDimension.location().toString());
+	}
+
+	enum Route { PASS, SILENT, DESCRIBE, GIFT, INVITE, AWAY, ORPHAN, CONFLICT, UNAVAILABLE }
 
 	static OfferResult offerFood(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
 		if (!villager.isAlive() || !player.isAlive()) {

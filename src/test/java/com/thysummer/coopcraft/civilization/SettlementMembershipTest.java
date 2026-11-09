@@ -18,6 +18,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.Level;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -367,6 +368,46 @@ class SettlementMembershipTest {
 		f.data.setDirty(false);
 		assertFalse(SettlementSimulationService.recordBirth(f.data, f.settlement, RESIDENT, COMPANION, NEWCOMER, 99));
 		assertEquals(beforeRepeat, save(f.data));
+		assertFalse(f.data.isDirty());
+	}
+
+	@Test
+	void globalBirthPreflightRejectsConflictingParentsAndClaimedChildWithoutCoreWrites() {
+		Fixture f = fixture();
+		SettlementSavedData remote = new SettlementSavedData();
+		Settlement other = remote.getOrCreate(BlockPos.ZERO, "Remote", 0);
+		var sources = List.of(new SettlementMembershipClaims.Source(Level.OVERWORLD, f.data),
+			new SettlementMembershipClaims.Source(Level.NETHER, remote));
+		for (UUID conflict : List.of(RESIDENT, COMPANION, NEWCOMER)) {
+			remote.registerMember(other, conflict, 2);
+			CompoundTag localBefore = save(f.data);
+			CompoundTag remoteBefore = save(remote);
+			f.data.setDirty(false);
+			remote.setDirty(false);
+			assertFalse(SettlementSimulationService.recordBirth(sources, Level.OVERWORLD,
+				f.data, f.settlement, RESIDENT, COMPANION, NEWCOMER, 9));
+			assertEquals(localBefore, save(f.data));
+			assertEquals(remoteBefore, save(remote));
+			assertFalse(f.data.isDirty());
+			assertFalse(remote.isDirty());
+			remote.removeMember(conflict);
+		}
+		Object identity = f.data.memberIdentity(RESIDENT);
+		AtomicInteger meals = new AtomicInteger();
+		var queue = queue(f, 100, meals);
+		var invitation = invitation(f, 100);
+		assertEquals(List.of(RESIDENT), SettlementMembership.registerCandidates(sources, Level.OVERWORLD,
+			f.data, f.settlement, List.of(candidate(RESIDENT, 0), candidate(RESIDENT, 10)), 99));
+		assertSame(identity, f.data.memberIdentity(RESIDENT));
+		assertTrue(queue.waiting());
+		assertTrue(invitation.valid(f.data, 101, 0));
+		assertTrue(SettlementSimulationService.recordBirth(sources, Level.OVERWORLD,
+			f.data, f.settlement, RESIDENT, COMPANION, NEWCOMER, 9));
+		CompoundTag after = save(f.data);
+		f.data.setDirty(false);
+		assertFalse(SettlementSimulationService.recordBirth(sources, Level.OVERWORLD,
+			f.data, f.settlement, RESIDENT, COMPANION, NEWCOMER, 99));
+		assertEquals(after, save(f.data));
 		assertFalse(f.data.isDirty());
 	}
 
