@@ -354,3 +354,5 @@
 - 当前规则摘要独立只读，no_proposal/already_held及其他阻塞状态也能查看；ACTIVE额度不依赖两名监督资格，需求排序另需资格，照护只加额、不独立排序。关闭生存/规范时明确当前不执行对应规则；日结待处理时说明只是现存核心记录。资格仍不是实体现场监管。
 - 不变更NBT、DataVersion19、资源、日结、投票或扣时公式；只读说明不会创建模拟、传播、收费、刷新额度或刷会期。提示指向既有rations/events，成功后的重复meeting不回放旧回执，历史结果用events查看。实际世界、聊天排版及下一次进食仍待用户统一实测。
 - 本地纯Java两组实验已复跑通过：206行配给与48行多人顺序CSV校验值与上一轮相同。当前环境无可用JDK25，直接Gradle尝试遇默认缓存目录不可写，未改变权限或绕过既有限制；完整build及JUnit以下方分支CI最终结果为准。未启动Minecraft客户端、服务器或GameTest。
+
+- 验证完成：代码提交 `41659eb0` 的[会议解释构建](https://github.com/ThySummer14/coopcraft/actions/runs/42547543202)已通过完整build和582项JUnit，0失败/0跳过。新增8项会议/说明/重载/守恒测试及1项实际Component递归双语参数测试全过；审查阶段修正原始起因ID与提案消息ID混用，不改真实提案测试夹具迁就错误。206行配给与48行多人实验CSV同最终源码本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42547543202/artifacts/13643799013)内 `coopcraft-0.1.0.jar` 为727759字节，SHA-256 `0170e7af44a2d27739b489b01d8885d2f91756c025467516a0aadfedc4973939`。未启动Minecraft客户端、服务器或GameTest；真实聊天显示与到仓行为仍待用户统一验收。
