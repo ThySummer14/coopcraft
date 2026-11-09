@@ -31,7 +31,7 @@ public class VillagerWorkGoal extends Goal {
 	private static final int SEARCH_INTERVAL = 20;
 	private static final int SEARCH_RADIUS_SQUARED = 12 * 12;
 	private static final double INTERACTION_DISTANCE_SQUARED = 9.0;
-	private static final double BUILD_INTERACTION_DISTANCE_SQUARED = 36.0;
+	private static final double BUILD_INTERACTION_DISTANCE_SQUARED = ConstructionApproach.REACH_SQUARED;
 	private static final int HAND_GATHER_TICKS = 60;
 	private static final int TOOL_GATHER_TICKS = 30;
 	private static final int CRAFT_TICKS = 60;
@@ -51,7 +51,7 @@ public class VillagerWorkGoal extends Goal {
 	private int progress;
 	private int searchCooldown;
 	private int travelTicks;
-	private int approachIndex;
+	private final ConstructionApproach.Search constructionApproach = new ConstructionApproach.Search();
 	private long forageCooldownUntil;
 	private SettlementFoodRequests.Ticket foodTicket;
 	private SettlementMeetingInvitations.Ticket meetingTicket;
@@ -311,7 +311,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (++travelTicks >= SettlementMeetingInvitations.MAX_TRAVEL_TICKS || !meetingPathTicking()) { stop(); return; }
 		if (!villager.getNavigation().isDone()) return;
-		if (travelTicks > 1 || !meetingSearchRegionLoaded()) { stop(); return; }
+		if (travelTicks > 1 || !navigationSearchRegionLoaded()) { stop(); return; }
 		for (int vertical : new int[] {0, 1, -1}) {
 			for (Direction direction : Direction.Plane.HORIZONTAL) {
 				BlockPos candidate = target.relative(direction).above(vertical);
@@ -335,12 +335,14 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	/** PathNavigation builds a chunk-backed search region before returning any nodes. */
-	private boolean meetingSearchRegionLoaded() {
+	private boolean navigationSearchRegionLoaded() {
 		ServerLevel level = (ServerLevel) villager.level();
 		double followRange = villager.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
 		if (!Double.isFinite(followRange) || followRange < 0 || followRange > 256) return false;
 		int radius = (int) Math.ceil(followRange) + 16;
 		BlockPos origin = villager.blockPosition();
+		if ((long) origin.getX() - radius < Integer.MIN_VALUE || (long) origin.getX() + radius > Integer.MAX_VALUE
+			|| (long) origin.getZ() - radius < Integer.MIN_VALUE || (long) origin.getZ() + radius > Integer.MAX_VALUE) return false;
 		for (int x = (origin.getX() - radius) >> 4; x <= (origin.getX() + radius) >> 4; x++) {
 			for (int z = (origin.getZ() - radius) >> 4; z <= (origin.getZ() + radius) >> 4; z++) {
 				if (!level.isLoaded(new BlockPos(x << 4, origin.getY(), z << 4))) return false;
@@ -366,7 +368,7 @@ public class VillagerWorkGoal extends Goal {
 			+ ", canContinue=" + canContinueToUse() + ", alive=" + villager.isAlive() + ", villagerTick=" + villager.tickCount
 			+ ", gameTime=" + villager.level().getGameTime()
 			+ ", entityTicking=" + ((ServerLevel) villager.level()).isPositionEntityTicking(villager.blockPosition())
-			+ ", travel=" + travelTicks + ", approach=" + approachIndex
+			+ ", travel=" + travelTicks + ", approach=" + constructionApproach.cursor()
 			+ ", navigationDone=" + villager.getNavigation().isDone() + ", path=" + villager.getNavigation().getPath()
 			+ ", pathTarget=" + (villager.getNavigation().getPath() == null ? null : villager.getNavigation().getPath().getTarget());
 	}
@@ -738,7 +740,6 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action == Action.BUILD && !constructionPathIsTicking()) {
 			villager.getNavigation().stop();
-			approachIndex++;
 			travelTicks = 0;
 		}
 		if (action == Action.BUILD && villager.getBoundingBox().intersects(new AABB(target))) {
@@ -746,7 +747,6 @@ public class VillagerWorkGoal extends Goal {
 			if (villager.getNavigation().isDone() || travelTicks >= 20) {
 				if (travelTicks >= 20) {
 					villager.getNavigation().stop();
-					approachIndex++;
 					travelTicks = 0;
 				}
 				if (!navigateToConstructionApproach()) {
@@ -762,13 +762,11 @@ public class VillagerWorkGoal extends Goal {
 			}
 			villager.getLookControl().setLookAt(target.getCenter());
 			travelTicks = 0;
-			approachIndex = 0;
 			return true;
 		}
 		travelTicks++;
 		if (travelTicks >= 100) {
 			villager.getNavigation().stop();
-			approachIndex++;
 			travelTicks = 0;
 		}
 		if (villager.getNavigation().isDone()) {
@@ -806,26 +804,22 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean navigateToConstructionApproach() {
 		ServerLevel level = (ServerLevel) villager.level();
-		List<BlockPos> candidates = new ArrayList<>();
-		for (int vertical : new int[] {0, 1, -1, -2}) {
-			for (Direction direction : Direction.Plane.HORIZONTAL) {
-				BlockPos candidate = target.relative(direction).above(vertical);
-				if (level.isPositionEntityTicking(candidate)
-					&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
-					&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
-					&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
-					candidates.add(candidate);
-				}
+		return constructionApproach.attempt(target, villager.position(), level.getGameTime(), new ConstructionApproach.Probe() {
+			public boolean inBounds(BlockPos position) {
+				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
 			}
-		}
-		candidates.sort(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())));
-		int start = candidates.isEmpty() ? 0 : Math.floorMod(approachIndex, candidates.size());
-		for (int i = 0; i < candidates.size(); i++) {
-			if (navigateTo(candidates.get((start + i) % candidates.size()))) {
-				return true;
+			public boolean loaded(BlockPos position) { return level.isLoaded(position); }
+			public boolean ticking(BlockPos position) { return level.isPositionEntityTicking(position); }
+			public BlockState state(BlockPos position) { return level.getBlockState(position); }
+		}, this::navigationSearchRegionLoaded, candidate -> {
+			var path = villager.getNavigation().createPath(candidate, 0);
+			if (path == null || !path.canReach()) return false;
+			for (int i = 0; i < path.getNodeCount(); i++) {
+				if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) return false;
 			}
-		}
-		return navigateTo(target.above());
+			return villager.getNavigation().moveTo(path,
+				settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+		});
 	}
 
 	private boolean navigateTo(BlockPos pos) {
@@ -848,7 +842,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		ServerLevel level = (ServerLevel) villager.level();
 		for (int index = 0; index < path.getNodeCount(); index++) {
-			if (!level.isPositionEntityTicking(path.getNodePos(index))) {
+			if (!level.isLoaded(path.getNodePos(index)) || !level.isPositionEntityTicking(path.getNodePos(index))) {
 				return false;
 			}
 		}
