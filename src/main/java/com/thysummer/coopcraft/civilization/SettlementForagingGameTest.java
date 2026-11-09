@@ -34,6 +34,7 @@ public final class SettlementForagingGameTest implements FabricGameTest {
 
 	private static void runForagingLoop(GameTestHelper helper, boolean simulation) {
 		helper.setBlock(CHEST.below(), Blocks.STONE);
+		helper.setBlock(CHEST.east().below(), Blocks.STONE);
 		helper.setBlock(RESIDENT.below(), Blocks.STONE);
 		helper.setBlock(BUSH.below(), Blocks.DIRT);
 		helper.setBlock(CHEST, Blocks.CHEST);
@@ -61,8 +62,23 @@ public final class SettlementForagingGameTest implements FabricGameTest {
 		int realBefore = chest.countItem(Items.SWEET_BERRIES) + villager.getInventory().countItem(Items.SWEET_BERRIES);
 		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
 		long abstractBefore = state.world().inventoryTotals().get(ResourceType.WILD_FRUIT);
-		helper.assertTrue(simulation ? abstractBefore > 0 && realBefore == 0 : realBefore > 0 && abstractBefore == 0,
-			"Harvested berries must have exactly one inventory authority");
+		helper.assertTrue(realBefore > 0 && abstractBefore == 0,
+			"Harvested berries must first remain in the real inventory");
+		if (simulation) {
+			helper.assertTrue(SettlementFoodAge.isMarked(villager.getInventory().getItem(0)), "New survival berries carry their harvest age");
+			goal.stop();
+			villager.setNoAi(false);
+			helper.assertTrue(goal.canUse(), "Usable carried berries must trigger delivery before further foraging");
+			helper.assertValueEqual("return_to_stockpile", goal.status().action(), "Return is an explicit action");
+			// Exercise the real arrival gate without claiming this synchronous fixture tests navigation.
+			var feet = helper.absolutePos(CHEST.east()).getBottomCenter();
+			villager.moveTo(feet.x, feet.y, feet.z, 0, 0);
+			goal.start();
+			goal.tick();
+			helper.assertValueEqual((long) realBefore, state.world().inventoryTotals().get(ResourceType.WILD_FRUIT), "Arrival admits only physical cargo");
+			helper.assertValueEqual(0, chest.countItem(Items.SWEET_BERRIES) + villager.getInventory().countItem(Items.SWEET_BERRIES),
+				"No second physical copy remains after abstract intake");
+		}
 
 		helper.assertTrue(goal.canUse(), "The same resident must now choose a real meal request");
 		helper.assertValueEqual("eat", goal.status().action(), "Foraged food must be edible in both modes");

@@ -563,5 +563,6 @@
 	"coopcraft.command.settlement.cargo_rescued": "Operator rescued remnants of %s at %s: collected %s items; %s remain.",
 	"coopcraft.command.settlement.cargo_rescue_requirements": "Rescue requires a living, non-spectating operator at an in-bounds loaded and ticking location; the remnant must still be out of bounds.",
 	"coopcraft.food_age.cargo_only": "Settlement food cargo: vanilla eating, sharing and planting are paused",
-	"coopcraft.food_age.return_to_source": "Return to the source settlement stockpile; unavailable for vanilla recipes"
+	"coopcraft.food_age.return_to_source": "Return to the source settlement stockpile; unavailable for vanilla recipes",
+	"coopcraft.interaction.blocker.cargo_food_unavailable": "Dated berries cannot be accepted: check production/survival modes, source and expiry; cargo remains carried"
 }

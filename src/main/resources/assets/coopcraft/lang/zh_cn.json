@@ -547,7 +547,7 @@
 	"coopcraft.interaction.action.return_to_stockpile": "携带货物返回公仓",
 	"coopcraft.interaction.blocker.cargo_store_unavailable": "返仓暂停：公共仓储或归属暂不可用",
 	"coopcraft.interaction.blocker.cargo_path_blocked": "返仓暂停：未找到安全可达的仓边站位",
-	"coopcraft.interaction.blocker.cargo_store_full": "返仓暂停：公仓无可接收空间，材料仍在背包",
+	"coopcraft.interaction.blocker.cargo_store_full": "返仓暂停：公仓无可接收空间，货物仍在背包",
 	"coopcraft.command.settlement.cargo_none": "本维度附近64格内没有待领取的货物遗物。",
 	"coopcraft.command.settlement.cargo_row": "%s的货物遗物，位置%s：%s；记录ID：%s",
 	"coopcraft.command.settlement.cargo_hint": "最多列出最近8份。到遗物位置3格内执行 /coop settlement cargo recover <记录ID>，货物进入主背包；任何到场玩家均可领取。",
@@ -563,5 +563,6 @@
 	"coopcraft.command.settlement.cargo_rescued": "已由管理员救援%s位于%s的遗物：领取%s件，还剩%s件。",
 	"coopcraft.command.settlement.cargo_rescue_requirements": "救援需管理员本人存活、非旁观者，站在合法且已加载、正在活动的区块；遗物位置须仍在边界外。",
 	"coopcraft.food_age.cargo_only": "文明食品货物：暂停原版食用、分享和种植",
-	"coopcraft.food_age.return_to_source": "请送回来源聚落公仓；不能用于原版配方"
+	"coopcraft.food_age.return_to_source": "请送回来源聚落公仓；不能用于原版配方",
+	"coopcraft.interaction.blocker.cargo_food_unavailable": "日期浆果暂不能验收：请检查生产/生存开关、来源与过期状态；货物仍在背包"
 }

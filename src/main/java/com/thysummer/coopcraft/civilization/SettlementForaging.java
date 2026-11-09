@@ -90,7 +90,8 @@ public final class SettlementForaging {
 
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement,
 		Villager villager, BlockPos pos) {
-		return validTarget(data, settlement, villager.getUUID(), () -> !villager.isBaby(),
+		return validTarget(data, settlement, villager.getUUID(),
+			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
 			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
 	}
 
@@ -99,15 +100,20 @@ public final class SettlementForaging {
 	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, SimpleContainer inventory,
 		BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block,
 		Supplier<List<ItemStack>> loot, Predicate<BlockState> regrow) {
-		if (!validTarget(data, settlement, actor, adult, loaded, ticking, block)) return 0;
+		var attempt = SettlementBerryCargoHarvest.capture(data, settlement, actor);
+		if (!attempt.valid(data, settlement, actor, adult)
+			|| !validTarget(data, settlement, actor, adult, loaded, ticking, block)) return 0;
 		BlockState mature = block.get();
-		List<ItemStack> output = loot.get().stream().map(ItemStack::copy).toList();
+		List<ItemStack> drops = loot.get();
+		if (!attempt.valid(data, settlement, actor, adult)) return 0;
+		int berries = drops.stream().filter(SettlementBerryCargoHarvest::plainBerry).mapToInt(ItemStack::getCount).sum();
+		// Stamped output must participate in capacity planning, not be attached after a plain-stack merge.
+		List<ItemStack> output = drops.stream().map(attempt::outputCopy).toList();
 		if (!SettlementHarvestCommit.commit(inventory, output,
 			() -> validTarget(data, settlement, actor, adult, loaded, ticking, block)
-				&& block.get().equals(mature) && regrow.test(mature))) return 0;
-		int berries = output.stream().filter(stack -> stack.is(Items.SWEET_BERRIES)
-			&& stack.getComponentsPatch().isEmpty()).mapToInt(ItemStack::getCount).sum();
-		if (berries > 0) SettlementSimulationService.recordProduction(
+				&& block.get().equals(mature) && attempt.valid(data, settlement, actor, adult)
+				&& regrow.test(mature))) return 0;
+		if (berries > 0) SettlementSimulationService.recordCarriedProduction(
 			data, settlement, actor, inventory, Items.SWEET_BERRIES, berries, "forage");
 		return output.stream().mapToInt(ItemStack::getCount).sum();
 	}
@@ -115,28 +121,13 @@ public final class SettlementForaging {
 	public static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement,
 		Villager villager, BlockPos position) {
 		int harvested = harvest(data, settlement, villager.getUUID(), villager.getInventory(),
-			() -> !villager.isBaby(), () -> level.isLoaded(position),
+			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(), () -> level.isLoaded(position),
 			() -> level.isPositionEntityTicking(position), () -> level.getBlockState(position),
 			() -> Block.getDrops(level.getBlockState(position), level, position, level.getBlockEntity(position)),
 			mature -> level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
 		if (harvested > 0) {
 			villager.swing(InteractionHand.MAIN_HAND);
-			if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-				depositForagedFood(level, data, settlement, villager);
-			}
 		}
 		return harvested;
-	}
-
-	private static void depositForagedFood(
-		ServerLevel level,
-		SettlementSavedData data,
-		Settlement settlement,
-		Villager villager
-	) {
-		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		if (stockpile != null) {
-			SettlementStockpile.depositItem(stockpile, villager.getInventory(), Items.SWEET_BERRIES);
-		}
 	}
 }

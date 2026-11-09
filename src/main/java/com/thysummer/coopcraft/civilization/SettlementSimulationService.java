@@ -391,6 +391,17 @@ public final class SettlementSimulationService {
 	/** Container boundary shared by real collection and server-free service regression tests. */
 	static int recordProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
 		Item item, int inserted, String activity) {
+		return recordProduction(data, settlement, actor, inventory, item, inserted, activity, true);
+	}
+
+	/** Practice for successfully harvested physical cargo, without importing any old or new bag food. */
+	static int recordCarriedProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity) {
+		return recordProduction(data, settlement, actor, inventory, item, inserted, activity, false);
+	}
+
+	private static int recordProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity, boolean importFood) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled() || inserted <= 0) {
 			return 0;
@@ -402,7 +413,7 @@ public final class SettlementSimulationService {
 		int moved = 0;
 		long productionEventId = -1;
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (state.productionEnabled() && resourceType != null && resourceType.isFood()) {
+		if (importFood && state.productionEnabled() && resourceType != null && resourceType.isFood()) {
 			moved = MinecraftStockpileAdapter.importToSimulation(
 				inventory, state.world(), state.campOwner(), resourceType, inserted,
 				List.of(personId), Map.of("activity", activity, "villagerId", actor.toString())

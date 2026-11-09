@@ -106,6 +106,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setProductionEnabled(boolean enabled) {
+		if (productionEnabled != enabled) foodRequestModeVersion++;
 		productionEnabled = enabled;
 	}
 

@@ -410,6 +410,8 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.ATTEND_MEETING && meetingTicket != null)
 			return new WorkStatus(meetingTicket.waiting() ? "meeting_wait" : "attend_meeting", meetingStore, null);
 		if (action == Action.RETURN_TO_STOCKPILE) return new WorkStatus(action.id(), target, cargoBlocker);
+		if (SettlementCargoDelivery.hasMarkedBerries(villager.getInventory()) && !hasDeliverableFoodCargo())
+			return new WorkStatus(action == null ? "idle" : action.id(), target, "cargo_food_unavailable");
 		if (action == null && cargoBlocker != null && hasReturnCargo())
 			return new WorkStatus("idle", null, cargoBlocker);
 		if (action != null) {
@@ -927,18 +929,28 @@ public class VillagerWorkGoal extends Goal {
 		return villager.level().getBlockState(target).is(station);
 	}
 
-	/** Current physical cargo only; food transport uses the same surplus rule as final unloading. */
+	/** Current physical cargo only, sharing food eligibility with final unloading. */
 	private boolean hasReturnCargo() {
 		if (SettlementCargo.hasCargo(villager.getInventory())) return true;
 		if (!(villager.level() instanceof ServerLevel level)) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
-		return SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory());
+		return SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory())
+			|| SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory());
 	}
 
 	private boolean emergencyForage() {
+		// Carried usable berries are the solution to an empty public ration, not a reason to gather more.
+		if (hasDeliverableFoodCargo()) return false;
 		return settlement != null && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20
 			&& !hasFoodAvailable() && shouldForage();
+	}
+
+	private boolean hasDeliverableFoodCargo() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		return SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory());
 	}
 
 	private boolean prepareCargoReturn() {
@@ -1009,6 +1021,7 @@ public class VillagerWorkGoal extends Goal {
 			if (result.status() == SettlementCargoDelivery.Status.NO_CAPACITY
 				|| (result.status() == SettlementCargoDelivery.Status.DELIVERED && hasReturnCargo()))
 				deferCargo("cargo_store_full");
+			else if (result.status() == SettlementCargoDelivery.Status.FOOD_UNAVAILABLE) deferCargo("cargo_food_unavailable");
 			else if (result.status() != SettlementCargoDelivery.Status.DELIVERED) deferCargo("cargo_store_unavailable");
 			else cargoBlocker = null;
 			stop();
