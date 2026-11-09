@@ -72,6 +72,7 @@ class SettlementStarterCraftingTest {
 	@AfterEach void restore() throws Exception { plans.set(null, previous); }
 
 	@Test void oneRealLogNeedsTwoTicketsAndLeavesOnlyOneRealTable() {
+		var initialAbstractStock = Map.copyOf(state.world().inventoryTotals());
 		stock.setItem(0, new ItemStack(Items.OAK_LOG));
 		var first = prepare();
 		assertEquals(SettlementMaterialCrafting.Recipe.PLANKS, first.recipe());
@@ -89,7 +90,10 @@ class SettlementStarterCraftingTest {
 		assertEquals(2, events(EventType.CRAFT_COMPLETED));
 		assertEquals(2, events(EventType.SKILL_PRACTICED));
 		assertEquals(0, events(EventType.EXTERNAL_IMPORT));
-		assertTrue(state.world().inventoryTotals().isEmpty());
+		assertEquals(initialAbstractStock, state.world().inventoryTotals());
+		for (ResourceType resource : ResourceType.values()) {
+			assertEquals(0L, state.world().inventoryTotals().get(resource).longValue(), resource.name());
+		}
 		assertTrue(data.getCraftingStation(settlement).isEmpty());
 		assertTrue(data.getConstructionJob(settlement).isEmpty());
 		state.world().assertConservation();
