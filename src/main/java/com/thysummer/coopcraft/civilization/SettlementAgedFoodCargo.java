@@ -14,7 +14,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Arrival-only intake of age-marked berry cargo; arrival and membership belong to the caller. */
+/** Arrival-only intake of age-marked berry and potato cargo; arrival and membership belong to the caller. */
 public final class SettlementAgedFoodCargo {
 	private static final Map<String, String> CONTEXT = Map.of("activity", "cargo_delivery");
 
@@ -78,14 +78,14 @@ public final class SettlementAgedFoodCargo {
 			int amount = offered.getCount() - remaining;
 			if (amount == 0) continue;
 			accepted = Math.addExact(accepted, amount);
-			plan.add(new Intake(sourceSlot, offered.copyWithCount(remaining), amount, age.harvestDay()));
+			plan.add(new Intake(sourceSlot, offered.copyWithCount(remaining), amount, age.resourceType(), age.harvestDay()));
 		}
 		if (plan.isEmpty()) return 0;
 		// No capacity is recycled after an import. Only these exact source-slot deltas can enter the camp.
 		if (!sameModeAndDay(state, clock, day, modeVersion)) return 0;
 		StorageOwner camp = state.campOwner();
 		for (Intake intake : plan) {
-			world.validateExternalFoodImport(ResourceType.WILD_FRUIT, intake.amount(), camp,
+			world.validateExternalFoodImport(intake.resourceType(), intake.amount(), camp,
 				intake.harvestDay(), List.of(), CONTEXT, List.of());
 		}
 		validateImportCapacity(world, plan.size());
@@ -96,7 +96,7 @@ public final class SettlementAgedFoodCargo {
 			|| !world.ledger().lastEvent().equals(lastEvent)) return 0;
 
 		for (Intake intake : plan) {
-			world.importExternalFoodBatch(ResourceType.WILD_FRUIT, intake.amount(), camp,
+			world.importExternalFoodBatch(intake.resourceType(), intake.amount(), camp,
 				intake.harvestDay(), List.of(), CONTEXT, List.of());
 			inventory.setItem(intake.slot(), intake.remainder());
 		}
@@ -115,10 +115,15 @@ public final class SettlementAgedFoodCargo {
 	}
 
 	private static SettlementFoodAge.Stamp deliverable(ItemStack stack, UUID clock, long day) {
-		if (stack == null || stack.isEmpty() || !stack.is(Items.SWEET_BERRIES)) return null;
+		if (stack == null || stack.isEmpty() || !transportFood(stack)) return null;
 		SettlementFoodAge.Stamp age = SettlementFoodAge.read(stack).orElse(null);
-		return age != null && age.resourceType() == ResourceType.WILD_FRUIT && clock.equals(age.clockId())
+		return age != null && clock.equals(age.clockId())
 			&& age.harvestDay() <= day && day <= age.expiryDay() ? age : null;
+	}
+
+	/** Narrow automatic transport scope; strict age parsing separately verifies item/resource pairing. */
+	static boolean transportFood(ItemStack stack) {
+		return stack.is(Items.SWEET_BERRIES) || stack.is(Items.POTATO);
 	}
 
 	private static List<ItemStack> snapshot(Container container) {
@@ -141,12 +146,12 @@ public final class SettlementAgedFoodCargo {
 			long lastEventId = world.ledger().lastEvent().map(event -> event.eventId()).orElse(0L);
 			Math.addExact(Math.addExact(lastEventId, 1), count);
 		} catch (ArithmeticException exception) {
-			throw new IllegalArgumentException("Berry cargo exceeds representable batch or event IDs", exception);
+			throw new IllegalArgumentException("Food cargo exceeds representable batch or event IDs", exception);
 		}
 		if (world.nextBatchId() <= 0 || world.ledger().lastEvent().filter(event -> event.day() > world.day()).isPresent()) {
-			throw new IllegalArgumentException("Berry cargo requires a valid simulation clock and next batch ID");
+			throw new IllegalArgumentException("Food cargo requires a valid simulation clock and next batch ID");
 		}
 	}
 
-	private record Intake(int slot, ItemStack remainder, int amount, long harvestDay) { }
+	private record Intake(int slot, ItemStack remainder, int amount, ResourceType resourceType, long harvestDay) { }
 }

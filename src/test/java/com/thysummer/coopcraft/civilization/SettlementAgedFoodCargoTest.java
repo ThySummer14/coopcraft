@@ -173,7 +173,7 @@ class SettlementAgedFoodCargoTest {
 		CompoundTag tag = new CompoundTag(); tag.putString("coopcraft_food_age", "unknown");
 		unknown.set(DataComponents.CUSTOM_DATA, CustomData.of(tag)); invalid.add(unknown);
 		ItemStack named = marked(state, 3, 4); named.set(DataComponents.CUSTOM_NAME, Component.literal("Keep")); invalid.add(named);
-		for (var item : List.of(Items.POTATO, Items.COD, Items.BEEF)) {
+		for (var item : List.of(Items.COD, Items.BEEF)) {
 			invalid.add(SettlementFoodAge.stamp(new ItemStack(item, 3), state.foodClockId().orElseThrow(), 4));
 		}
 		for (ItemStack stack : invalid) {

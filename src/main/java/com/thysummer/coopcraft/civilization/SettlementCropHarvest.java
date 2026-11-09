@@ -3,12 +3,15 @@ package com.thysummer.coopcraft.civilization;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -26,7 +29,7 @@ public final class SettlementCropHarvest {
 	}
 
 	static boolean ordinaryPotato(ItemStack stack) {
-		return !stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, new ItemStack(Items.POTATO));
+		return !stack.isEmpty() && stack.is(Items.POTATO) && stack.getComponentsPatch().isEmpty();
 	}
 
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos pos) {
@@ -66,23 +69,38 @@ public final class SettlementCropHarvest {
 		return reserved ? Optional.of(output) : Optional.empty();
 	}
 
+	/** Shared production entry: reserve the new seed before stamping or planning the complete cargo. */
+	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
+		SimpleContainer inventory, BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking,
+		Supplier<BlockState> block, Supplier<List<ItemStack>> loot, Predicate<BlockState> replant) {
+		var attempt = SettlementBerryCargoHarvest.capture(data, settlement, actor);
+		if (!attempt.valid(data, settlement, actor, adult)
+			|| !validTarget(data, settlement, pos, loaded, ticking, block)) return 0;
+		BlockState mature = block.get();
+		var reserved = outputAfterSeed(loot.get());
+		if (reserved.isEmpty() || !attempt.valid(data, settlement, actor, adult)) return 0;
+		int potatoes = reserved.get().stream().filter(SettlementCropHarvest::ordinaryPotato)
+			.mapToInt(ItemStack::getCount).sum();
+		List<ItemStack> output = reserved.get().stream().map(attempt::potatoOutputCopy).toList();
+		if (!SettlementHarvestCommit.commit(inventory, output,
+			() -> validTarget(data, settlement, pos, loaded, ticking, block)
+				&& block.get().equals(mature) && attempt.valid(data, settlement, actor, adult)
+				&& replant.test(mature))) return 0;
+		if (potatoes > 0) SettlementSimulationService.recordCarriedProduction(
+			data, settlement, actor, inventory, Items.POTATO, potatoes, "harvest_crop");
+		return potatoes;
+	}
+
 	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos) {
-		if (villager.isBaby() || !validTarget(level, data, settlement, pos)) return 0;
-		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)
-			&& data.simulationOf(settlement).flatMap(state -> state.residentId(villager.getUUID())).isEmpty()) return 0;
-		BlockState mature = level.getBlockState(pos);
-		var output = outputAfterSeed(Block.getDrops(mature, level, pos, level.getBlockEntity(pos)));
-		if (output.isEmpty()) return 0;
-		if (!SettlementHarvestCommit.commit(villager.getInventory(), output.get(), () -> validTarget(level, data, settlement, pos)
-			&& level.getBlockState(pos).equals(mature)
-			&& level.setBlock(pos, ((CropBlock) Blocks.POTATOES).getStateForAge(0), Block.UPDATE_ALL))) return 0;
-		villager.swing(InteractionHand.MAIN_HAND);
-		int potatoes = output.get().stream().filter(SettlementCropHarvest::ordinaryPotato).mapToInt(ItemStack::getCount).sum();
-		if (potatoes > 0) SettlementSimulationService.recordProduction(villager, data, settlement, Items.POTATO, potatoes, "harvest_crop");
-		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-			var stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-			if (stockpile != null) SettlementStockpile.depositItem(stockpile, villager.getInventory(), Items.POTATO);
-		}
+		int potatoes = harvest(data, settlement, villager.getUUID(), pos, villager.getInventory(),
+			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
+			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
+			() -> Block.getDrops(level.getBlockState(pos), level, pos, level.getBlockEntity(pos)),
+			mature -> {
+				if (!level.setBlock(pos, ((CropBlock) Blocks.POTATOES).getStateForAge(0), Block.UPDATE_ALL)) return false;
+				villager.swing(InteractionHand.MAIN_HAND);
+				return true;
+			});
 		return potatoes;
 	}
 }

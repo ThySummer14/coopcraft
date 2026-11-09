@@ -23,11 +23,11 @@ public final class SettlementCargoDelivery {
 		return state != null && SettlementAgedFoodCargo.hasDeliverable(state, inventory);
 	}
 
-	public static boolean hasMarkedBerries(Container inventory) {
+	public static boolean hasMarkedHarvestFood(Container inventory) {
 		if (inventory == null) return false;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			var stack = inventory.getItem(slot);
-			if (stack.is(net.minecraft.world.item.Items.SWEET_BERRIES) && SettlementFoodAge.isMarked(stack)) return true;
+			if (SettlementAgedFoodCargo.transportFood(stack) && SettlementFoodAge.isMarked(stack)) return true;
 		}
 		return false;
 	}
@@ -93,7 +93,7 @@ public final class SettlementCargoDelivery {
 		boolean materialCargo = SettlementCargo.hasCargo(inventory);
 		moved += SettlementStockpile.depositGatheredResources(currentStore, inventory);
 		if (!ticket.survival) moved += SettlementFoodCargo.depositSurplus(data, camp, actor, inventory, currentStore);
-		if (moved == 0 && !materialCargo && hasMarkedBerries(inventory)
+		if (moved == 0 && !materialCargo && hasMarkedHarvestFood(inventory)
 			&& !hasDeliverableFood(data, camp, actor, inventory)) return new Result(Status.FOOD_UNAVAILABLE, 0);
 		return new Result(moved > 0 ? Status.DELIVERED : Status.NO_CAPACITY, moved);
 	}

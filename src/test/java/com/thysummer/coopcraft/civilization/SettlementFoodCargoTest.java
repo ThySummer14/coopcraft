@@ -191,7 +191,7 @@ class SettlementFoodCargoTest {
 		assertFalse(SettlementFoodCargo.hasSurplus(null, camp, f.actor, f.bag));
 	}
 
-	@Test void survivalBerriesRequireAgedArrivalWhilePotatoesKeepTheirExistingImport() {
+	@Test void survivalBerriesRequireAgedArrivalWhileLegacyProductionImportRemainsExplicit() {
 		Fixture f = new Fixture(); var state = f.data.getOrCreateSimulation(f.camp);
 		state.mapResident(f.actor, false, 0); state.setSurvivalEnabled(true, 0); state.setProductionEnabled(true);
 		var ripe = Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3);

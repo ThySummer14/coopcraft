@@ -307,7 +307,7 @@ class SettlementBerryReturnIntegrationTest {
 		}
 	}
 
-	@Test void exportedBerryReturnCreatesNoNewDonorCreditAndPotatoProductionKeepsItsExistingPath() {
+	@Test void exportedBerryReturnCreatesNoNewDonorCreditAndLegacyProductionApiRemainsAvailable() {
 		Fixture f = new Fixture();
 		f.harvest(3);
 		assertEquals(3, f.finish(f.prepare(), true).moved());

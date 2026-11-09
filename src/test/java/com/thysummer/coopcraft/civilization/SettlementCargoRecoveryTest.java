@@ -79,7 +79,7 @@ class SettlementCargoRecoveryTest {
 		assertEquals(0, loaded.recover(dead, recipient, () -> true).moved());
 	}
 
-	@Test void survivalDeathKeepsPhysicalFoodOutsideTheNewCustodyRule() {
+	@Test void survivalDeathPreservesPhysicalPotatoesButKeepsOtherOrdinaryFoodOutsideCustody() {
 		UUID dead = new UUID(57, 2);
 		var claims = member(dead);
 		var claim = claims.uniqueClaim().orElseThrow();
@@ -90,10 +90,71 @@ class SettlementCargoRecoveryTest {
 			new ItemStack(Items.SWEET_BERRIES, 9), new ItemStack(Items.COBBLESTONE, 2));
 		var before = simulation.save();
 		var data = new SettlementCargoRecovery();
-		assertEquals(2, data.captureDeath(claims, Level.OVERWORLD, dead, PLACE, "Resident", () -> source));
-		assertEquals(8, source.countItem(Items.POTATO));
+		assertEquals(10, data.captureDeath(claims, Level.OVERWORLD, dead, PLACE, "Resident", () -> source));
+		assertEquals(0, source.countItem(Items.POTATO));
 		assertEquals(9, source.countItem(Items.SWEET_BERRIES));
 		assertEquals(before, simulation.save());
+	}
+
+	@Test void allPotatoKindsUseRealCustodyInBothModesWithoutTouchingSimulationOrOtherFood() {
+		for (boolean survival : List.of(false, true)) {
+			UUID dead = new UUID(62, survival ? 1 : 2);
+			var claims = member(dead); var claim = claims.uniqueClaim().orElseThrow();
+			var simulation = claim.data().getOrCreateSimulation(claim.settlement());
+			simulation.mapResident(dead, false, 0); simulation.setSurvivalEnabled(survival, 0);
+			simulation.setProductionEnabled(true);
+			ItemStack custom = new ItemStack(Items.POTATO, 3);
+			custom.set(DataComponents.CUSTOM_NAME, Component.literal("Existing personal potatoes"));
+			ItemStack poison = new ItemStack(Items.POISONOUS_POTATO, 2);
+			CompoundTag payload = new CompoundTag(); payload.putString("byproduct_test", "unchanged");
+			poison.set(DataComponents.CUSTOM_DATA, CustomData.of(payload));
+			SimpleContainer source = new SimpleContainer(custom.copy(), poison.copy(), new ItemStack(Items.POTATO, 4),
+				new ItemStack(Items.SWEET_BERRIES, 1), new ItemStack(Items.BREAD, 2), new ItemStack(Items.WOODEN_PICKAXE));
+			var before = simulation.save(); var recovery = new SettlementCargoRecovery();
+			assertEquals(survival ? 9 : 10,
+				recovery.captureDeath(claims, Level.OVERWORLD, dead, PLACE, "Resident", () -> source));
+			assertEquals(0, recovery.captureDeath(claims, Level.OVERWORLD, dead, PLACE, "Resident", () -> source));
+			assertEquals(0, source.countItem(Items.POTATO)); assertEquals(0, source.countItem(Items.POISONOUS_POTATO));
+			assertEquals(survival ? 1 : 0, source.countItem(Items.SWEET_BERRIES));
+			assertEquals(2, source.countItem(Items.BREAD)); assertEquals(1, source.countItem(Items.WOODEN_PICKAXE));
+			CompoundTag saved = recovery.save(new CompoundTag(), registries);
+			assertEquals(1, saved.getInt("DataVersion"));
+			recovery = SettlementCargoRecovery.load(saved, registries);
+			assertEquals(saved, recovery.save(new CompoundTag(), registries));
+			SimpleContainer full = new SimpleContainer(new ItemStack(Items.DIRT, 64));
+			assertEquals(0, recovery.recover(dead, full, () -> true).moved());
+			assertEquals(saved, recovery.save(new CompoundTag(), registries));
+			SimpleContainer destination = new SimpleContainer(1);
+			assertEquals(3, recovery.recover(dead, destination, () -> true).moved());
+			assertTrue(ItemStack.matches(custom, destination.getItem(0)));
+			recovery = SettlementCargoRecovery.load(recovery.save(new CompoundTag(), registries), registries);
+			destination.clearContent();
+			assertEquals(2, recovery.recover(dead, destination, () -> true).moved());
+			assertTrue(ItemStack.matches(poison, destination.getItem(0)));
+			destination.clearContent();
+			assertEquals(4, recovery.recover(dead, destination, () -> true).moved());
+			assertEquals(4, destination.countItem(Items.POTATO));
+			assertFalse(SettlementFoodAge.isMarked(destination.getItem(0)));
+			destination.clearContent();
+			assertEquals(survival ? 0 : 1, recovery.recover(dead, destination, () -> true).moved());
+			assertEquals(0, recovery.recover(dead, destination, () -> true).moved());
+			assertTrue(recovery.inspect(dead).isEmpty()); assertEquals(before, simulation.save());
+		}
+	}
+
+	@Test void potatoCustodyRecordsOnlyWhatTheSourceActuallyRemoves() {
+		UUID dead = new UUID(62, 3);
+		SimpleContainer source = new SimpleContainer(new ItemStack(Items.POISONOUS_POTATO, 5)) {
+			@Override public ItemStack removeItem(int slot, int count) { return super.removeItem(slot, Math.min(count, 2)); }
+		};
+		var recovery = new SettlementCargoRecovery();
+		assertEquals(2, capture(recovery, dead, source));
+		assertEquals(3, source.countItem(Items.POISONOUS_POTATO));
+		assertEquals(2, recovery.inspect(dead).orElseThrow().totalCount());
+		assertEquals(0, capture(recovery, dead, source));
+		SimpleContainer destination = new SimpleContainer(1);
+		assertEquals(2, recovery.recover(dead, destination, () -> true).moved());
+		assertEquals(5, source.countItem(Items.POISONOUS_POTATO) + destination.countItem(Items.POISONOUS_POTATO));
 	}
 
 	@Test void movesActualMaterialSlotsAndPreservesAllOtherInventory() {

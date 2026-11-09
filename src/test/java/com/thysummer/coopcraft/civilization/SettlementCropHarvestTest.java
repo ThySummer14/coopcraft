@@ -165,7 +165,7 @@ class SettlementCropHarvestTest {
 			() -> ((CropBlock) Blocks.POTATOES).getStateForAge(age));
 	}
 
-	@Test void netPotatoesUseExistingProductionServiceAndSurviveReload() {
+	@Test void netPotatoesRemainCarriedAndSurviveReload() {
 		for (boolean simulation : List.of(false, true)) {
 			SettlementSavedData data = new SettlementSavedData();
 			Settlement settlement = data.getOrCreate(BlockPos.ZERO, "Crops", 0);
@@ -177,11 +177,14 @@ class SettlementCropHarvestTest {
 			state.setProductionEnabled(simulation);
 			state.setSkillsEnabled(simulation);
 			SimpleContainer inventory = new SimpleContainer(2);
-			var output = SettlementCropHarvest.outputAfterSeed(List.of(new ItemStack(Items.POTATO, 5), new ItemStack(Items.POISONOUS_POTATO))).orElseThrow();
-			assertTrue(SettlementHarvestCommit.commit(inventory, output, () -> true));
-			assertEquals(simulation ? 4 : 0, SettlementSimulationService.recordProduction(data, settlement, actor, inventory, Items.POTATO, 4, "harvest_crop"));
+			data.toggleResource(settlement, BlockPos.ZERO);
+			assertEquals(4, SettlementCropHarvest.harvest(data, settlement, actor, BlockPos.ZERO, inventory,
+				() -> true, () -> true, () -> true, () -> ((CropBlock) Blocks.POTATOES).getStateForAge(7),
+				() -> List.of(new ItemStack(Items.POTATO, 5), new ItemStack(Items.POISONOUS_POTATO)), mature -> true));
 			assertEquals(1, inventory.countItem(Items.POISONOUS_POTATO));
-			assertEquals(simulation ? 0 : 4, inventory.countItem(Items.POTATO));
+			assertEquals(4, inventory.countItem(Items.POTATO));
+			assertEquals(simulation, SettlementFoodAge.isMarked(inventory.getItem(0)));
+			assertEquals(0L, state.world().inventoryTotals().getOrDefault(ResourceType.TUBERS, 0L).longValue());
 			assertEquals(simulation ? 1 : 0, state.world().ledger().events().stream().filter(event -> event.type() == EventType.SKILL_PRACTICED).count());
 			for (int round = 0; round < 2; round++) {
 				CompoundTag saved = data.save(new CompoundTag(), null);

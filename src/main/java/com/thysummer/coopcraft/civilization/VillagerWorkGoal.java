@@ -410,7 +410,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.ATTEND_MEETING && meetingTicket != null)
 			return new WorkStatus(meetingTicket.waiting() ? "meeting_wait" : "attend_meeting", meetingStore, null);
 		if (action == Action.RETURN_TO_STOCKPILE) return new WorkStatus(action.id(), target, cargoBlocker);
-		if (SettlementCargoDelivery.hasMarkedBerries(villager.getInventory()) && !hasDeliverableFoodCargo())
+		if (SettlementCargoDelivery.hasMarkedHarvestFood(villager.getInventory()) && !hasDeliverableFoodCargo())
 			return new WorkStatus(action == null ? "idle" : action.id(), target, "cargo_food_unavailable");
 		if (action == null && cargoBlocker != null && hasReturnCargo())
 			return new WorkStatus("idle", null, cargoBlocker);
@@ -940,7 +940,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean emergencyForage() {
-		// Carried usable berries are the solution to an empty public ration, not a reason to gather more.
+		// Carried usable food is the solution to an empty public ration, not a reason to gather more.
 		if (hasDeliverableFoodCargo()) return false;
 		return settlement != null && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20
 			&& !hasFoodAvailable() && shouldForage();

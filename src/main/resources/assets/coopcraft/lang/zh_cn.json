@@ -564,5 +564,5 @@
 	"coopcraft.command.settlement.cargo_rescue_requirements": "救援需管理员本人存活、非旁观者，站在合法且已加载、正在活动的区块；遗物位置须仍在边界外。",
 	"coopcraft.food_age.cargo_only": "文明食品货物：暂停原版食用、分享和种植",
 	"coopcraft.food_age.return_to_source": "请送回来源聚落公仓；不能用于原版配方",
-	"coopcraft.interaction.blocker.cargo_food_unavailable": "日期浆果暂不能验收：请检查生产/生存开关、来源与过期状态；货物仍在背包"
+	"coopcraft.interaction.blocker.cargo_food_unavailable": "日期食物暂不能验收：请检查生产/生存开关、来源与过期状态；货物仍在背包"
 }

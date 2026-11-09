@@ -9,7 +9,7 @@ import com.thysummer.coopcraft.civilization.simulation.Person;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** One synchronous berry harvest's clock and eligibility, captured before evaluating loot. */
+/** Shared berry/potato harvest clock and eligibility, captured before evaluating loot. */
 final class SettlementBerryCargoHarvest {
 	private SettlementBerryCargoHarvest() { }
 
@@ -59,6 +59,12 @@ final class SettlementBerryCargoHarvest {
 					&& current.isMember(settlement, actor) && person != null && person.isAlive()
 					&& person.campId().equals(state.campOwner().id())
 					&& state.world().allPeople().stream().anyMatch(candidate -> candidate == person));
+		}
+
+		/** Called only after reserving a plain seed from this harvest's original loot. */
+		ItemStack potatoOutputCopy(ItemStack stack) {
+			return survival && SettlementCropHarvest.ordinaryPotato(stack)
+				? SettlementFoodAge.stamp(stack, clock, day) : stack.copy();
 		}
 
 		/** Only newly produced plain berries are stamped; old cargo and custom loot are untouched. */

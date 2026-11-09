@@ -25,6 +25,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -83,7 +84,8 @@ public final class SettlementCargoRecovery extends SavedData {
 		if (source == null || source.getContainerSize() > MAX_CARGO_SLOTS) return 0;
 		var claim = claims.uniqueClaim().orElseThrow();
 		// Explicit age-marked food remains real custody in either mode, including unknown formats.
-		// Ordinary food keeps the earlier mode-specific personal-ration boundary.
+		// Potatoes and their poisonous byproduct are real custody in either mode, including old/custom stacks.
+		// Other ordinary food keeps the earlier mode-specific personal-ration boundary.
 		boolean preserveFood = !SettlementSimulationService.isSurvivalEnabled(claim.data(), claim.settlement());
 		CargoRecord record = new CargoRecord(deceasedId, position, safeName(name), new ArrayList<>());
 		// Move only actual source contents. Repeated callbacks see the drained inventory.
@@ -91,7 +93,9 @@ public final class SettlementCargoRecovery extends SavedData {
 			ItemStack stack = source.getItem(slot);
 			boolean agedFood = SettlementFoodAge.isMarked(stack)
 				&& SettlementFoodAge.ordinaryFoodType(new ItemStack(stack.getItem())).isPresent();
-			if (!SettlementCargo.isMaterial(stack) && !agedFood && !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
+			boolean potatoCargo = stack.is(Items.POTATO) || stack.is(Items.POISONOUS_POTATO);
+			if (!SettlementCargo.isMaterial(stack) && !agedFood && !potatoCargo
+				&& !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
 			ItemStack removed = source.removeItem(slot, stack.getCount());
 			if (!removed.isEmpty()) record.stacks.add(removed.copy());
 		}
