@@ -152,7 +152,8 @@ class ConstructionPairReadinessTest {
 			assertEquals("ready", inspect(plan, index, probe));
 			var data = new SettlementSavedData(); var settlement = data.getOrCreate(ORIGIN, "Pair", 0);
 			data.setConstructionJob(settlement, job); data.setDirty(false);
-			probe.inventory.setItem(0, new ItemStack(plan.instructions().getFirst().item(), 3));
+			probe.inventory.setItem(0, new ItemStack(plan.instructions().getFirst().item()));
+			assertEquals(1, probe.inventory.getItem(0).getCount());
 			var saved = job.save(); var calls = new AtomicInteger();
 			probe.blocks.put(at(plan, 1 - index), Blocks.STONE.defaultBlockState());
 			for (int repeat = 0; repeat < 3; repeat++) {
@@ -160,7 +161,7 @@ class ConstructionPairReadinessTest {
 					calls.incrementAndGet(); probe.inventory.removeItem(0, 1); data.setDirty(); return true;
 				}));
 			}
-			assertEquals(0, calls.get()); assertEquals(3, probe.inventory.getItem(0).getCount());
+			assertEquals(0, calls.get()); assertEquals(1, probe.inventory.getItem(0).getCount());
 			assertEquals(saved, data.getConstructionJob(settlement).orElseThrow().save()); assertFalse(data.isDirty());
 			probe.blocks.put(at(plan, 1 - index), index == 0 ? Blocks.AIR.defaultBlockState() : plan.instructions().getFirst().state());
 			assertTrue(ConstructionSystem.placeIfReady(ConstructionJob.load(saved), plan, probe, () -> { calls.incrementAndGet(); return true; }));
@@ -196,11 +197,12 @@ class ConstructionPairReadinessTest {
 					var restored = SettlementSavedData.load(saved, null); restored.setDirty(false);
 					var probe = new Probe();
 					if (!instruction.consume()) probe.blocks.put(at(plan, index - 1), plan.instructions().get(index - 1).state());
-					probe.inventory.setItem(0, new ItemStack(instruction.item(), 2));
+					probe.inventory.setItem(0, new ItemStack(instruction.item()));
+					assertEquals(1, probe.inventory.getItem(0).getCount());
 					var restoredJob = restored.getConstructionJob(settlement).orElseThrow();
 					assertEquals("ready", ConstructionReadiness.inspect(restoredJob, plan, probe).blocker());
 					assertEquals(saved, restored.save(new net.minecraft.nbt.CompoundTag(), null));
-					assertFalse(restored.isDirty()); assertEquals(2, probe.inventory.getItem(0).getCount());
+					assertFalse(restored.isDirty()); assertEquals(1, probe.inventory.getItem(0).getCount());
 				}
 				assertTrue(pairedSteps >= 4, name);
 			}
