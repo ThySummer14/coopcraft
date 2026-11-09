@@ -243,6 +243,34 @@ public final class SettlementSimulationService {
 		return workDuration(data, settlement, villagerId, duration, WorkType.CRAFT);
 	}
 
+	/** Read-only social budget for a current, living resident of the canonical settlement. */
+	public record SocialWork(int socialHours, int previousSocialHours, int availableHours) {}
+
+	public static Optional<SocialWork> socialWork(
+		SettlementSavedData data, Settlement settlement, UUID villagerId
+	) {
+		if (data == null || settlement == null || villagerId == null
+			|| data.all().stream().noneMatch(candidate -> candidate == settlement)
+			|| !data.isMember(settlement, villagerId)) return Optional.empty();
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled() || !state.normsEnabled()) return Optional.empty();
+		return state.residentId(villagerId)
+			.flatMap(id -> state.world().allPeople().stream().filter(person -> person.id().equals(id)).findFirst())
+			.filter(person -> person.isAlive() && person.campId().equals(state.campOwner().id()))
+			.map(person -> new SocialWork(person.socialHours(), person.previousSocialHours(),
+				Math.max(1, 6 - person.previousSocialHours())));
+	}
+
+	/** BUILD has no core skill: apply only the already-settled social time cost. */
+	public static int constructionWorkDuration(
+		SettlementSavedData data, Settlement settlement, UUID villagerId, int duration
+	) {
+		if (duration <= 0) throw new IllegalArgumentException("Work duration must be positive");
+		return socialWork(data, settlement, villagerId)
+			.map(work -> (int) Math.min(Integer.MAX_VALUE, Math.round(duration * 6.0 / work.availableHours())))
+			.orElse(duration);
+	}
+
 	private static int workDuration(
 		SettlementSavedData data,
 		Settlement settlement,

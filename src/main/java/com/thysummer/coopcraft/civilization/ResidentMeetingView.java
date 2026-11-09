@@ -68,6 +68,17 @@ final class ResidentMeetingView {
 		return command("meeting_" + result.status());
 	}
 
+	/** Read the same applied social-time factor as construction, without charging or settling a day. */
+	static List<Component> socialWorkCost(SettlementSavedData data, Settlement settlement, UUID resident, long gameDay) {
+		return SettlementSimulationService.socialWork(data, settlement, resident).map(work -> {
+			var state = data.simulationOf(settlement).orElseThrow();
+			if (gameDay < 0 || !SettlementMeetings.dayReady(gameDay, state.lastSurvivalDay()))
+				return List.of(message("social_work_day_pending"));
+			return List.of(message(work.previousSocialHours() >= 6 ? "social_work_exhausted" : "social_work_cost",
+				state.world().day(), work.socialHours(), work.previousSocialHours(), work.availableHours()));
+		}).orElseGet(List::of);
+	}
+
 	/** Existing saved allocation, not a delivery or a promise that the current world day is settled. */
 	static List<Component> rations(SettlementSavedData data, Settlement settlement, UUID resident, Component name, long gameDay) {
 		var state = data.simulationOf(settlement).orElse(null);

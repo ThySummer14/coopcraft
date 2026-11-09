@@ -483,7 +483,7 @@
 	"coopcraft.resident_dialog.hold_meeting": "召开会议",
 	"coopcraft.resident_dialog.hold_meeting_hint": "按上方预览召开一轮会议，每名参与者花费1社交小时并占用今日会期。情况变化时先刷新；不保证提案通过。",
 	"coopcraft.resident_dialog.gathering_title": "仓库会议：下方为实际待议事项，可能不同于居民意见区的议题。",
-	"coopcraft.resident_dialog.gathering_cost": "选择立即议事或继续邀请。有效会议花费每位参与者1社交小时并占用本聚落今日会期；不直接消耗或发放食物。",
+	"coopcraft.resident_dialog.gathering_cost": "选择立即议事或继续邀请。有效会议每位参与者花费1社交小时并占用今日会期，下次日结后拖慢采集、加工与施工；不直接发粮。",
 	"coopcraft.resident_dialog.gathering_ready": "可以尝试召开下方会议；仅现场合格居民参加，玩家只组织，不投票。",
 	"coopcraft.resident_dialog.gathering_unreviewable": "无法完整核验待议内容，请刷新后重试。本次未开会。",
 	"coopcraft.resident_dialog.receipt_title": "本窗口最近一次成功会议：以下为当次冻结回执和会后即时状态，刷新不重开会议。",
@@ -509,5 +509,8 @@
 	"coopcraft.resident_dialog.meal_retry_satisfied": "已达到进食目标，这条旧中断记录不会触发额外进食。",
 	"coopcraft.resident_dialog.meal_retry_allocation_changed": "已领数量已改变，这条旧餐记录不能再触发补吃。",
 	"coopcraft.resident_dialog.meal_retry_allowance_spent": "当前已无剩余额度，补货不会增加每日可领件数。",
-	"coopcraft.resident_dialog.meal_retry_no_food": "公仓仍无可用食物营养，这餐需等待实际补货。"
+	"coopcraft.resident_dialog.meal_retry_no_food": "公仓仍无可用食物营养，这餐需等待实际补货。",
+	"coopcraft.resident_dialog.social_work_day_pending": "社会劳动记录待日结，当前不推算本日工时系数。",
+	"coopcraft.resident_dialog.social_work_cost": "核心日%s：本日已付%s社交小时，上轮%s小时；采集/加工/施工的社会时间倍率为6/%s（另计性格、饥饿与适用技能）。",
+	"coopcraft.resident_dialog.social_work_exhausted": "核心日%s：本日已付%s社交小时，上轮%s小时；木石采集暂停，其余采食/加工/施工的社会时间倍率为6/%s。"
 }

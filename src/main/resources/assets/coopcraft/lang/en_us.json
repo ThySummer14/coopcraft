@@ -483,7 +483,7 @@
 	"coopcraft.resident_dialog.hold_meeting": "Hold meeting",
 	"coopcraft.resident_dialog.hold_meeting_hint": "Hold the reviewed round. Each participant spends 1 social hour and today's meeting is used. Refresh if conditions change; approval is not guaranteed.",
 	"coopcraft.resident_dialog.gathering_title": "Common-store meeting: the actual agenda below may differ from the resident inquiry.",
-	"coopcraft.resident_dialog.gathering_cost": "Choose to meet now or invite more residents. A held round costs each participant 1 social hour and uses today's meeting. It does not consume or hand out food.",
+	"coopcraft.resident_dialog.gathering_cost": "Meet now or invite more residents. A held round costs each participant 1 social hour and today’s meeting, slowing gathering, crafting and construction after the next day settlement; no food is handed out.",
 	"coopcraft.resident_dialog.gathering_ready": "You may hold the reviewed meeting below. Only eligible residents on site take part; you organize, but do not vote.",
 	"coopcraft.resident_dialog.gathering_unreviewable": "The agenda cannot be fully verified. Refresh and try again. No meeting was held.",
 	"coopcraft.resident_dialog.receipt_title": "Last held meeting in this window: the following receipt and immediate post-meeting state are frozen. Refresh does not hold another meeting.",
@@ -509,5 +509,8 @@
 	"coopcraft.resident_dialog.meal_retry_satisfied": "The eating target is already met. This old interruption does not trigger more eating.",
 	"coopcraft.resident_dialog.meal_retry_allocation_changed": "Allocations have changed since this interrupted meal. Its old evidence cannot trigger another attempt.",
 	"coopcraft.resident_dialog.meal_retry_allowance_spent": "No current allowance remains. Restocking does not create additional daily units.",
-	"coopcraft.resident_dialog.meal_retry_no_food": "The common store still has no food nutrition. The unfinished meal awaits a real restock."
+	"coopcraft.resident_dialog.meal_retry_no_food": "The common store still has no food nutrition. The unfinished meal awaits a real restock.",
+	"coopcraft.resident_dialog.social_work_day_pending": "Social work record awaits day settlement; no current-day time factor is inferred.",
+	"coopcraft.resident_dialog.social_work_cost": "Core day %s: %s social hours spent today, %s last cycle; gathering/crafting/construction time factor 6/%s (personality, hunger and applicable skills apply separately).",
+	"coopcraft.resident_dialog.social_work_exhausted": "Core day %s: %s social hours spent today, %s last cycle; wood/stone gathering paused, food gathering/crafting/construction time factor 6/%s."
 }

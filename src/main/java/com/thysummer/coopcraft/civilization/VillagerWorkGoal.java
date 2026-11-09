@@ -478,7 +478,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action == Action.GATHER || (action == Action.FORAGE || action == Action.HARVEST_CROP)) {
 			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
-		} else if (action != Action.BUILD && action != Action.EAT) {
+		} else if (action == Action.BUILD) {
+			duration = SettlementSimulationService.constructionWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+		} else if (action != Action.EAT) {
 			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		}
 		if (progress < duration) {

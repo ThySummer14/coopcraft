@@ -175,6 +175,7 @@ public final class VillagerInteraction {
 			lines.add(Component.translatable("coopcraft.interaction.inspect_action", action));
 		}
 		lines.add(Component.translatable("coopcraft.interaction.meeting.inspect_" + VillagerWorkGoal.invitationStatus(villager)));
+		lines.addAll(ResidentMeetingView.socialWorkCost(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY));
 		VillagerMeetingInquiry.inspect(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY)
 			.forEach(lines::add);
 		lines.add(Component.translatable("coopcraft.interaction.meeting.hint"));
