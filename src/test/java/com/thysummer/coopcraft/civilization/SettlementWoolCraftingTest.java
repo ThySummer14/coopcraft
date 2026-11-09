@@ -185,33 +185,35 @@ class SettlementWoolCraftingTest {
 	}
 
 	@Test
-	void namedFinishedBedFullySatisfiesConstructionWithoutAnyCrafting() {
+	void namedFinishedBedIsPreservedWhileOrdinaryBedIsProduced() {
 		SimpleContainer stock = stock(64, 3, 3);
 		stock.setItem(3, named(Items.WHITE_BED, 1));
-		assertEquals(1, ConstructionMaterials.available(stock, null, Items.WHITE_BED));
+		assertEquals(0, ConstructionMaterials.available(stock, null, Items.WHITE_BED));
+		craftNext(stock, null, BED_DEMAND, SettlementMaterialCrafting.Recipe.BED);
 		assertTrue(SettlementMaterialCrafting.chooseRecipe(stock, null, BED_DEMAND).isEmpty());
 		assertEquals(64, stock.countItem(Items.STRING));
-		assertEquals(3, stock.countItem(Items.WHITE_WOOL));
-		assertEquals(3, stock.countItem(Items.OAK_PLANKS));
+		assertEquals(0, stock.countItem(Items.WHITE_WOOL));
+		assertEquals(0, stock.countItem(Items.OAK_PLANKS));
+		assertEquals(2, stock.countItem(Items.WHITE_BED));
 		assertNotNull(stock.getItem(3).get(DataComponents.CUSTOM_NAME));
-		// No phantom log shortage after construction's actual bed demand is fulfilled.
-		stock.setItem(2, ItemStack.EMPTY);
 		assertFalse(SettlementMaterialCrafting.needsConstructionLogs(stock, new SimpleContainer(1), null,
 			List.of(BED_DEMAND), true));
 	}
 
 	@Test
-	void namedBedPartiallySatisfiesDemandAndOnlyOneMissingBedIsProduced() {
+	void namedBedDoesNotSuppressTheSecondOrdinaryBedDemand() {
 		SimpleContainer stock = stock(64, 2, 6);
 		stock.setItem(3, named(Items.WHITE_BED, 1));
 		Map<Item, Integer> demand = Map.of(Items.WHITE_BED, 2);
 		craftNext(stock, null, demand, SettlementMaterialCrafting.Recipe.WOOL);
 		craftNext(stock, null, demand, SettlementMaterialCrafting.Recipe.BED);
+		for (int i = 0; i < 3; i++) craftNext(stock, null, demand, SettlementMaterialCrafting.Recipe.WOOL);
+		craftNext(stock, null, demand, SettlementMaterialCrafting.Recipe.BED);
 		assertTrue(SettlementMaterialCrafting.chooseRecipe(stock, null, demand).isEmpty());
-		assertEquals(2, stock.countItem(Items.WHITE_BED));
-		assertEquals(1, SettlementMaterialCrafting.countPlain(stock, Items.WHITE_BED));
-		assertEquals(60, stock.countItem(Items.STRING));
-		assertEquals(3, stock.countItem(Items.OAK_PLANKS));
+		assertEquals(3, stock.countItem(Items.WHITE_BED));
+		assertEquals(2, ConstructionSupply.countAvailable(stock, Items.WHITE_BED));
+		assertEquals(48, stock.countItem(Items.STRING));
+		assertEquals(0, stock.countItem(Items.OAK_PLANKS));
 		assertNotNull(stock.getItem(3).get(DataComponents.CUSTOM_NAME));
 	}
 

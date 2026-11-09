@@ -61,6 +61,9 @@ public class VillagerWorkGoal extends Goal {
 	private final SettlementCargoApproach.Search cargoApproach = new SettlementCargoApproach.Search();
 	private final SettlementCargoApproach.Cooldown cargoCooldown = new SettlementCargoApproach.Cooldown();
 	private String cargoBlocker;
+	private java.util.function.BooleanSupplier supplyAuthorization;
+	private BlockPos supplyStore;
+	private final SettlementCargoApproach.Cooldown supplyCooldown = new SettlementCargoApproach.Cooldown();
 
 	public VillagerWorkGoal(Villager villager) {
 		this.villager = villager;
@@ -112,7 +115,7 @@ public class VillagerWorkGoal extends Goal {
 			searchCooldown--;
 			return false;
 		}
-		if (shouldForage() && (!carrying || emergencyForage())) {
+		if (settlementData().getStockpile(settlement).isPresent() && shouldForage() && (!carrying || emergencyForage())) {
 			BlockPos bush = findRipeBerryBush();
 			if (bush != null) {
 				action = SettlementCropHarvest.isRipe(villager.level().getBlockState(bush)) ? Action.HARVEST_CROP : Action.FORAGE;
@@ -126,16 +129,26 @@ public class VillagerWorkGoal extends Goal {
 		if (carrying && cargoCooldown.ready(villager.level().getGameTime())) {
 			if (prepareCargoReturn()) return true;
 		}
+		if (isSupplyAction() && isTargetValid()) return true;
+		if (supplyCooldown.ready(villager.level().getGameTime()) && hasReturnableSupply()) {
+			if (prepareBuildSupply(true)) return true;
+		}
 		if (action != Action.BUILD) {
 			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
-				(ServerLevel) villager.level(), settlementData(), settlement
+				(ServerLevel) villager.level(), settlementData(), settlement, villager
 			);
 			if (buildTarget.isPresent()) {
 				currentBuildTarget = buildTarget.get();
-				action = Action.BUILD;
-				target = currentBuildTarget.position();
-				progress = 0;
-				return true;
+				if (requiresBuildSupply() && !hasCurrentSupply()) {
+					if (supplyCooldown.ready(villager.level().getGameTime())
+						&& !ConstructionSupply.hasAny(villager.getInventory()) && prepareBuildSupply(false)) return true;
+					currentBuildTarget = null;
+				} else {
+					action = Action.BUILD;
+					target = currentBuildTarget.position();
+					progress = 0;
+					return true;
+				}
 			}
 		}
 		if (action != null && isTargetValid()) {
@@ -164,6 +177,7 @@ public class VillagerWorkGoal extends Goal {
 		progress = 0;
 		travelTicks = 0;
 		if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
+		else if (isSupplyAction()) { villager.getNavigation().stop(); tickBuildSupply(); }
 		else if (action == Action.RETURN_TO_STOCKPILE) { villager.getNavigation().stop(); tickCargoReturn(); }
 		else navigateToTarget();
 	}
@@ -173,6 +187,8 @@ public class VillagerWorkGoal extends Goal {
 		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
 		if (foodTicket != null) foodTicket.cancel();
 		foodTicket = null;
+		supplyStore = null;
+		supplyAuthorization = null; // Physical supply remains in the bag across interruption/unload.
 		cargoTicket = null; // Never retain a cargo claim over stop/unload/interruption.
 		action = null;
 		target = null;
@@ -475,6 +491,7 @@ public class VillagerWorkGoal extends Goal {
 		refreshMeetingInvitation();
 		if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
 		if (action == null) return;
+		if (isSupplyAction()) { tickBuildSupply(); return; }
 		if (action == Action.RETURN_TO_STOCKPILE) { tickCargoReturn(); return; }
 		if (action == Action.CRAFT_FIRST_WORKBENCH && !isTargetValid()) { stop(); return; }
 		if (foodTicket != null) {
@@ -532,7 +549,7 @@ public class VillagerWorkGoal extends Goal {
 			);
 			case POLISH_PICKAXE -> craftPolishedPickaxe();
 			case GRIND_SMOOTH_STONE -> grindSmoothStone();
-			case ATTEND_MEETING, RETURN_TO_STOCKPILE -> { return; }
+			case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY -> { return; }
 			case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 		}
 		if (action == Action.EAT && isTargetValid()) {
@@ -586,6 +603,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private Action chooseAction() {
+		if (settlementData().getStockpile(settlement).isEmpty()) return null;
 		if (shouldEat()) {
 			return Action.EAT;
 		}
@@ -896,6 +914,8 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
+		if (isSupplyAction()) return target.equals(supplyStore) && supplyAuthorization != null && supplyAuthorization.getAsBoolean()
+			&& (action == Action.RETURN_BUILD_SUPPLY ? hasReturnableSupply() : currentSupplyTargetValid());
 		if (action == Action.RETURN_TO_STOCKPILE) return cargoTicket != null && target.equals(cargoTicket.store())
 			&& SettlementCargoDelivery.valid(cargoTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
 		if (action == Action.FORAGE) {
@@ -915,7 +935,7 @@ public class VillagerWorkGoal extends Goal {
 			return SettlementCropHarvest.validTarget(level, settlementData(), settlement, target);
 		}
 		if (action == Action.BUILD) {
-			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
+			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement, villager)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
 		}
@@ -951,6 +971,102 @@ public class VillagerWorkGoal extends Goal {
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
 		return SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory());
+	}
+
+	private boolean isSupplyAction() {
+		return action == Action.COLLECT_BUILD_SUPPLY || action == Action.RETURN_BUILD_SUPPLY;
+	}
+
+	private boolean requiresBuildSupply() {
+		return currentBuildTarget != null && currentBuildTarget.instruction().consume()
+			&& ConstructionSupply.supported(currentBuildTarget.instruction().item());
+	}
+
+	private boolean hasCurrentSupply() {
+		return currentBuildTarget != null && ConstructionSupply.hasFor(villager.getInventory(),
+			villager.level().dimension().location(), settlement.id(), villager.getUUID(),
+			currentBuildTarget.job(), currentBuildTarget.instruction());
+	}
+
+	private boolean hasReturnableSupply() {
+		return settlement != null && ConstructionSupply.hasReturnable(villager.getInventory(),
+			villager.level().dimension().location(), settlement.id(), villager.getUUID(),
+			returnSupplyJob());
+	}
+
+	private ConstructionJob returnSupplyJob() {
+		ConstructionJob job = settlementData().getConstructionJob(settlement).orElse(null);
+		return job != null && job.compatibilityBlocker(BlueprintManager.get(job.blueprintId())).equals("ready") ? job : null;
+	}
+
+	private boolean currentSupplyTargetValid() {
+		return requiresBuildSupply() && !ConstructionSupply.hasAny(villager.getInventory())
+			&& settlementData().getConstructionJob(settlement).filter(currentBuildTarget.job()::equals).isPresent()
+			&& ConstructionSystem.nextBuildTarget((ServerLevel) villager.level(), settlementData(), settlement, villager)
+				.filter(currentBuildTarget::equals).isPresent();
+	}
+
+	/** Travel authority binds identities, never an inventory wrapper or a copied item. */
+	private boolean prepareBuildSupply(boolean returning) {
+		ServerLevel level = (ServerLevel) villager.level();
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		if (!SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+			level.dimension(), data, camp)) return deferBuildSupply();
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		SettlementCraftingStore.Binding binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return deferBuildSupply();
+		Object member = data.memberIdentity(villager.getUUID());
+		Object storeToken = data.stockpileBindingToken(camp);
+		supplyAuthorization = () -> SettlementSavedData.get(level) == data && settlement == camp
+			&& villager.level() == level && data.findSettlementForVillager(villager.getUUID()).orElse(null) == camp
+			&& member != null && data.memberIdentity(villager.getUUID()) == member && data.isMember(camp, villager.getUUID())
+			&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()), level.dimension(), data, camp)
+			&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby() && !villager.isSleeping()
+			&& !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+			&& level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition())
+			&& level.isPositionEntityTicking(villager.blockPosition())
+			&& data.stockpileBindingToken(camp) == storeToken
+			&& data.getStockpile(camp).filter(store::equals).isPresent() && binding.valid();
+		if (!supplyAuthorization.getAsBoolean() || (returning ? !hasReturnableSupply() : !currentSupplyTargetValid()))
+			return deferBuildSupply();
+		supplyStore = store;
+		action = returning ? Action.RETURN_BUILD_SUPPLY : Action.COLLECT_BUILD_SUPPLY;
+		target = store;
+		progress = 0;
+		return true;
+	}
+
+	private boolean deferBuildSupply() {
+		supplyStore = null;
+		supplyCooldown.defer(villager.level().getGameTime());
+		supplyAuthorization = null;
+		return false;
+	}
+
+	private void tickBuildSupply() {
+		if (!isTargetValid()) { deferBuildSupply(); stop(); return; }
+		if (shouldEat() || meetingTicket != null || emergencyForage()) { stop(); return; }
+		if (!atCargoStore()) { tickStoreTravel(true); return; }
+		villager.getNavigation().stop();
+		ServerLevel level = (ServerLevel) villager.level();
+		// Resolve the live store only after physical arrival; helper rechecks the full authority at mutation.
+		Container store = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+		java.util.function.BooleanSupplier authorized = () -> isTargetValid() && atCargoStore();
+		if (action == Action.RETURN_BUILD_SUPPLY) {
+			ConstructionJob rawJob = settlementData().getConstructionJob(settlement).orElse(null);
+			ConstructionJob returnJob = returnSupplyJob();
+			ConstructionSupply.returnUnused(villager.getInventory(), store, level.dimension().location(), settlement.id(),
+				villager.getUUID(), returnJob, () -> authorized.getAsBoolean()
+					&& java.util.Objects.equals(rawJob, settlementData().getConstructionJob(settlement).orElse(null))
+					&& java.util.Objects.equals(returnJob, returnSupplyJob()));
+			if (hasReturnableSupply()) deferBuildSupply();
+		} else {
+			ConstructionSupply.pickup(store, villager.getInventory(), level.dimension().location(), settlement.id(),
+				villager.getUUID(), currentBuildTarget.job(), currentBuildTarget.instruction(), authorized);
+			if (!hasCurrentSupply()) deferBuildSupply();
+		}
+		stop();
 	}
 
 	private boolean prepareCargoReturn() {
@@ -1027,8 +1143,13 @@ public class VillagerWorkGoal extends Goal {
 			stop();
 			return;
 		}
+		tickStoreTravel(false);
+	}
+
+	private void tickStoreTravel(boolean supply) {
+		ServerLevel level = (ServerLevel) villager.level();
 		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS || !constructionPathIsTicking()) {
-			deferCargo("cargo_path_blocked"); stop(); return;
+			if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); return;
 		}
 		if (!villager.getNavigation().isDone()) return;
 		var outcome = cargoApproach.attempt(target, villager.position(), level.getGameTime(), cargoProbe(level),
@@ -1040,10 +1161,11 @@ public class VillagerWorkGoal extends Goal {
 				}
 				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
 			});
-		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { deferCargo("cargo_path_blocked"); stop(); }
+		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); }
 	}
 
 	private boolean shouldEat() {
+		if (settlementData().getStockpile(settlement).isEmpty()) return false;
 		return SettlementFoodAccess.shouldEat(settlementData(), settlement, villager.getUUID(),
 			villager.level().getDayTime() / net.minecraft.world.level.Level.TICKS_PER_DAY,
 			settlementData().needsOf(settlement, villager.getUUID()).satiety(), hasFoodAvailable());
@@ -1350,7 +1472,10 @@ public class VillagerWorkGoal extends Goal {
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
 		return data.findSettlementForVillager(villager.getUUID())
-			.filter(settlement -> data.getStockpile(settlement).isPresent());
+			.filter(camp -> data.getStockpile(camp).isPresent() || ConstructionSupply.hasAny(villager.getInventory())
+				|| (data.getConstructionJob(camp).isPresent()
+					&& ConstructionSystem.nextBuildTarget(level, data, camp, villager)
+						.filter(next -> !next.instruction().consume()).isPresent()));
 	}
 
 	private SettlementSavedData settlementData() {
@@ -1372,6 +1497,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private enum Action {
 		RETURN_TO_STOCKPILE("return_to_stockpile"),
+		COLLECT_BUILD_SUPPLY("collect_build_supply"),
+		RETURN_BUILD_SUPPLY("return_build_supply"),
 		GATHER("gather"),
 		FORAGE("forage"),
 		HARVEST_CROP("harvest_crop"),

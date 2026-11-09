@@ -474,7 +474,7 @@ public final class SettlementCommands {
 
 	/** Formatting a snapshot never resolves a target, loads chunks, or changes a saved project. */
 	static Component constructionMessage(ConstructionReadiness readiness) {
-		Object total = List.of("plan_unavailable", "plan_unverified", "plan_changed").contains(readiness.blocker())
+		Object total = List.of("plan_unavailable", "plan_unverified", "plan_changed", "invalid_job_id").contains(readiness.blocker())
 			? message("construction_unknown") : readiness.total();
 		Object position = readiness.position() == null
 			? message("construction_unknown") : readiness.position().toShortString();

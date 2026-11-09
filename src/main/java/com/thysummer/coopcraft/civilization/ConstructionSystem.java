@@ -23,6 +23,12 @@ public final class ConstructionSystem {
 	}
 
 	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data, Settlement settlement) {
+		return nextBuildTarget(level, data, settlement, null);
+	}
+
+	/** A carried last unit remains available after its source store becomes empty or unavailable. */
+	public static Optional<BuildTarget> nextBuildTarget(ServerLevel level, SettlementSavedData data,
+		Settlement settlement, Villager worker) {
 		ConstructionJob job = data.getConstructionJob(settlement).orElse(null);
 		if (job == null) {
 			clearStaleHearth(level, data, settlement);
@@ -44,16 +50,21 @@ public final class ConstructionSystem {
 		var readiness = ConstructionStepReadiness.inspect(job, plan, stepProbe(level), false);
 		if (!readiness.ready()) return Optional.empty();
 		BlockPos position = readiness.position();
-		if (!instruction.consume()) return Optional.of(new BuildTarget(job, instruction, position));
-		Container stockpile = loadedStockpile(level, data, settlement);
-		if (stockpile == null || (instruction.consume() && ConstructionMaterials.available(stockpile, data.simulationOf(settlement).orElse(null), instruction.item()) < 1)) {
-			return Optional.empty();
-		}
-		if (instruction.consume() && stockpile.countItem(instruction.item()) < 1
-			&& !ConstructionReadiness.canInsertOne(stockpile, new ItemStack(instruction.item()))) {
-			return Optional.empty();
-		}
-		return Optional.of(new BuildTarget(job, instruction, position));
+		return materialReady(job, instruction, level.dimension().location(), settlement.id(),
+			worker == null ? null : worker.getUUID(), worker == null ? null : worker.getInventory(),
+			() -> loadedStockpile(level, data, settlement), () -> data.simulationOf(settlement).orElse(null))
+			? Optional.of(new BuildTarget(job, instruction, position)) : Optional.empty();
+	}
+
+	/** Material half of target selection; the caller has already checked the current plan and world. */
+	static boolean materialReady(ConstructionJob job, ConstructionInstruction instruction,
+		net.minecraft.resources.ResourceLocation dimension, java.util.UUID camp, java.util.UUID actor, Container carried,
+		java.util.function.Supplier<Container> stockpile, java.util.function.Supplier<SettlementSimulationState> simulation) {
+		if (!instruction.consume()) return true;
+		if (ConstructionSupply.hasFor(carried, dimension, camp, actor, job, instruction)) return true;
+		Container store = stockpile.get();
+		if (store == null || ConstructionMaterials.available(store, simulation.get(), instruction.item()) < 1) return false;
+		return store.countItem(instruction.item()) > 0 || ConstructionReadiness.canInsertOne(store, new ItemStack(instruction.item()));
 	}
 
 	/** Shared new-project selection: unavailable materials or sites never block later projects. */
@@ -133,11 +144,24 @@ public final class ConstructionSystem {
 			return false;
 		}
 		ConstructionInstruction instruction = target.instruction();
+		if (instruction.consume() && ConstructionSupply.supported(instruction.item())
+			&& !supplyWorkerReady(level, data, settlement, villager)) return false;
 		// Re-read pair and completion-bed state even when the work claim was valid earlier.
 		if (!placeIfReady(current, plan, stepProbe(level), () -> {
-			Container stockpile = instruction.consume() ? loadedStockpile(level, data, settlement) : null;
 			boolean firstPart = instruction.consume()
 				&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
+			if (instruction.consume() && ConstructionSupply.supported(instruction.item())) {
+				return ConstructionSupply.place(villager.getInventory(), level.dimension().location(), settlement.id(),
+					villager.getUUID(), current, instruction,
+					() -> supplyWorkerReady(level, data, settlement, villager)
+						&& data.getConstructionJob(settlement).filter(current::equals).isPresent()
+						&& current.compatibilityBlocker(BlueprintManager.get(current.blueprintId())).equals("ready")
+						&& villager.distanceToSqr(target.position().getCenter()) <= ConstructionApproach.REACH_SQUARED
+						&& !villager.getBoundingBox().intersects(new AABB(target.position()))
+						&& ConstructionStepReadiness.inspect(current, plan, stepProbe(level), true).ready(),
+					() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
+			}
+			Container stockpile = instruction.consume() ? loadedStockpile(level, data, settlement) : null;
 			return ConstructionMaterials.place(stockpile, instruction.consume() ? data.simulationOf(settlement).orElse(null) : null,
 				instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
 				() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
@@ -165,6 +189,15 @@ public final class ConstructionSystem {
 		return true;
 	}
 
+	private static boolean supplyWorkerReady(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager worker) {
+		return worker != null && worker.level() == level && worker.isAlive() && !worker.isRemoved()
+			&& !worker.isBaby() && !worker.isNoAi() && !worker.isSleeping() && !worker.isTrading() && !worker.isPassenger()
+			&& level.getEntity(worker.getUUID()) == worker && level.isLoaded(worker.blockPosition())
+			&& level.isPositionEntityTicking(worker.blockPosition()) && SettlementSavedData.get(level) == data
+			&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, worker.getUUID()),
+				level.dimension(), data, settlement);
+	}
+
 	/** Explicit legacy-only adoption. Validation never consumes items or changes blocks/index. */
 	public static ConstructionPlanAdoption.Result adoptLegacyPlan(ServerLevel level, SettlementSavedData data,
 		Settlement settlement, String expectedFingerprint) {
@@ -183,7 +216,7 @@ public final class ConstructionSystem {
 		var result = ConstructionPlanAdoption.inspect(job, plan, expectedFingerprint, probe);
 		if (result.status().equals("adopted")) {
 			data.setConstructionJob(settlement,
-				new ConstructionJob(job.blueprintId(), job.origin(), job.nextIndex(), plan.fingerprint()));
+				job.withPlanFingerprint(plan.fingerprint()));
 		}
 		return result;
 	}

@@ -87,7 +87,7 @@ public final class SettlementMaterialCrafting {
 	}
 
 	private static long availableProduct(Container stockpile, SettlementSimulationState state, Item item) {
-		// Construction consumes named beds as well; other crafting stock keeps its plain-item policy.
+		// Match construction pickup eligibility, including its rejection of assigned or custom beds.
 		return item == Items.WHITE_BED ? ConstructionMaterials.available(stockpile, state, item)
 			: countPlain(stockpile, item);
 	}

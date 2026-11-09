@@ -211,7 +211,7 @@ class SettlementSavedDataTest {
 		CompoundTag tag = data.save(new CompoundTag(), null);
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
 
-		assertEquals(new ConstructionJob(job.blueprintId(), job.origin(), 24), restored.getConstructionJob(settlement).orElseThrow());
+		assertEquals(job.advance(), restored.getConstructionJob(settlement).orElseThrow());
 		assertEquals(1, restored.housingCapacity(settlement));
 		assertEquals(grindingStation, restored.getGrindingStation(settlement).orElseThrow());
 		restored.completeConstruction(settlement);

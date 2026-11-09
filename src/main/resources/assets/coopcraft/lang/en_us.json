@@ -564,5 +564,11 @@
 	"coopcraft.command.settlement.cargo_rescue_requirements": "Rescue requires a living, non-spectating operator at an in-bounds loaded and ticking location; the remnant must still be out of bounds.",
 	"coopcraft.food_age.cargo_only": "Settlement food cargo: vanilla eating, sharing and planting are paused",
 	"coopcraft.food_age.return_to_source": "Return to the source settlement stockpile; unavailable for vanilla recipes",
-	"coopcraft.interaction.blocker.cargo_food_unavailable": "Dated food cannot be accepted: check production/survival modes, source and expiry; cargo remains carried"
+	"coopcraft.interaction.blocker.cargo_food_unavailable": "Dated food cannot be accepted: check production/survival modes, source and expiry; cargo remains carried",
+	"coopcraft.interaction.action.collect_build_supply": "Collecting one door or bed from the communal store",
+	"coopcraft.interaction.action.return_build_supply": "Returning an unused construction item to the communal store",
+	"coopcraft.interaction.blocker.construction_invalid_job_id": "Paused: the construction instance ID is malformed and was not replaced",
+	"coopcraft.command.settlement.construction_adopt_invalid_job_id": "The construction instance ID is malformed. Plan adoption was refused; the original data was retained.",
+	"coopcraft.construction_supply.reserved": "Resident construction supply: this stack is the physical item",
+	"coopcraft.construction_supply.recovered": "Recovered items retain their original assignment; the store will not treat them as ordinary materials for a new job"
 }

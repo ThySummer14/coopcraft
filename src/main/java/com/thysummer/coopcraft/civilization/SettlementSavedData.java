@@ -659,6 +659,8 @@ public final class SettlementSavedData extends SavedData {
 			CompoundTag constructionTag = constructionList.getCompound(i);
 			ConstructionJob job = ConstructionJob.load(constructionTag);
 			data.constructionJobs.put(constructionTag.getUUID("SettlementId"), job);
+			// Assign legacy job identities once, even when the job remains blocked.
+			if (!constructionTag.contains("JobId")) data.setDirty();
 		}
 
 		ListTag bedList = tag.getList("HousingBeds", ListTag.TAG_COMPOUND);

@@ -52,16 +52,17 @@ class SettlementWoolSupplyTest {
 	}
 
 	@Test
-	void namedFinishedBedCountsButNamedWoolAndStringDoNot() {
+	void namedFinishedBedWoolAndStringRemainOutsideTheOrdinarySupplyBudget() {
 		SimpleContainer store = new SimpleContainer(6);
 		store.setItem(0, named(Items.WHITE_BED, 1));
 		store.setItem(1, named(Items.WHITE_WOOL, 6));
 		store.setItem(2, named(Items.STRING, 24));
 		store.setItem(3, new ItemStack(Items.WHITE_WOOL, 2));
 		store.setItem(4, new ItemStack(Items.STRING, 3));
-		assertEquals(new SettlementWoolSupply.Snapshot(1, 1, 4, 3),
+		assertEquals(new SettlementWoolSupply.Snapshot(2, 4, 16, 3),
 			SettlementWoolSupply.inspect(Map.of(Items.WHITE_BED, 2), store).orElseThrow());
-		assertTrue(SettlementWoolSupply.inspect(Map.of(Items.WHITE_BED, 1), store).isEmpty());
+		assertEquals(new SettlementWoolSupply.Snapshot(1, 1, 4, 3),
+			SettlementWoolSupply.inspect(Map.of(Items.WHITE_BED, 1), store).orElseThrow());
 		assertEquals(8, store.countItem(Items.WHITE_WOOL));
 		assertEquals(27, store.countItem(Items.STRING));
 	}

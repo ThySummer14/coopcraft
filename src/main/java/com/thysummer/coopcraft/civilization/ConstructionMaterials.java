@@ -20,6 +20,8 @@ public final class ConstructionMaterials {
 		if (stockpile == null) {
 			return 0;
 		}
+		// Recovered/unknown supply markers and custom items are not ordinary pickup sources.
+		if (ConstructionSupply.supported(item)) return ConstructionSupply.countAvailable(stockpile, item);
 		long real = stockpile.countItem(item);
 		ResourceType type = resourceType(state, item);
 		if (type == null) {

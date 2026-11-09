@@ -42,6 +42,14 @@ class ConstructionPlanAdoptionTest {
 		assertEquals("fingerprint_mismatch", ConstructionPlanAdoption.inspect(legacy, differentId, differentId.fingerprint(), null).status());
 	}
 
+	@Test void malformedInstanceCannotGainPermissionThroughLegacyAdoption() {
+		var tag = new ConstructionJob(ID, ORIGIN, 0).save();
+		tag.putString("JobId", "preserve broken identity");
+		var job = ConstructionJob.load(tag);
+		assertEquals("invalid_job_id", ConstructionPlanAdoption.inspect(job, plan(), plan().fingerprint(), null).status());
+		assertEquals(tag, job.save());
+	}
+
 	@Test void unloadedCompletedPrefixNeverReadsUnknownBlockState() {
 		var plan = plan();
 		var probe = new Probe();

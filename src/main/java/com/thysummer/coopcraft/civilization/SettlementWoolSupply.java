@@ -14,8 +14,8 @@ final class SettlementWoolSupply {
 	static Optional<Snapshot> inspect(Map<Item, Integer> demand, Container stockpile) {
 		int requiredBeds = demand.getOrDefault(Items.WHITE_BED, 0);
 		if (requiredBeds <= 0 || stockpile == null) return Optional.empty();
-		// Construction accepts named finished beds; named wool/string are not crafting ingredients.
-		long missingBeds = Math.max(0L, (long) requiredBeds - stockpile.countItem(Items.WHITE_BED));
+		// Match the real pickup policy: named or already assigned beds cannot satisfy new demand.
+		long missingBeds = Math.max(0L, (long) requiredBeds - ConstructionSupply.countAvailable(stockpile, Items.WHITE_BED));
 		if (missingBeds == 0) return Optional.empty();
 		long missingWool = Math.max(0L, missingBeds * 3 - SettlementMaterialCrafting.countPlain(stockpile, Items.WHITE_WOOL));
 		return Optional.of(new Snapshot(missingBeds, missingWool, missingWool * 4,

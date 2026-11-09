@@ -9,6 +9,7 @@ public final class ConstructionPlanAdoption {
 
 	static Result inspect(ConstructionJob job, ConstructionPlan plan, String expectedFingerprint, Probe probe) {
 		if (job == null) return new Result("no_job", null);
+		if (!job.hasValidJobId()) return new Result("invalid_job_id", null);
 		if (!job.planFingerprint().isEmpty()) return new Result("not_legacy", null);
 		if (plan == null) return new Result("plan_unavailable", null);
 		if (job.nextIndex() >= plan.instructions().size()) return new Result("invalid_index", null);

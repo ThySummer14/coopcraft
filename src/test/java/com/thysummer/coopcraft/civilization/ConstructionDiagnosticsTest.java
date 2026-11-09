@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ConstructionDiagnosticsTest {
 	private static final List<String> REASONS = List.of("ready", "target_not_ticking", "target_occupied",
-		"entity_obstructed", "stockpile_unavailable", "stockpile_full", "missing_material", "plan_unavailable", "invalid_index", "plan_unverified", "plan_changed");
+		"entity_obstructed", "stockpile_unavailable", "stockpile_full", "missing_material", "plan_unavailable", "invalid_index", "plan_unverified", "plan_changed", "invalid_job_id");
 	private static final ResourceLocation BLUEPRINT = ResourceLocation.fromNamespaceAndPath("coopcraft", "stone_cottage");
 
 	@BeforeAll
@@ -59,7 +59,7 @@ class ConstructionDiagnosticsTest {
 			Object[] args = message.getArgs();
 			assertEquals(BLUEPRINT.toString(), args[0]);
 			assertEquals(4, args[1]);
-			if (List.of("plan_unavailable", "plan_unverified", "plan_changed").contains(reason)) {
+			if (List.of("plan_unavailable", "plan_unverified", "plan_changed", "invalid_job_id").contains(reason)) {
 				assertEquals("coopcraft.command.settlement.construction_unknown",
 					translation((Component) args[2]).getKey());
 			} else {
