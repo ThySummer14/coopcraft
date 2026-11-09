@@ -144,6 +144,42 @@ class SettlementEventsCommandTest {
 	}
 
 	@Test
+	void interruptedMealEventUsesFrozenDailyTotalRatherThanTheLastMealSize() {
+		var f = SettlementFoodRestockTest.fixture(1);
+		SettlementFoodRestockTest.eat(f);
+		f.state().world().importExternalBatch(ResourceType.FISH, 1, f.state().campOwner());
+		SettlementFoodRestockTest.eat(f);
+		var event = f.state().world().ledger().events().stream().filter(e -> e.type() == EventType.COMMON_MEAL_INTERRUPTED).toList().getLast();
+		assertEquals("1", event.context().get("allocatedUnits"));
+		assertEquals("2", event.context().get("dailyAllocatedUnits"));
+		var expected = Civilization.toSimulationEventInfo(null, f.data(), f.settlement(), event);
+		assertTrue(expected.details().stream().anyMatch(d -> d.label().equals("coopcraft.simulation.detail.allocation_units") && d.value().equals("2/3")));
+		assertTrue(expected.details().stream().anyMatch(d -> d.value().equals("coopcraft.simulation.reason.common-food-exhausted")));
+		f.state().world().importExternalBatch(ResourceType.FISH, 1, f.state().campOwner());
+		SettlementFoodRestockTest.eat(f);
+		var before = SettlementFoodRestockTest.save(f); f.data().setDirty(false);
+		assertEquals(expected, Civilization.toSimulationEventInfo(null, f.data(), f.settlement(), event));
+		assertEquals(before, SettlementFoodRestockTest.save(f)); assertFalse(f.data().isDirty());
+		f.state().world().assertConservation();
+	}
+
+	@Test
+	void everyLedgerEventAndInterruptedMealReasonHaveBothLanguageNames() throws Exception {
+		for (String language : List.of("zh_cn", "en_us")) {
+			try (var input = getClass().getResourceAsStream("/assets/coopcraft/lang/" + language + ".json")) {
+				assertNotNull(input);
+				var json = JsonParser.parseReader(new InputStreamReader(input, StandardCharsets.UTF_8)).getAsJsonObject();
+				for (EventType type : EventType.values()) {
+					String key = "coopcraft.simulation.event." + type.name();
+					assertTrue(json.has(key), key); assertFalse(json.get(key).getAsString().isBlank(), key);
+				}
+				String reason = "coopcraft.simulation.reason.common-food-exhausted";
+				assertTrue(json.has(reason)); assertFalse(json.get(reason).getAsString().isBlank());
+			}
+		}
+	}
+
+	@Test
 	void newTranslationsExistWithMatchingArgumentCounts() throws Exception {
 		var keys = Map.of("events_empty", 1, "events_header", 2, "events_none", 0, "events_row", 6, "events_more_causes", 1);
 		for (String language : List.of("zh_cn", "en_us")) {

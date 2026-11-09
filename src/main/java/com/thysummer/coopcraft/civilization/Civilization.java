@@ -425,6 +425,10 @@ public final class Civilization {
 		}
 		if (event.context().containsKey("previousCap") && event.context().containsKey("newCap")) {
 			addDetail(details, "cap", event.context().get("previousCap") + " → " + event.context().get("newCap"));
+		} else if (event.type() == EventType.COMMON_MEAL_INTERRUPTED) {
+			// allocatedUnits belongs to this meal's evidence; this label describes the daily total.
+			if (event.context().containsKey("dailyAllocatedUnits") && event.context().containsKey("cap"))
+				addDetail(details, "allocation_units", event.context().get("dailyAllocatedUnits") + "/" + event.context().get("cap"));
 		} else if (event.context().containsKey("allocatedUnits") && event.context().containsKey("cap")) {
 			addDetail(details, "allocation", event.context().get("allocatedUnits") + "/" + event.context().get("cap"));
 			addDetail(details, "care_bonus", event.context().get("careBonus"));

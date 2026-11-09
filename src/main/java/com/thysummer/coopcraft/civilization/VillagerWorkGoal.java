@@ -672,7 +672,8 @@ public class VillagerWorkGoal extends Goal {
 		if (needsConstructionLogs()) {
 			BlockPos oak = settlementData().resourcesOf(settlement).stream()
 				.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
-				.filter(pos -> villager.level().isLoaded(pos) && villager.level().getBlockState(pos).is(Blocks.OAK_LOG))
+				.filter(pos -> SettlementGathering.validTarget((ServerLevel) villager.level(), settlementData(), settlement, villager, pos))
+				.filter(pos -> villager.level().getBlockState(pos).is(Blocks.OAK_LOG))
 				.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
 				.orElse(null);
 			if (oak != null) {
@@ -718,7 +719,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		return settlementData().resourcesOf(settlement).stream()
 			.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
-			.filter(pos -> level.isLoaded(pos) && level.isPositionEntityTicking(pos))
+			.filter(pos -> SettlementGathering.validTarget(level, settlementData(), settlement, villager, pos))
 			.filter(pos -> {
 				BlockState state = level.getBlockState(pos);
 				return logs ? state.is(BlockTags.LOGS) : state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE);
@@ -858,15 +859,15 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.FORAGE) {
 			return SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
 		}
+		if (action == Action.GATHER) {
+			return SettlementGathering.validTarget(level, settlementData(), settlement, villager, target);
+		}
 		if (!level.isLoaded(target) || !level.isPositionEntityTicking(target)) return false;
 		if (action == Action.EAT) {
 			if (foodTicket != null) return true; // Queue revalidates attendance even after stock runs out.
 			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
 				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
 				&& (hasFoodAvailable() || hasPendingFoodRefusal());
-		}
-		if (action == Action.GATHER) {
-			return isGatherable(target);
 		}
 		if (action == Action.HARVEST_CROP) {
 			return SettlementCropHarvest.validTarget(level, settlementData(), settlement, target);
@@ -939,51 +940,10 @@ public class VillagerWorkGoal extends Goal {
 		return SettlementNeeds.hasFood(villager.getInventory(), stockpile);
 	}
 
-	private boolean isGatherable(BlockPos pos) {
-		if (!(villager.level() instanceof ServerLevel level) || !level.isLoaded(pos)
-			|| !level.isPositionEntityTicking(pos)) {
-			return false;
-		}
-		BlockState state = level.getBlockState(pos);
-		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS);
-	}
-
 	private void gather() {
-		if (!isGatherable(target)) {
-			// Preserve unknown/unloaded targets and planted or temporarily bare crop plots.
-			if (target != null && villager.level() instanceof ServerLevel level
-				&& level.isLoaded(target) && level.isPositionEntityTicking(target)
-				&& level.isLoaded(target.below())
-				&& !level.getBlockState(target).is(Blocks.POTATOES)
-				&& !level.getBlockState(target.below()).is(Blocks.FARMLAND)) {
-				settlementData().removeResource(settlement, target);
-			}
-			return;
+		if (villager.level() instanceof ServerLevel level) {
+			SettlementGathering.harvest(level, settlementData(), settlement, villager, target);
 		}
-		ServerLevel level = (ServerLevel) villager.level();
-		BlockState state = level.getBlockState(target);
-		List<ItemStack> drops = Block.getDrops(state, level, target, level.getBlockEntity(target));
-		for (ItemStack drop : drops) {
-			if (!villager.getInventory().canAddItem(drop)) {
-				return;
-			}
-		}
-
-		if (!level.destroyBlock(target, false, villager)) {
-			return;
-		}
-		for (ItemStack drop : drops) {
-			int produced = drop.getCount();
-			ItemStack remainder = villager.getInventory().addItem(drop);
-			if (!remainder.isEmpty()) {
-				villager.spawnAtLocation(remainder);
-			}
-			int inserted = produced - remainder.getCount();
-			if (inserted > 0) {
-				SettlementSimulationService.recordProduction(villager, settlementData(), settlement, drop.getItem(), inserted);
-			}
-		}
-		settlementData().removeResource(settlement, target);
 	}
 
 	private void craftPickaxe() {
