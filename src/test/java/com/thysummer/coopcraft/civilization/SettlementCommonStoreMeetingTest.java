@@ -633,7 +633,7 @@ class SettlementCommonStoreMeetingTest {
 	}
 
 	@Test
-	void careAgendaIsAnExtraAllowanceAndFirstNeedAdoptionActuallyLowersDefaultBase() {
+	void careAgendaIsAnExtraAllowanceAndFirstNeedAdoptionUsesEffectiveDefaultBase() {
 		Fixture care = fixture(2);
 		care.person(1).initializeAge(Person.AgeBand.ELDER, 0);
 		assertEquals(Norm.CARE_FIRST_COMMON_STORE, initialProposal(care).normId());
@@ -652,10 +652,10 @@ class SettlementCommonStoreMeetingTest {
 		var adopted = hold(need, need.people());
 		assertEquals("adopted", adopted.outcome());
 		var feedback = SettlementMeetingFeedback.inspect(need.state, adopted);
-		assertEquals(2, feedback.effects().baseCap());
+		assertEquals(4, feedback.effects().baseCap());
 		assertEquals(0, feedback.effects().careExtraCap());
-		assertEquals("0 → 2", feedback.completedDetails().getLast().value(), "Historical norm establishment is separate from the actual 3-to-2 quota change");
-		assertEquals(2, need.state.dailyFoodUnitCap(need.person(1).id()));
+		assertEquals("0 → 4", feedback.completedDetails().getLast().value(), "Historical norm establishment is separate from the actual 3-to-4 quota change");
+		assertEquals(4, need.state.dailyFoodUnitCap(need.person(1).id()));
 		assertEquals(30L, need.state.world().inventoryTotals().get(ResourceType.FISH).longValue());
 		need.state.world().assertConservation();
 	}
