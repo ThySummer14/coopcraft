@@ -15,6 +15,7 @@ public final class ConstructionPlanner {
 	public static final ResourceLocation CAMPFIRE_HEARTH = CoopCraft.id("campfire_hearth");
 	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
 	public static final ResourceLocation TIMBER_PORCH_CABIN = CoopCraft.id("timber_porch_cabin_v1");
+	public static final ResourceLocation TIMBER_SIDE_PORCH_CABIN = CoopCraft.id("timber_side_porch_cabin_v1");
 
 	private ConstructionPlanner() {
 	}
@@ -24,15 +25,22 @@ public final class ConstructionPlanner {
 		if (data.stageOf(settlement) == SettlementStage.PRIMITIVE && data.getHearth(settlement).isEmpty()) {
 			projects.add(new Project(CAMPFIRE_HEARTH));
 		}
-		if (housingPlan(data, settlement).needsHousing()) {
-			projects.add(new Project(TIMBER_PORCH_CABIN));
+		HousingPlan housing = housingPlan(data, settlement);
+		if (housing.needsHousing()) {
+			projects.add(new Project(housingBlueprint(housing.housingCapacity())));
 		}
 		return List.copyOf(projects);
 	}
 
+	/** Read-only selection for the next project, based on current registered beds, not job history. */
+	public static ResourceLocation housingBlueprint(int housingCapacity) {
+		if (housingCapacity < 0) throw new IllegalArgumentException("Housing counts cannot be negative");
+		return (housingCapacity / 2) % 2 == 0 ? TIMBER_PORCH_CABIN : TIMBER_SIDE_PORCH_CABIN;
+	}
+
 	/** Versioned new-house selection never changes a saved job's plan or instruction index. */
 	public static boolean isHousingBlueprint(ResourceLocation id) {
-		return STONE_COTTAGE.equals(id) || TIMBER_PORCH_CABIN.equals(id);
+		return STONE_COTTAGE.equals(id) || TIMBER_PORCH_CABIN.equals(id) || TIMBER_SIDE_PORCH_CABIN.equals(id);
 	}
 
 	/** A paused saved job must not trigger production for a different or unverified plan. */
