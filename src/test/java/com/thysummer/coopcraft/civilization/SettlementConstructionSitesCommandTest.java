@@ -97,12 +97,12 @@ class SettlementConstructionSitesCommandTest {
 		var job = new ConstructionJob(HOUSE, new BlockPos(6, 0, 0), 3);
 		data.setConstructionJob(settlement, job);
 		var before = data.save(new CompoundTag(), null); data.setDirty(false);
-		assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+		assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 		assertEquals(job, data.getConstructionJob(settlement).orElseThrow());
 		assertFalse(data.isDirty()); assertEquals(before, data.save(new CompoundTag(), null));
 		var restored = SettlementSavedData.load(before, null);
 		assertEquals(before, restored.save(new CompoundTag(), null));
-		assertTrue(ConstructionSystem.inspectNewHousingSites(null, restored, restored.find(BlockPos.ZERO).orElseThrow()).isEmpty());
+		assertTrue(ConstructionSystem.inspectNewSites(null, restored, restored.find(BlockPos.ZERO).orElseThrow()).isEmpty());
 	}
 
 	@Test void everySurveyMessageAndFailureReasonHasBilingualArgumentParity() throws Exception {

@@ -27,19 +27,8 @@ public final class ConstructionSystem {
 		if (job == null) {
 			clearStaleHearth(level, data, settlement);
 			Container stockpile = loadedStockpile(level, data, settlement);
-			for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
-				ConstructionPlan candidate = BlueprintManager.get(project.blueprintId());
-				if (candidate == null || !ConstructionMaterials.hasAll(stockpile, data.simulationOf(settlement).orElse(null), candidate)) {
-					continue;
-				}
-				BlockPos origin = chooseOrigin(level, data, settlement, candidate);
-				if (origin == null) {
-					continue;
-				}
-				job = ConstructionJob.start(candidate, origin);
-				data.setConstructionJob(settlement, job);
-				break;
-			}
+			job = chooseProject(data, settlement, stockpile, candidate -> chooseOrigin(level, data, settlement, candidate));
+			if (job != null) data.setConstructionJob(settlement, job);
 			if (job == null) {
 				return Optional.empty();
 			}
@@ -64,6 +53,23 @@ public final class ConstructionSystem {
 			return Optional.empty();
 		}
 		return Optional.of(new BuildTarget(job, instruction, position));
+	}
+
+	/** Shared new-project selection: unavailable materials or sites never block later projects. */
+	static ConstructionJob chooseProject(SettlementSavedData data, Settlement settlement, Container stockpile,
+		java.util.function.Function<ConstructionPlan, BlockPos> findOrigin) {
+		// Saved jobs always retain their own origin, progress and compatibility handling.
+		ConstructionJob existing = data.getConstructionJob(settlement).orElse(null);
+		if (existing != null) return existing;
+		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
+			ConstructionPlan candidate = BlueprintManager.get(project.blueprintId());
+			if (candidate == null || !ConstructionMaterials.hasAll(stockpile, data.simulationOf(settlement).orElse(null), candidate)) {
+				continue;
+			}
+			BlockPos origin = findOrigin.apply(candidate);
+			if (origin != null) return ConstructionJob.start(candidate, origin);
+		}
+		return null;
 	}
 
 	/** Read-only snapshot of an existing job; never starts, cancels or advances construction. */
@@ -136,6 +142,7 @@ public final class ConstructionSystem {
 				() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
 		})) return false;
 		if (current.nextIndex() + 1 >= plan.instructions().size()) {
+			ConstructionWorkshop.registerCompleted(data, settlement, plan, current.origin(), siteProbe(level));
 			data.completeConstruction(settlement);
 			for (ConstructionInstruction part : plan.instructions()) {
 				BlockPos bed = current.origin().offset(part.offset());
@@ -230,8 +237,8 @@ public final class ConstructionSystem {
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, SettlementSavedData data, Settlement settlement, ConstructionPlan plan) {
-		if (ConstructionSite.isHousing(plan)) {
-			return chooseHousingOrigin(data, settlement, plan, level.getGameTime(), siteProbe(level));
+		if (ConstructionSite.isHousing(plan) || plan.id().equals(ConstructionPlanner.STARTER_WORKSHOP)) {
+			return chooseGuardedOrigin(data, settlement, plan, level.getGameTime(), siteProbe(level));
 		}
 		for (BlockPos origin : ConstructionSite.candidates(settlement.center())) {
 			if (canPlace(level, plan, origin)) return origin;
@@ -239,8 +246,8 @@ public final class ConstructionSystem {
 		return null;
 	}
 
-	/** New housing only, after material checks. Failure throttles never cache world observations. */
-	static BlockPos chooseHousingOrigin(SettlementSavedData data, Settlement settlement, ConstructionPlan plan,
+	/** New housing and starter workshops only, after material checks. Failure throttles never cache world observations. */
+	static BlockPos chooseGuardedOrigin(SettlementSavedData data, Settlement settlement, ConstructionPlan plan,
 		long gameTime, ConstructionSite.Probe probe) {
 		ConstructionSiteRetries retries = data.constructionSiteRetries();
 		if (retries.shouldWait(settlement, plan, gameTime)) return null;
@@ -261,18 +268,19 @@ public final class ConstructionSystem {
 		return true;
 	}
 
-	/** Current housing projects only; no material checks, job creation or persistent writes. */
-	public static List<ConstructionSite.Result> inspectNewHousingSites(ServerLevel level, SettlementSavedData data,
+	/** Current housing and starter workshop projects only; no material checks, job creation or persistent writes. */
+	public static List<ConstructionSite.Result> inspectNewSites(ServerLevel level, SettlementSavedData data,
 		Settlement settlement) {
 		if (data.getConstructionJob(settlement).isPresent()) return List.of();
 		List<ConstructionSite.Result> results = new ArrayList<>();
 		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
 			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
 			if (plan == null) {
-				if (ConstructionPlanner.isHousingBlueprint(project.blueprintId())) {
+				if (ConstructionPlanner.isHousingBlueprint(project.blueprintId())
+					|| project.blueprintId().equals(ConstructionPlanner.STARTER_WORKSHOP)) {
 					results.add(new ConstructionSite.Result(project.blueprintId(), settlement.center(), "plan_unavailable", null));
 				}
-			} else if (ConstructionSite.isHousing(plan)) {
+			} else if (ConstructionSite.isHousing(plan) || plan.id().equals(ConstructionPlanner.STARTER_WORKSHOP)) {
 				results.addAll(inspectSites(level, data, settlement, plan));
 			}
 		}

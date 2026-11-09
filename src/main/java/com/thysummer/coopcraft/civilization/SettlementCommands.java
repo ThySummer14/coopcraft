@@ -135,7 +135,7 @@ public final class SettlementCommands {
 			if (data.getConstructionJob(settlement).isPresent()) {
 				send(source, "construction_sites_existing");
 			} else {
-				for (Component line : constructionSiteMessages(ConstructionSystem.inspectNewHousingSites(level, data, settlement))) {
+				for (Component line : constructionSiteMessages(ConstructionSystem.inspectNewSites(level, data, settlement))) {
 					source.sendSuccess(() -> line, false);
 				}
 			}

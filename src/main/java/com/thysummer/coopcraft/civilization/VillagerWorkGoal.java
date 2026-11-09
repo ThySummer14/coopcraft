@@ -1099,7 +1099,7 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		return station
-			.filter(pos -> settlement.center().distSqr(pos) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> ConstructionWorkshop.withinWorkRange(settlement.center(), pos))
 			.filter(pos -> villager.level().isLoaded(pos)
 				&& ((ServerLevel) villager.level()).isPositionEntityTicking(pos)
 				&& villager.level().getBlockState(pos).is(block))

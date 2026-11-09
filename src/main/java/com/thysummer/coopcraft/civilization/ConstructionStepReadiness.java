@@ -7,12 +7,18 @@ import net.minecraft.world.level.block.BedBlock;
 final class ConstructionStepReadiness {
 	private ConstructionStepReadiness() {}
 
-	interface Probe extends ConstructionPairReadiness.Probe {
+	interface Probe extends ConstructionPairReadiness.Probe, ConstructionSite.Probe {
 		SettlementHousing.BedCheck inspectBed(BlockPos position);
 	}
 
 	static ConstructionPairReadiness.Result inspect(ConstructionJob job, ConstructionPlan plan,
 		Probe probe, boolean checkEntities) {
+		String compatibility = job.compatibilityBlocker(plan);
+		if (!compatibility.equals("ready")) return new ConstructionPairReadiness.Result(null, compatibility);
+		if (plan.id().equals(ConstructionPlanner.STARTER_WORKSHOP)) {
+			var site = ConstructionWorkshop.inspect(plan, job.origin(), probe);
+			if (!site.ready()) return new ConstructionPairReadiness.Result(site.position(), "workshop_" + site.reason());
+		}
 		var target = ConstructionPairReadiness.inspect(job, plan, probe, checkEntities);
 		if (!target.ready() || job.nextIndex() != plan.instructions().size() - 1) return target;
 		for (ConstructionInstruction part : plan.instructions()) {

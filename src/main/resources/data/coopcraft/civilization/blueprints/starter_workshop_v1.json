@@ -1,0 +1,7 @@
+{
+  "id": "coopcraft:starter_workshop_v1",
+  "size": [1, 1, 1],
+  "special": [
+    {"pos": [0, 0, 0], "block": "minecraft:crafting_table"}
+  ]
+}

@@ -46,6 +46,8 @@ class HousingVariantSelectionTest {
 		data = new SettlementSavedData();
 		settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Variants", 0);
 		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+		// These fixtures isolate housing selection; workshop demand has its own tests.
+		data.setCraftingStation(settlement, new BlockPos(6, 64, 8));
 	}
 	@AfterEach void restore() throws Exception { plans.set(null, previous); }
 
@@ -119,7 +121,7 @@ class HousingVariantSelectionTest {
 					data.setDirty(false);
 					var demand = List.of(ConstructionPlanner.remainingMaterials(plan, index));
 					assertEquals(demand, ConstructionPlanner.materialDemands(data, settlement));
-					assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+					assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 					assertEquals(job, data.getConstructionJob(settlement).orElseThrow());
 					assertFalse(data.isDirty());
 					assertEquals(before, data.save(new CompoundTag(), null));
@@ -146,7 +148,7 @@ class HousingVariantSelectionTest {
 					data.setDirty(false);
 					assertTrue(ConstructionPlanner.materialDemands(data, settlement).isEmpty());
 					assertTrue(ConstructionSystem.nextBuildTarget(null, data, settlement).isEmpty());
-					assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+					assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 					assertEquals(job, data.getConstructionJob(settlement).orElseThrow());
 					assertEquals(before, data.save(new CompoundTag(), null));
 					assertFalse(data.isDirty());
@@ -164,7 +166,7 @@ class HousingVariantSelectionTest {
 				ConstructionPlanner.STONE_COTTAGE, resource("stone_cottage")), null, null);
 			var before = data.save(new CompoundTag(), null);
 			data.setDirty(false);
-			var results = ConstructionSystem.inspectNewHousingSites(null, data, settlement);
+			var results = ConstructionSystem.inspectNewSites(null, data, settlement);
 			assertEquals(1, results.size());
 			assertEquals(selected, results.getFirst().blueprintId());
 			assertEquals("plan_unavailable", results.getFirst().reason());
@@ -202,20 +204,20 @@ class HousingVariantSelectionTest {
 		var side = BlueprintManager.get(SIDE);
 		var before = data.save(new CompoundTag(), null);
 		data.setDirty(false);
-		assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, north, 100, unloaded));
+		assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, north, 100, unloaded));
 		int oneScan = reads.get();
 		assertTrue(oneScan > 0);
-		assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, side, 105, unloaded));
+		assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, side, 105, unloaded));
 		assertEquals(2 * oneScan, reads.get());
 		for (int caller = 0; caller < 20; caller++) {
-			assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, north, 119, unloaded));
-			assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, side, 119, unloaded));
+			assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, north, 119, unloaded));
+			assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, side, 119, unloaded));
 		}
 		assertEquals(2 * oneScan, reads.get());
-		assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, north, 120, unloaded));
-		assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, side, 124, unloaded));
+		assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, north, 120, unloaded));
+		assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, side, 124, unloaded));
 		assertEquals(3 * oneScan, reads.get());
-		assertNull(ConstructionSystem.chooseHousingOrigin(data, settlement, side, 125, unloaded));
+		assertNull(ConstructionSystem.chooseGuardedOrigin(data, settlement, side, 125, unloaded));
 		assertEquals(4 * oneScan, reads.get());
 		assertEquals(2, data.constructionSiteRetries().size());
 		assertFalse(data.isDirty());

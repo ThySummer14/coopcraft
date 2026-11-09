@@ -279,7 +279,7 @@ class ConstructionTerrainSiteTest {
 				data.setConstructionJob(settlement, job);
 				var before = data.save(new CompoundTag(), null);
 				assertTrue(ConstructionSystem.inspectSites(null, data, settlement, plan).isEmpty());
-				assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+				assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 				assertSame(job, data.getConstructionJob(settlement).orElseThrow());
 				assertEquals(before, data.save(new CompoundTag(), null));
 			}

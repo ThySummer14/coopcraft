@@ -51,7 +51,11 @@ public final class ConstructionSite {
 
 	/** Exhaust the original twelve first, then all +1, then all -1; never interleave heights. */
 	public static List<BlockPos> candidates(ConstructionPlan plan, BlockPos center) {
-		return candidates(center, isHousing(plan) ? new int[] {0, 1, -1} : new int[] {0});
+		boolean workshop = plan != null && plan.id().equals(ConstructionPlanner.STARTER_WORKSHOP);
+		List<BlockPos> origins = candidates(center, !workshop && isHousing(plan) ? new int[] {0, 1, -1} : new int[] {0});
+		// A registered but unusably distant table would suppress the very demand that created it.
+		return workshop
+			? origins.stream().filter(pos -> ConstructionWorkshop.withinWorkRange(center, pos)).toList() : origins;
 	}
 
 	private static List<BlockPos> candidates(BlockPos center, int[] heights) {
@@ -104,8 +108,11 @@ public final class ConstructionSite {
 			return fail(origin, "unsupported_layout", origin);
 		}
 		try {
+			if (plan.id().equals(ConstructionPlanner.STARTER_WORKSHOP)) {
+				return ConstructionWorkshop.inspect(plan, origin, probe);
+			}
 			if (!housing) {
-				// Nonresidential plans retain target-only air checks; no new foundation/entrance rules.
+				// Other nonresidential plans retain target-only air checks; no new foundation/entrance rules.
 				for (ConstructionInstruction part : plan.instructions()) {
 					Result result = air(origin, offset(origin, part.offset()), probe, "target_occupied");
 					if (result != null) return result;

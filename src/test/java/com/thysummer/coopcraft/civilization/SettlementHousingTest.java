@@ -93,6 +93,8 @@ class SettlementHousingTest {
 			SettlementSavedData data = new SettlementSavedData(); Settlement s = settlement(data);
 			data.registerMember(s, UUID.randomUUID(), 0);
 			data.setHearth(s, s.center());
+			// Keep this regression focused on housing restored by bed removal.
+			data.setCraftingStation(s, s.center().east());
 			SettlementHousing.registerBed(world, data, s, HEAD);
 			assertTrue(ConstructionPlanner.projects(data, s).isEmpty());
 			world.states.remove(broken);

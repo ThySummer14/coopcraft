@@ -48,7 +48,7 @@ class ConstructionSiteRetriesTest {
 
 	private static BlockPos choose(SettlementSavedData data, Settlement settlement, ConstructionPlan plan,
 		long tick, CountingProbe probe) {
-		return ConstructionSystem.chooseHousingOrigin(data, settlement, plan, tick, probe);
+		return ConstructionSystem.chooseGuardedOrigin(data, settlement, plan, tick, probe);
 	}
 
 	@Test void manyCallersShareOneFailureUntilExactTwentiethTickWithoutRenewingIt() {
@@ -140,7 +140,7 @@ class ConstructionSiteRetriesTest {
 			public BlockState state(BlockPos position) { throw new AssertionError(); }
 		};
 		assertThrows(IllegalStateException.class,
-			() -> ConstructionSystem.chooseHousingOrigin(other, camp, cabin, 0, failingProbe));
+			() -> ConstructionSystem.chooseGuardedOrigin(other, camp, cabin, 0, failingProbe));
 		assertEquals(0, other.constructionSiteRetries().size());
 		assertNull(choose(other, camp, cabin, 0, probe));
 		assertEquals(new Counts(72, 72, 0), probe.counts());
@@ -228,7 +228,7 @@ class ConstructionSiteRetriesTest {
 		data.setDirty(false);
 		assertTrue(ConstructionSystem.nextBuildTarget(null, data, camp).isEmpty());
 		assertTrue(ConstructionSystem.inspectSites(null, data, camp, cabin).isEmpty());
-		assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, camp).isEmpty());
+		assertTrue(ConstructionSystem.inspectNewSites(null, data, camp).isEmpty());
 		assertEquals(job, data.getConstructionJob(camp).orElseThrow());
 		assertEquals(0, data.constructionSiteRetries().size());
 		assertFalse(data.isDirty());

@@ -40,6 +40,8 @@ class TimberHousingSelectionTest {
 		data = new SettlementSavedData(); settlement = data.getOrCreate(new BlockPos(4, 64, 8), "Cabin", 0);
 		data.registerMember(settlement, UUID.randomUUID(), 0);
 		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+		// These fixtures isolate housing selection; workshop demand has its own tests.
+		data.setCraftingStation(settlement, new BlockPos(6, 64, 8));
 	}
 	@AfterEach void restore() throws Exception { plans.set(null, previous); }
 
@@ -60,7 +62,7 @@ class TimberHousingSelectionTest {
 		var before = data.save(new CompoundTag(), null); data.setDirty(false);
 		var demand = List.of(ConstructionPlanner.remainingMaterials(cottage, 17));
 		assertEquals(demand, ConstructionPlanner.materialDemands(data, settlement));
-		assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+		assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 		assertEquals(before, data.save(new CompoundTag(), null)); assertFalse(data.isDirty());
 		var restored = SettlementSavedData.load(before, null);
 		var restoredSettlement = restored.find(settlement.center()).orElseThrow();
@@ -77,14 +79,14 @@ class TimberHousingSelectionTest {
 			data.setConstructionJob(settlement, job);
 			assertTrue(ConstructionPlanner.materialDemands(data, settlement).isEmpty());
 			assertEquals(job, data.getConstructionJob(settlement).orElseThrow());
-			assertTrue(ConstructionSystem.inspectNewHousingSites(null, data, settlement).isEmpty());
+			assertTrue(ConstructionSystem.inspectNewSites(null, data, settlement).isEmpty());
 		}
 	}
 
 	@Test void missingNewPlanReportsUnavailableWithoutWorldReadsOrFallbackToCottage() throws Exception {
 		new BlueprintManager().apply(Map.of(ConstructionPlanner.STONE_COTTAGE, resource("stone_cottage")), null, null);
 		var before = data.save(new CompoundTag(), null); data.setDirty(false);
-		var results = ConstructionSystem.inspectNewHousingSites(null, data, settlement);
+		var results = ConstructionSystem.inspectNewSites(null, data, settlement);
 		assertEquals(1, results.size());
 		assertEquals(ConstructionPlanner.TIMBER_PORCH_CABIN, results.getFirst().blueprintId());
 		assertEquals("plan_unavailable", results.getFirst().reason());

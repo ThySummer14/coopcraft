@@ -13,6 +13,7 @@ import net.minecraft.world.item.Item;
 
 public final class ConstructionPlanner {
 	public static final ResourceLocation CAMPFIRE_HEARTH = CoopCraft.id("campfire_hearth");
+	public static final ResourceLocation STARTER_WORKSHOP = CoopCraft.id("starter_workshop_v1");
 	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
 	public static final ResourceLocation TIMBER_PORCH_CABIN = CoopCraft.id("timber_porch_cabin_v1");
 	public static final ResourceLocation TIMBER_SIDE_PORCH_CABIN = CoopCraft.id("timber_side_porch_cabin_v1");
@@ -21,12 +22,14 @@ public final class ConstructionPlanner {
 	}
 
 	public static List<Project> projects(SettlementSavedData data, Settlement settlement) {
-		List<Project> projects = new ArrayList<>(2);
+		List<Project> projects = new ArrayList<>(3);
 		if (data.stageOf(settlement) == SettlementStage.PRIMITIVE && data.getHearth(settlement).isEmpty()) {
 			projects.add(new Project(CAMPFIRE_HEARTH));
 		}
 		HousingPlan housing = housingPlan(data, settlement);
 		if (housing.needsHousing()) {
+			// Never treat an unknown or unloaded saved station as permission to build a replacement.
+			if (data.getCraftingStation(settlement).isEmpty()) projects.add(new Project(STARTER_WORKSHOP));
 			projects.add(new Project(housingBlueprint(housing.housingCapacity())));
 		}
 		return List.copyOf(projects);
