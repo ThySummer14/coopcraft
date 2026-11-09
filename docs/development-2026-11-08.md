@@ -390,3 +390,5 @@
 - 不改NBT结构与DataVersion19，不清原版交易表/职业/经验。本轮未新增自有界面或交易隔离；跨维度身份解析、远行工作策略和跨维度死亡清理明确留到后续。没有启动Minecraft客户端、服务器或GameTest，完整自动验证结果见下方。
 
 - 新增13项登记回归：重复扫描幂等、外营/残缺归属拒绝、有效候选及32/64格边界、旧存档缺项、票据保留与明确移除重入、连续两次NBT往返、出生前置拒绝和单次出生。三份旧测试夹具改为真实入库或明确移除后登记，原权限与UUID极值断言保留。纯Java配给与请求顺序实验复跑通过，完整Minecraft依赖JUnit由分支CI验证。
+
+- 验证完成：代码提交 `61f6a884` 的[稳定成员登记构建](https://github.com/ThySummer14/coopcraft/actions/runs/42553817618)已通过完整build和630项JUnit，0失败/0跳过，新增13项回归全过。206行配给与48行多人顺序CSV同最终核心源码的本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42553817618/artifacts/13646148125)内 `coopcraft-0.1.0.jar` 为758406字节，SHA-256 `36ba9c9c647d85ecdaaf58504d360cab5ce1733f7972fa7dce6198ea5d089468`。没有启动Minecraft客户端、服务器或GameTest；真实钟扫描、命名、阶段显示、远行回归和原版交易数据仍待用户统一验收。
