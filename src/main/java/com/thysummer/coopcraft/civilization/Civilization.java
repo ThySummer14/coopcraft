@@ -327,6 +327,7 @@ public final class Civilization {
 	private static void tick(MinecraftServer server) {
 		for (ServerLevel level : server.getAllLevels()) {
 			SettlementSavedData data = SettlementSavedData.get(level);
+			SettlementResourceDiscovery.tick(level, data);
 			for (Settlement settlement : data.all()) {
 				SettlementHousing.tick(level, data, settlement, level.getGameTime());
 				SettlementSimulationService.tick(level, data, settlement);

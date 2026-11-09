@@ -570,5 +570,17 @@
 	"coopcraft.interaction.blocker.construction_invalid_job_id": "暂停：工程身份字段损坏，未自动重建",
 	"coopcraft.command.settlement.construction_adopt_invalid_job_id": "工程身份字段损坏，无法认领图纸；原存档内容已保留。",
 	"coopcraft.construction_supply.reserved": "居民施工预留物品：数量以这个物品堆为准",
-	"coopcraft.construction_supply.recovered": "回收后保留原用途；公仓不会将它当作新工程的普通材料"
+	"coopcraft.construction_supply.recovered": "回收后保留原用途；公仓不会将它当作新工程的普通材料",
+	"coopcraft.command.settlement.observations_header": "%s：曾观察候选 %s，已抑制 %s（共用上限 %s）。",
+	"coopcraft.command.settlement.observations_scope": "仅记录曾看到的成熟甜浆果，来源 UNKNOWN；未确认当前位置仍成熟，不授予采集权。",
+	"coopcraft.command.settlement.observations_row": "%s | %s | 甜浆果，来源 UNKNOWN，%s",
+	"coopcraft.command.settlement.observations_candidate": "曾观察候选",
+	"coopcraft.command.settlement.observations_suppressed": "已抑制自动记录",
+	"coopcraft.command.settlement.observations_help": "OP：observations suppress <ID> 抑制重扫；resume <ID> 解除抑制并释放记录，需重新观察。此命令不控制旧浆果采收。",
+	"coopcraft.command.settlement.observations_status": "曾观察浆果候选：%s（来源未知；/coop settlement observations 查看）。",
+	"coopcraft.command.settlement.observation_changed": "观察记录已更新；没有授予或撤销任何采收权限。",
+	"coopcraft.command.settlement.observation_unchanged": "该观察已被抑制，未作改动。",
+	"coopcraft.command.settlement.observation_not_found": "当前聚落没有这个观察记录ID。",
+	"coopcraft.command.settlement.observation_not_suppressed": "该记录未被抑制，无需恢复。",
+	"coopcraft.command.settlement.observation_preserved_unsupported": "观察数据格式未知或损坏：已原样保留，暂停新观察及修改。人工资源标记不受影响。"
 }

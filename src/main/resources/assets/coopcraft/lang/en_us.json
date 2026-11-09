@@ -570,5 +570,17 @@
 	"coopcraft.interaction.blocker.construction_invalid_job_id": "Paused: the construction instance ID is malformed and was not replaced",
 	"coopcraft.command.settlement.construction_adopt_invalid_job_id": "The construction instance ID is malformed. Plan adoption was refused; the original data was retained.",
 	"coopcraft.construction_supply.reserved": "Resident construction supply: this stack is the physical item",
-	"coopcraft.construction_supply.recovered": "Recovered items retain their original assignment; the store will not treat them as ordinary materials for a new job"
+	"coopcraft.construction_supply.recovered": "Recovered items retain their original assignment; the store will not treat them as ordinary materials for a new job",
+	"coopcraft.command.settlement.observations_header": "%s: %s historical candidates, %s suppressed (shared limit %s).",
+	"coopcraft.command.settlement.observations_scope": "Records only previously observed ripe sweet berries, source UNKNOWN. Current ripeness is unverified; no gathering permission is granted.",
+	"coopcraft.command.settlement.observations_row": "%s | %s | sweet berries, source UNKNOWN, %s",
+	"coopcraft.command.settlement.observations_candidate": "historical candidate",
+	"coopcraft.command.settlement.observations_suppressed": "automatic observation suppressed",
+	"coopcraft.command.settlement.observations_help": "OP: observations suppress <ID> prevents rediscovery; resume <ID> removes the veto and frees its record until observed again. These commands do not control existing berry harvesting.",
+	"coopcraft.command.settlement.observations_status": "Historical berry candidates: %s (unknown source; /coop settlement observations for details).",
+	"coopcraft.command.settlement.observation_changed": "Observation record updated; no harvesting permissions were granted or revoked.",
+	"coopcraft.command.settlement.observation_unchanged": "That observation is already suppressed; nothing changed.",
+	"coopcraft.command.settlement.observation_not_found": "No observation with that ID exists in this settlement.",
+	"coopcraft.command.settlement.observation_not_suppressed": "That record is not suppressed; no resumption is needed.",
+	"coopcraft.command.settlement.observation_preserved_unsupported": "Observation data is unsupported or malformed: preserved unchanged, with observation and edits paused. Manual resource marks are unaffected."
 }

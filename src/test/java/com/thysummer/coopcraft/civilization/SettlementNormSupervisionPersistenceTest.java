@@ -123,7 +123,7 @@ class SettlementNormSupervisionPersistenceTest {
 
 	private static Fixture reloadUnchanged(Fixture f) {
 		CompoundTag before = f.data().save(new CompoundTag(), null);
-		assertEquals(19, before.getInt("DataVersion"));
+		assertEquals(20, before.getInt("DataVersion"));
 		SettlementSavedData loaded = SettlementSavedData.load(before, null);
 		Settlement settlement = loaded.find(BlockPos.ZERO).orElseThrow();
 		Fixture restored = new Fixture(loaded, loaded.simulationOf(settlement).orElseThrow());

@@ -24,7 +24,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 19;
+	private static final int DATA_VERSION = 20;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
 		SettlementSavedData::new,
@@ -34,7 +34,14 @@ public final class SettlementSavedData extends SavedData {
 
 	private final Map<UUID, FoodReserveTarget> foodReserveTargets = new LinkedHashMap<>();
 	private final Map<BlockPos, Settlement> settlements = new LinkedHashMap<>();
+	private final Map<UUID, Settlement> settlementsById = new LinkedHashMap<>();
+	private final Set<UUID> ambiguousSettlementIds = new LinkedHashSet<>();
+	private long membershipRevision;
+	private SettlementResourceObservations resourceObservations = new SettlementResourceObservations();
+	private final SettlementResourceDiscovery resourceDiscovery = new SettlementResourceDiscovery();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
+	// Transient round-robin order; unrelated membership changes must not restart active sweeps.
+	private final LinkedHashMap<UUID, SettlementMember> discoveryRoster = new LinkedHashMap<>();
 	private final Map<UUID, Object> stockpileBindings = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> stockpiles = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> hearths = new LinkedHashMap<>();
@@ -90,6 +97,7 @@ public final class SettlementSavedData extends SavedData {
 		);
 		Settlement settlement = new Settlement(id, center, name, foundedDay);
 		settlements.put(center, settlement);
+		indexSettlement(settlement);
 		socialOrganizations.put(id, SocialOrganization.PRIMITIVE_COMMUNE);
 		setDirty();
 		return settlement;
@@ -206,7 +214,10 @@ public final class SettlementSavedData extends SavedData {
 	MemberRegistrationResult registerMember(Settlement settlement, UUID villagerId, long joinedDay) {
 		MemberRegistrationResult result = memberRegistrationResult(settlement, villagerId, joinedDay);
 		if (result != MemberRegistrationResult.ADDED) return result;
-		members.put(villagerId, new SettlementMember(villagerId, settlement.id(), joinedDay));
+		SettlementMember member = new SettlementMember(villagerId, settlement.id(), joinedDay);
+		members.put(villagerId, member);
+		discoveryRoster.put(villagerId, member);
+		membershipRevision++;
 		setDirty();
 		return result;
 	}
@@ -291,6 +302,8 @@ public final class SettlementSavedData extends SavedData {
 	public void removeMember(UUID villagerId) {
 		foodRequests.cancelResident(villagerId);
 		boolean changed = members.remove(villagerId) != null;
+		discoveryRoster.remove(villagerId);
+		if (changed) membershipRevision++;
 		if (leaders.values().removeIf(leaderId -> leaderId.equals(villagerId))) {
 			changed = true;
 		}
@@ -320,6 +333,48 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	Object memberIdentity(UUID resident) { return members.get(resident); }
+
+	private void indexSettlement(Settlement settlement) {
+		if (ambiguousSettlementIds.contains(settlement.id())) return;
+		if (settlementsById.putIfAbsent(settlement.id(), settlement) != null) {
+			settlementsById.remove(settlement.id());
+			ambiguousSettlementIds.add(settlement.id());
+		}
+	}
+	Settlement settlementById(UUID id) { return settlementsById.get(id); }
+	boolean canonicalSettlement(Settlement settlement) {
+		return settlement != null && settlements.get(settlement.center()) == settlement && settlementById(settlement.id()) == settlement;
+	}
+	long membershipRevision() { return membershipRevision; }
+	boolean hasDiscoveryMembers() { return !discoveryRoster.isEmpty(); }
+	SettlementMember nextDiscoveryMember() {
+		var next = discoveryRoster.pollFirstEntry();
+		if (next == null) return null;
+		discoveryRoster.putLast(next.getKey(), next.getValue());
+		return next.getValue();
+	}
+	SettlementResourceDiscovery resourceDiscovery() { return resourceDiscovery; }
+	boolean resourceObservationsBlocked() { return resourceObservations.blocked(); }
+	List<SettlementResourceObservations.Observation> resourceObservationsOf(Settlement settlement) {
+		return resourceObservations.of(settlement.id());
+	}
+	boolean resourceObservationSuppressed(Settlement settlement, BlockPos position) {
+		return resourceObservations.suppressed(settlement.id(), position);
+	}
+
+	boolean recordResourceObservation(Settlement settlement, BlockPos position, boolean ripeBerry) {
+		if (!canonicalSettlement(settlement)) return false;
+		boolean changed = resourceObservations.observe(settlement.id(), position, ripeBerry);
+		if (changed) setDirty();
+		return changed;
+	}
+
+	SettlementResourceObservations.Change changeResourceObservation(Settlement settlement, String id, boolean suppress) {
+		if (!canonicalSettlement(settlement)) return SettlementResourceObservations.Change.NOT_FOUND;
+		var result = suppress ? resourceObservations.suppress(settlement.id(), id) : resourceObservations.resume(settlement.id(), id);
+		if (result == SettlementResourceObservations.Change.CHANGED) setDirty();
+		return result;
+	}
 
 	Object stockpileBindingToken(Settlement settlement) {
 		return stockpileBindings.get(settlement.id());
@@ -536,6 +591,7 @@ public final class SettlementSavedData extends SavedData {
 			}
 		}
 		tag.put("ResourceSites", resourceList);
+		tag.put("ResourceObservations", resourceObservations.save());
 
 		ListTag stationList = new ListTag();
 		for (Map.Entry<UUID, BlockPos> entry : craftingStations.entrySet()) {
@@ -586,6 +642,7 @@ public final class SettlementSavedData extends SavedData {
 
 	static SettlementSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		SettlementSavedData data = new SettlementSavedData();
+		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
 
 		ListTag settlementList = tag.getList("Settlements", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < settlementList.size(); i++) {
@@ -594,6 +651,9 @@ public final class SettlementSavedData extends SavedData {
 			data.foodReserveTargets.put(settlement.id(), FoodReserveTarget.byId(
 				settlementList.getCompound(i).getString("FoodReserveTarget")));
 		}
+
+		// Derive only from the final canonical center map, never from overwritten load records.
+		for (Settlement settlement : data.settlements.values()) data.indexSettlement(settlement);
 
 		ListTag socialList = tag.getList("SocialOrganizations", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < socialList.size(); i++) {
@@ -615,6 +675,8 @@ public final class SettlementSavedData extends SavedData {
 			SettlementMember member = SettlementMember.load(memberList.getCompound(i));
 			data.members.put(member.villagerId(), member);
 		}
+
+		data.discoveryRoster.putAll(data.members);
 
 		ListTag needsList = tag.getList("MemberNeeds", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < needsList.size(); i++) {

@@ -162,7 +162,7 @@ class SettlementCareAllocationPersistenceTest {
 
 	private static Fixture reloadUnchanged(Fixture f) {
 		CompoundTag saved = f.data().save(new CompoundTag(), null);
-		assertEquals(19, saved.getInt("DataVersion"));
+		assertEquals(20, saved.getInt("DataVersion"));
 		var loaded = SettlementSavedData.load(saved, null);
 		var restored = new Fixture(loaded, loaded.simulationOf(loaded.find(BlockPos.ZERO).orElseThrow()).orElseThrow());
 		assertEquals(saved, restored.data().save(new CompoundTag(), null));

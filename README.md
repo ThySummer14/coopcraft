@@ -164,3 +164,7 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 ## 许可证
 
 [MIT](LICENSE)。可以自由使用、修改、分发，包括商用，保留版权声明即可。
+
+### 居民自主资源观察（只读候选）
+
+居民会分批记录附近已加载的成熟甜浆果位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选来源始终未知，不会自动增加木石/土豆采集授权，也不会改变旧自动浆果采收行为。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。

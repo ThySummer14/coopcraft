@@ -54,6 +54,14 @@ public final class SettlementCommands {
 		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
+		var observations = LiteralArgumentBuilder.<S>literal("observations")
+			.executes(ctx -> handler.run(ctx, "observations", ""));
+		for (String operation : List.of("suppress", "resume")) {
+			observations.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.then(RequiredArgumentBuilder.<S, String>argument("observation_id", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "observations", operation))));
+		}
+		settlement.then(observations);
 		settlement.then(LiteralArgumentBuilder.<S>literal("cargo")
 			.executes(ctx -> handler.run(ctx, "cargo", ""))
 			.then(LiteralArgumentBuilder.<S>literal("recover")
@@ -122,6 +130,10 @@ public final class SettlementCommands {
 			source.sendFailure(message("no_settlement"));
 			return 0;
 		}
+		if (action.equals("observations") && option.isEmpty()) {
+			for (Component line : observationMessages(data, settlement)) source.sendSuccess(() -> line, false);
+			return 1;
+		}
 		if (action.equals("meeting")) {
 			SettlementMeetings.Result result = option.equals("hold")
 				? SettlementMeetings.hold(level, data, settlement, player)
@@ -176,6 +188,16 @@ public final class SettlementCommands {
 		}
 		if (!source.hasPermission(2)) {
 			source.sendFailure(message("permission"));
+			return 0;
+		}
+		if (action.equals("observations")) {
+			var result = data.changeResourceObservation(settlement, StringArgumentType.getString(context, "observation_id"), option.equals("suppress"));
+			Component feedback = message("observation_" + result.name().toLowerCase(Locale.ROOT));
+			if (result == SettlementResourceObservations.Change.CHANGED || result == SettlementResourceObservations.Change.UNCHANGED) {
+				source.sendSuccess(() -> feedback, false);
+				return 1;
+			}
+			source.sendFailure(feedback);
 			return 0;
 		}
 		if (action.equals("construction") && option.equals("adopt")) {
@@ -389,6 +411,21 @@ public final class SettlementCommands {
 			snapshot.remainingUnits(), nutrition, snapshot.hunger(), snapshot.day());
 	}
 
+	/** Reads saved historical observations only. No scan, live block read, simulation or permission change. */
+	static List<Component> observationMessages(SettlementSavedData data, Settlement settlement) {
+		if (data.resourceObservationsBlocked()) return List.of(message("observation_preserved_unsupported"));
+		var records = data.resourceObservationsOf(settlement);
+		long candidates = records.stream().filter(record -> record.state() == SettlementResourceObservations.State.CANDIDATE).count();
+		List<Component> lines = new ArrayList<>();
+		lines.add(message("observations_header", settlement.name(), candidates, records.size() - candidates,
+			SettlementResourceObservations.MAX_PER_SETTLEMENT));
+		lines.add(message("observations_scope"));
+		for (var record : records) lines.add(message("observations_row", record.id(), record.position().toShortString(),
+			message("observations_" + record.state().name().toLowerCase(Locale.ROOT))));
+		lines.add(message("observations_help"));
+		return List.copyOf(lines);
+	}
+
 	private static void showStatus(CommandSourceStack source, SettlementSavedData data, Settlement settlement) {
 		send(source, "status", settlement.name(), settlement.center().toShortString(),
 			SettlementSimulationService.isSurvivalEnabled(data, settlement),
@@ -396,6 +433,9 @@ public final class SettlementCommands {
 			SettlementSimulationService.isSkillsEnabled(data, settlement),
 			SettlementSimulationService.isGrowthEnabled(data, settlement),
 			SettlementSimulationService.isNormsEnabled(data, settlement));
+		if (data.resourceObservationsBlocked()) send(source, "observation_preserved_unsupported");
+		else send(source, "observations_status", data.resourceObservationsOf(settlement).stream()
+			.filter(record -> record.state() == SettlementResourceObservations.State.CANDIDATE).count());
 		var housing = ConstructionPlanner.housingPlan(data, settlement);
 		send(source, "housing", housing.housingCapacity(), housing.registeredMembers(), housing.missingBeds());
 	}

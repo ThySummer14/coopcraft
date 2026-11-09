@@ -227,7 +227,7 @@ class SettlementCompositePersistenceTest {
 	private static Fixture reloadUnchanged(Fixture f) {
 		f.state().world().assertConservation();
 		CompoundTag before = f.data().save(new CompoundTag(), null);
-		assertEquals(19, before.getInt("DataVersion"));
+		assertEquals(20, before.getInt("DataVersion"));
 		CompoundTag untouchedInput = before.copy();
 		var inventory = f.state().world().inventoryTotals();
 		var nutrition = f.state().world().nutritionTotals();
