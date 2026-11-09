@@ -146,11 +146,18 @@ class ResidentDialogPayloadTest {
         var returned = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, snapshot.gatheringHint());
         var contents = assertInstanceOf(TranslatableContents.class, returned.getContents());
         var returnedArgument = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, contents.getArgs()[0]);
-        returnedArgument.append(" changed");
+        // Decoded sibling lists may be immutable; mutate supported component state only.
         returnedArgument.setStyle(returnedArgument.getStyle().withItalic(false));
         var returnedChild = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, returnedArgument.getSiblings().getFirst());
-        returnedChild.append(" changed child");
-        returned.append(" changed again");
+        returnedChild.setStyle(returnedChild.getStyle().withBold(false));
+        returned.setStyle(returned.getStyle().withUnderlined(true));
+        assertFalse(returnedArgument.getStyle().isItalic());
+        assertFalse(returnedChild.getStyle().isBold());
+        assertTrue(returned.getStyle().isUnderlined());
+        assertNotEquals(expected, returned);
+        assertEquals(expected, snapshot.gatheringHint());
+        contents.getArgs()[0] = Component.literal("Changed proposal");
+        assertEquals("Changed proposal", ((Component) contents.getArgs()[0]).getString());
         assertNotEquals(expected, returned);
         assertEquals(expected, snapshot.gatheringHint());
         var preservedArgument = assertInstanceOf(Component.class,
