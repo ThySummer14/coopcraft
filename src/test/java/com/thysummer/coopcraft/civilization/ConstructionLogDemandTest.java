@@ -198,9 +198,18 @@ class ConstructionLogDemandTest {
 				if (recipe.isEmpty()) break;
 				assertTrue(SettlementMaterialCrafting.craft(stock, null, recipe.get(), ACTOR, () -> {}));
 				batches++;
+				if (batches == 1) {
+					assertEquals(SettlementMaterialCrafting.Recipe.PLANKS, recipe.get());
+					assertEquals(4, stock.countItem(Items.OAK_PLANKS));
+				}
 				assertTrue(batches < 100, "Production must remain bounded");
 			}
-			if (gathered == 1) assertEquals(4, stock.countItem(Items.OAK_PLANKS));
+			if (gathered == 1) {
+				// Once planks are blocked, the existing chooser can use them for the first bed.
+				assertEquals(1, stock.countItem(Items.OAK_PLANKS));
+				assertEquals(1, stock.countItem(Items.WHITE_BED));
+				assertEquals(3, stock.countItem(Items.WHITE_WOOL));
+			}
 		}
 		assertEquals(59, gathered);
 		assertTrue(batches > 0);
