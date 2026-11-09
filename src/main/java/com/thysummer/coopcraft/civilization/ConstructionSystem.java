@@ -64,7 +64,8 @@ public final class ConstructionSystem {
 		if (ConstructionSupply.hasFor(carried, dimension, camp, actor, job, instruction)) return true;
 		Container store = stockpile.get();
 		if (store == null || ConstructionMaterials.available(store, simulation.get(), instruction.item()) < 1) return false;
-		return store.countItem(instruction.item()) > 0 || ConstructionReadiness.canInsertOne(store, new ItemStack(instruction.item()));
+		return ConstructionMaterials.realAvailable(store, instruction.item()) > 0
+			|| ConstructionReadiness.canInsertOne(store, new ItemStack(instruction.item()));
 	}
 
 	/** Shared new-project selection: unavailable materials or sites never block later projects. */

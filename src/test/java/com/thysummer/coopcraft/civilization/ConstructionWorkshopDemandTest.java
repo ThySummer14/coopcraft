@@ -212,7 +212,7 @@ class ConstructionWorkshopDemandTest {
 			surveyed.add(plan.id());
 			return origin;
 		});
-		assertEquals(ConstructionJob.start(house, origin), selected);
+		assertNewProject(house, origin, selected);
 		assertEquals(List.of(house.id()), surveyed);
 		assertSelectionReadOnly(before, stockpile, inventoryBefore);
 	}
@@ -233,7 +233,7 @@ class ConstructionWorkshopDemandTest {
 			surveyed.add(plan.id());
 			return plan.id().equals(workshop.id()) ? null : origin;
 		});
-		assertEquals(ConstructionJob.start(house, origin), selected);
+		assertNewProject(house, origin, selected);
 		assertEquals(List.of(workshop.id(), house.id()), surveyed);
 		assertSelectionReadOnly(before, stockpile, inventoryBefore);
 	}
@@ -254,7 +254,7 @@ class ConstructionWorkshopDemandTest {
 			surveyed.add(plan.id());
 			return origin;
 		});
-		assertEquals(ConstructionJob.start(workshop, origin), selected);
+		assertNewProject(workshop, origin, selected);
 		assertEquals(List.of(workshop.id()), surveyed);
 		assertSelectionReadOnly(before, stockpile, inventoryBefore);
 	}
@@ -282,6 +282,17 @@ class ConstructionWorkshopDemandTest {
 			assertSame(job, data.getConstructionJob(settlement).orElseThrow());
 			assertUnchanged(before);
 		}
+	}
+
+	private static void assertNewProject(ConstructionPlan plan, BlockPos origin, ConstructionJob selected) {
+		assertNotNull(selected);
+		assertEquals(plan.id(), selected.blueprintId());
+		assertEquals(origin, selected.origin());
+		assertEquals(0, selected.nextIndex());
+		assertEquals(plan.fingerprint(), selected.planFingerprint());
+		assertTrue(selected.hasValidJobId());
+		assertNotNull(selected.jobId());
+		assertNull(selected.malformedJobId());
 	}
 
 	private void prepareAgriculturalDeficit() {

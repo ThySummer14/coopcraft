@@ -12,6 +12,8 @@ import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.SimpleContainer;
@@ -67,6 +69,10 @@ class ConstructionSupplyIntegrationTest {
 			assertTrue(ConstructionSupply.pickup(store, bag, DIM, CAMP, FIRST, job, first, () -> true));
 			assertTrue(store.isEmpty()); assertFalse(SettlementCargo.hasCargo(bag));
 			var restoredJob = ConstructionJob.load(job.save());
+			var registries = RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
+			ItemStack restoredCargo = ItemStack.parse(registries, bag.getItem(0).save(registries)).orElseThrow();
+			assertTrue(ItemStack.matches(bag.getItem(0), restoredCargo));
+			bag.setItem(0, restoredCargo);
 			assertTrue(ConstructionSystem.materialReady(restoredJob, first, DIM, CAMP, FIRST, bag,
 				() -> { throw new AssertionError("Must not inspect the empty/forgotten store"); },
 				() -> { throw new AssertionError("Must not export from the simulation"); }));

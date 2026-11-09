@@ -27,7 +27,8 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 			if (ConstructionMaterials.available(stockpile, probe.simulation(), instruction.item()) < 1) {
 				return result(job, total, position, "missing_material");
 			}
-			if (stockpile.countItem(instruction.item()) < 1 && !canInsertOne(stockpile, new ItemStack(instruction.item()))) {
+			if (ConstructionMaterials.realAvailable(stockpile, instruction.item()) < 1
+				&& !canInsertOne(stockpile, new ItemStack(instruction.item()))) {
 				return result(job, total, position, "stockpile_full");
 			}
 		}

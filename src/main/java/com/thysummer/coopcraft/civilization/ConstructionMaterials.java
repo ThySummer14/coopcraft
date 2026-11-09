@@ -20,9 +20,7 @@ public final class ConstructionMaterials {
 		if (stockpile == null) {
 			return 0;
 		}
-		// Recovered/unknown supply markers and custom items are not ordinary pickup sources.
-		if (ConstructionSupply.supported(item)) return ConstructionSupply.countAvailable(stockpile, item);
-		long real = stockpile.countItem(item);
+		long real = realAvailable(stockpile, item);
 		ResourceType type = resourceType(state, item);
 		if (type == null) {
 			return real;
@@ -32,12 +30,27 @@ public final class ConstructionMaterials {
 			.mapToLong(batch -> batch.quantity()).sum();
 	}
 
+	/** The same read-only real-supply count used by target selection, diagnostics and material totals. */
+	static long realAvailable(Container stockpile, Item item) {
+		if (stockpile == null) return 0;
+		if (ConstructionSupply.supported(item)) return ConstructionSupply.countAvailable(stockpile, item);
+		long real = 0;
+		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+			ItemStack stack = stockpile.getItem(slot);
+			if (usable(stack, item)) real += stack.getCount();
+		}
+		return real;
+	}
+
 	public static boolean hasAll(Container stockpile, SettlementSimulationState state, ConstructionPlan plan) {
 		return stockpile != null && plan.materials().entrySet().stream()
 			.allMatch(entry -> available(stockpile, state, entry.getKey()) >= entry.getValue());
 	}
 
-	/** Caller must validate the job, loaded position, air and entities before entering this operation. */
+	/**
+	 * Caller must validate the job, loaded position, air and entities before entering this operation.
+	 * Standard synchronous, non-reentrant containers are required; placement must not mutate inventory.
+	 */
 	static boolean place(
 		Container stockpile, SettlementSimulationState state, Item item, boolean consume,
 		ConstructionJob job, UUID villagerId, Runnable markDirty, BooleanSupplier placement
@@ -49,7 +62,8 @@ public final class ConstructionMaterials {
 		if (stockpile == null) {
 			return false;
 		}
-		if (consume && stockpile.countItem(item) < 1) {
+		int source = firstUsableSlot(stockpile, item);
+		if (source < 0) {
 			ResourceType type = resourceType(state, item);
 			if (type == null) {
 				return false;
@@ -72,20 +86,29 @@ public final class ConstructionMaterials {
 			}
 			// Export is committed even if placement fails: the unit remains in the real stockpile.
 			markDirty.run();
+			source = firstUsableSlot(stockpile, item);
 		}
-		if (!placement.getAsBoolean()) {
+		// A marked lookalike must never authorize an unpaid placement or be the item charged afterward.
+		if (source < 0 || !placement.getAsBoolean()) {
 			return false;
 		}
-		if (consume) {
-			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-				if (stockpile.getItem(slot).is(item)) {
-					stockpile.removeItem(slot, 1);
-					stockpile.setChanged();
-					break;
-				}
-			}
-		}
+		stockpile.removeItem(source, 1);
+		stockpile.setChanged();
 		return true;
+	}
+
+	private static int firstUsableSlot(Container stockpile, Item item) {
+		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+			if (usable(stockpile.getItem(slot), item)) return slot;
+		}
+		return -1;
+	}
+
+	private static boolean usable(ItemStack stack, Item item) {
+		// Unknown construction markers are quarantined for every item, including legacy wood/stone.
+		// Ordinary custom materials retain the legacy behavior; door/bed pickup remains plain-only.
+		return !stack.isEmpty() && stack.is(item) && !ConstructionSupply.isMarked(stack)
+			&& (!ConstructionSupply.supported(item) || ConstructionSupply.ordinary(stack));
 	}
 
 	private static ResourceType resourceType(SettlementSimulationState state, Item item) {
