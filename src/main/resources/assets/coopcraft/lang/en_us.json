@@ -79,8 +79,8 @@
 	"coopcraft.interaction.inspect_action_target": "Current action: %s (%s)",
 	"coopcraft.interaction.inspect_action_blocked": "Current action: %s; blocked by %s",
 	"coopcraft.interaction.inspect_food": "Settlement food: %s units · Reserve line %s per resident",
-	"coopcraft.interaction.inspect_hint": "Sneak with food in hand and right-click to offer one",
-	"coopcraft.interaction.accepted": "%s accepted your %s",
+	"coopcraft.interaction.inspect_hint": "Sneak and right-click with food in your main hand to give one to the active public store; this does not immediately feed them",
+	"coopcraft.interaction.accepted": "%s accepted one %s for the public store: %s",
 	"coopcraft.interaction.refused": "%s declined: %s",
 	"coopcraft.interaction.action.idle": "No current work",
 	"coopcraft.interaction.action.gather": "Gathering marked resources",
@@ -347,5 +347,14 @@
 	"coopcraft.command.settlement.reserves_points": "physical mode: communal food points",
 	"coopcraft.command.settlement.reserves_unavailable": "unavailable",
 	"coopcraft.command.settlement.reserves_status": "%s | Target %s; %s registered residents × %s food points each | %s | Current %s / target %s / shortfall %s",
-	"coopcraft.command.settlement.reserves_hint": "HIGH keeps assigned foragers gathering longer, leaving less time for other existing work. Applies only at the next work choice; no interruption, and the last harvest can exceed the target. Fewer than 3 loaded adults have no forager role. This target neither reserves nor guarantees food; emergency foraging and daily rations are unchanged."
+	"coopcraft.command.settlement.reserves_hint": "HIGH keeps assigned foragers gathering longer, leaving less time for other existing work. Applies only at the next work choice; no interruption, and the last harvest can exceed the target. Fewer than 3 loaded adults have no forager role. This target neither reserves nor guarantees food; emergency foraging and daily rations are unchanged.",
+	"coopcraft.interaction.reason.not_member": "they are not a registered member of this settlement",
+	"coopcraft.interaction.reason.wrong_level": "you are not in the same level",
+	"coopcraft.interaction.reason.reserve_target_met": "the public store meets the current reserve target; no gift needed for now",
+	"coopcraft.interaction.reason.below_reserve_target": "the public store is below the current reserve target",
+	"coopcraft.simulation.reason.reserve_target_met": "The public store met the reserve target at the time of the offer",
+	"coopcraft.simulation.reason.below_reserve_target": "The public store was below the reserve target at the time of the offer",
+	"coopcraft.simulation.detail.gift_reserve_target": "Reserve target at offer",
+	"coopcraft.simulation.detail.gift_reserve_points": "Store/target at offer (food points)",
+	"coopcraft.simulation.detail.gift_reserve_nutrition": "Store/target at offer (nutrition)"
 }

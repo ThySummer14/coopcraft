@@ -661,12 +661,18 @@ public final class SimulationWorld {
 		String reason,
 		int trustAfter
 	) {
+		return recordGiftInteraction(villagerPersonId, playerActorId, accepted, itemName, playerName, reason, trustAfter, Map.of());
+	}
+
+	/** Optional decision-time evidence; historical events retain their original context. */
+	public long recordGiftInteraction(String villagerPersonId, String playerActorId, boolean accepted,
+		String itemName, String playerName, String reason, int trustAfter, Map<String, String> evidence) {
 		person(villagerPersonId);
 		if (playerActorId.isBlank() || itemName.isBlank() || playerName.isBlank() || reason.isBlank()
 			|| trustAfter < 0 || trustAfter > 100) {
 			throw new IllegalArgumentException("Invalid gift interaction");
 		}
-		Map<String, String> context = new LinkedHashMap<>();
+		Map<String, String> context = new LinkedHashMap<>(evidence);
 		context.put("item", itemName);
 		context.put("player", playerName);
 		context.put("reason", reason);

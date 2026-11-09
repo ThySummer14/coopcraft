@@ -403,6 +403,11 @@ public final class Civilization {
 		}
 		addDetail(details, "item", event.context().get("item"));
 		addDetail(details, "player", event.context().get("player"));
+		var giftReserves = GiftReserveDetails.project(event);
+		if (details.size() + giftReserves.size() <= SettlementOverviewPayload.MAX_EVENT_DETAILS) {
+			// Normal gifts: resident + item + player + two recorded reserve facts + reason = six.
+			details.addAll(giftReserves);
+		}
 		addDetail(details, "work_type", event.context().containsKey("workType")
 			? "coopcraft.simulation.worktype." + event.context().get("workType") : null);
 		if (event.context().containsKey("skillBefore") && event.context().containsKey("skillAfter")) {

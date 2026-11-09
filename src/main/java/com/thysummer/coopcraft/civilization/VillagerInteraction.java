@@ -1,14 +1,9 @@
 package com.thysummer.coopcraft.civilization;
 
-import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
-import com.thysummer.coopcraft.civilization.simulation.Person;
-import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 
-import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -58,7 +53,7 @@ public final class VillagerInteraction {
 	}
 
 	static OfferResult offerFood(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
-		if (!villager.isAlive()) {
+		if (!villager.isAlive() || !player.isAlive()) {
 			return refuse(player, villager, "not_alive");
 		}
 		if (player.isSpectator()) {
@@ -67,97 +62,21 @@ public final class VillagerInteraction {
 		if (player.distanceToSqr(villager) > OFFER_DISTANCE_SQUARED) {
 			return refuse(player, villager, "too_far");
 		}
-		ItemStack held = player.getMainHandItem();
-		if (!isFood(held)) {
-			return refuse(player, villager, "not_food");
+		if (!(villager.level() instanceof ServerLevel level) || player.level() != level) {
+			return refuse(player, villager, "wrong_level");
 		}
-		if (!held.getComponentsPatch().isEmpty()) {
-			return refuse(player, villager, "unsupported_food");
-		}
-		Component itemDisplayName = held.getHoverName();
-		String itemName = held.getItem().getDescriptionId();
-
-		ServerLevel level = (ServerLevel) villager.level();
-		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		if (personId == null) {
-			state.mapResident(villager.getUUID(), villager.isBaby(), data.needsOf(settlement, villager.getUUID()).satiety());
-			personId = state.residentId(villager.getUUID()).orElseThrow();
-			data.setDirty();
-		}
-		Person person = state.world().person(personId);
-		boolean survival = state.survivalEnabled();
-		boolean supportedFood = isSupportedFood(held, survival);
-		Container stockpile = survival ? null : SettlementStockpile.getStockpile(level, data, settlement);
-		if (!survival && stockpile == null) {
-			return refuse(player, villager, "no_stockpile");
-		}
-
-		String playerActor = PLAYER_ACTOR_PREFIX + player.getUUID();
-		int trust = person.trustIn(playerActor);
-		VillagerPersonality personality = data.personalityOf(settlement, villager.getUUID());
-		VillagerInteractionDecision.Decision decision = VillagerInteractionDecision.decide(
-			satietyOf(data, settlement, state, villager),
-			data.registeredCount(settlement),
-			communalFoodUnits(state, stockpile),
-			trust,
-			personality.sociability(),
-			supportedFood
-		);
-		if (!decision.accepted()) {
-			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), decision.reason(), trust
-			);
-			data.setDirty();
-			return refuse(player, villager, decision.reason());
-		}
-
-		int moved;
-		if (survival) {
-			ResourceType resourceType = MinecraftStockpileAdapter.resourceType(held).orElseThrow();
-			long requestId = state.world().recordShareRequest(personId, playerActor, Math.max(1, person.hunger()));
-			moved = MinecraftStockpileAdapter.importToSimulation(
-				player.getInventory(),
-				state.world(),
-				state.campOwner(),
-				resourceType,
-				1,
-				List.of(personId, playerActor),
-				Map.of(
-					"activity", "player_gift",
-					"playerName", player.getScoreboardName(),
-					"villagerId", villager.getUUID().toString()
-				),
-				List.of(requestId)
-			);
-		} else {
-			ItemStack removed = removeOneFood(player.getInventory(), held.getItem());
-			if (removed.isEmpty()) {
-				return refuse(player, villager, "transfer_failed");
-			}
-			moved = SettlementStockpile.insert(stockpile, removed);
-			if (moved == 0) {
-				player.getInventory().placeItemBackInInventory(removed);
-				return refuse(player, villager, "stockpile_full");
-			}
-		}
-		if (moved == 0) {
-			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), "transfer_failed", trust
-			);
-			data.setDirty();
-			return refuse(player, villager, "transfer_failed");
-		}
-
-		person.recordAidFrom(playerActor);
-		state.world().recordGiftInteraction(
-			personId, playerActor, true, itemName, player.getScoreboardName(), decision.reason(), person.trustIn(playerActor)
-		);
-		data.setDirty();
+		if (!data.isMember(settlement, villager.getUUID())) return refuse(player, villager, "not_member");
+		int slot = player.getInventory().selected;
+		ItemStack held = player.getMainHandItem().copy();
+		Container stockpile = SettlementSimulationService.isSurvivalEnabled(data, settlement)
+			? null : SettlementStockpile.getStockpile(level, data, settlement);
+		OfferResult result = VillagerGiftService.offer(data, settlement, villager.getUUID(), villager.isBaby(),
+			PLAYER_ACTOR_PREFIX + player.getUUID(), player.getScoreboardName(), player.getInventory(), slot,
+			() -> player.getInventory().selected, held, stockpile);
+		if (!result.accepted()) return refuse(player, villager, result.reason());
 		player.displayClientMessage(Component.translatable(
-			"coopcraft.interaction.accepted", nameOf(villager), itemDisplayName
-		), false);
-		return new OfferResult(true, decision.reason(), moved);
+			"coopcraft.interaction.accepted", nameOf(villager), held.getHoverName(), reason(result.reason())), false);
+		return result;
 	}
 
 	private static void describe(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
@@ -187,11 +106,8 @@ public final class VillagerInteraction {
 			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_action", action));
 		}
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		player.sendSystemMessage(Component.translatable(
-			"coopcraft.interaction.inspect_food",
-			communalFoodUnits(state, stockpile),
-			(long) Math.max(1, data.registeredCount(settlement)) * VillagerInteractionDecision.FOOD_RESERVE_UNITS_PER_MEMBER
-		));
+		player.sendSystemMessage(SettlementCommands.reservesMessage(settlement.name(),
+			SettlementReserves.inspect(data, settlement, stockpile)));
 		if (isFood(player.getMainHandItem())) {
 			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_hint"));
 		}
@@ -213,7 +129,7 @@ public final class VillagerInteraction {
 		return Component.translatable("coopcraft.interaction.reason." + reason);
 	}
 
-	private static boolean isFood(ItemStack stack) {
+	static boolean isFood(ItemStack stack) {
 		if (stack.isEmpty()) {
 			return false;
 		}
@@ -223,7 +139,7 @@ public final class VillagerInteraction {
 		return MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent();
 	}
 
-	private static boolean isSupportedFood(ItemStack stack, boolean survival) {
+	static boolean isSupportedFood(ItemStack stack, boolean survival) {
 		return survival
 			? MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent()
 			: SettlementFood.points(stack.getItem()) > 0;
@@ -241,26 +157,6 @@ public final class VillagerInteraction {
 				.orElseGet(() -> data.needsOf(settlement, villager.getUUID()).satiety());
 		}
 		return data.needsOf(settlement, villager.getUUID()).satiety();
-	}
-
-	private static long communalFoodUnits(SettlementSimulationState state, Container stockpile) {
-		if (state != null && state.survivalEnabled()) {
-			return state.world().batchesAt(state.campOwner()).stream()
-				.filter(batch -> batch.resourceType().isFood())
-				.mapToLong(ResourceBatch::quantity)
-				.sum();
-		}
-		return SettlementStockpile.communalFoodPoints(stockpile);
-	}
-
-	private static ItemStack removeOneFood(Container inventory, net.minecraft.world.item.Item item) {
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			ItemStack stack = inventory.getItem(slot);
-			if (stack.is(item) && stack.getComponentsPatch().isEmpty()) {
-				return inventory.removeItem(slot, 1);
-			}
-		}
-		return ItemStack.EMPTY;
 	}
 
 	record OfferResult(boolean accepted, String reason, int moved) {

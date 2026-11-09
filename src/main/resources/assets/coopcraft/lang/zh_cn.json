@@ -79,8 +79,8 @@
 	"coopcraft.interaction.inspect_action_target": "当前行动：%s（%s）",
 	"coopcraft.interaction.inspect_action_blocked": "当前行动：%s；阻碍：%s",
 	"coopcraft.interaction.inspect_food": "聚落食物：%s 份 · 每人储备线 %s 份",
-	"coopcraft.interaction.inspect_hint": "潜行并手持食物右键，可送出 1 份",
-	"coopcraft.interaction.accepted": "%s 收下了你的 %s",
+	"coopcraft.interaction.inspect_hint": "潜行并主手持食物右键，送出 1 份存入当前公仓；不会立即喂饱对方",
+	"coopcraft.interaction.accepted": "%s 收下 1 份 %s 并存入公仓：%s",
 	"coopcraft.interaction.refused": "%s 没有收下：%s",
 	"coopcraft.interaction.action.idle": "暂无工作",
 	"coopcraft.interaction.action.gather": "采集标记资源",
@@ -347,5 +347,14 @@
 	"coopcraft.command.settlement.reserves_points": "实体模式：公共食物点",
 	"coopcraft.command.settlement.reserves_unavailable": "不可用",
 	"coopcraft.command.settlement.reserves_status": "%s | 目标%s；%s名登记居民×每人%s食物点 | %s | 当前%s / 目标%s / 缺口%s",
-	"coopcraft.command.settlement.reserves_hint": "高储备让已分配的觅食者多备粮，减少从事其他既有工作的时间。仅影响下次选工，不中断当前收获，末批可超过目标；已加载成年居民不足3人时没有觅食者分工。目标不预留或保证粮食；缺粮应急采集与每日配给不变。"
+	"coopcraft.command.settlement.reserves_hint": "高储备让已分配的觅食者多备粮，减少从事其他既有工作的时间。仅影响下次选工，不中断当前收获，末批可超过目标；已加载成年居民不足3人时没有觅食者分工。目标不预留或保证粮食；缺粮应急采集与每日配给不变。",
+	"coopcraft.interaction.reason.not_member": "对方不是这个聚落的登记成员",
+	"coopcraft.interaction.reason.wrong_level": "你们不在同一个世界",
+	"coopcraft.interaction.reason.reserve_target_met": "公仓已达到当前储备目标，暂时不需要",
+	"coopcraft.interaction.reason.below_reserve_target": "公仓低于当前储备目标，愿意收下",
+	"coopcraft.simulation.reason.reserve_target_met": "赠粮时公仓已达到储备目标，暂时不需要",
+	"coopcraft.simulation.reason.below_reserve_target": "赠粮时公仓低于储备目标",
+	"coopcraft.simulation.detail.gift_reserve_target": "赠粮时备粮目标",
+	"coopcraft.simulation.detail.gift_reserve_points": "赠粮时公仓/目标（食物点）",
+	"coopcraft.simulation.detail.gift_reserve_nutrition": "赠粮时公仓/目标（营养）"
 }
