@@ -237,7 +237,7 @@ class SettlementMeetingInvitationsTest {
 					assertEquals(1, json.get(key).getAsString().split("%s", -1).length - 1, key);
 				}
 				for (String status : List.of("inspect_none", "inspect_pending", "inspect_travelling", "inspect_waiting",
-					"agenda_none", "agenda_known", "agenda_unknown", "hint")) {
+					"hint")) {
 					String key = "coopcraft.interaction.meeting." + status;
 					assertTrue(json.has(key), locale + ": " + key);
 					assertFalse(json.get(key).getAsString().isBlank());

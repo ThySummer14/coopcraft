@@ -180,6 +180,51 @@ public final class NormSystem {
 	private record MeetingPlan(MeetingResult result, NormProposal proposal, List<Person> active,
 		List<Person> participants, Person source, SocialInformation information) {}
 
+	public enum ProposalFactorKind {
+		NEIGHBOR_REQUESTS, PERSONAL_HUNGER, HOUSEHOLD_HUNGER, GRIEVANCE, PROPOSER_TRUST,
+		HOUSEHOLD_SURPLUS, LARGE_ALLOCATION
+	}
+
+	public record ProposalFactor(ProposalFactorKind kind, double contribution) {}
+
+	/** Factors describe the existing score above its baseline of 35, in calculation order. */
+	public record ProposalOpinion(NormProposal.Position position, double score, List<ProposalFactor> factors) {
+		public ProposalOpinion {
+			factors = List.copyOf(factors);
+		}
+	}
+
+	/** A current, independent tendency, never a stored position or a promise about a future vote. */
+	public record ProposalInquiry(String proposalId, String normId, int allocationUnitCap, long proposedDay,
+		boolean known, boolean decisionCapable, boolean hasReliableInformation, int remainingSocialHours,
+		boolean canIntroduce, Optional<ProposalOpinion> opinion) {}
+
+	/**
+	 * Inspect one explicit proposal without learning, voting or spending time. Introduction is a
+	 * capability if the resident attends; this method neither verifies nor promises attendance.
+	 */
+	public Optional<ProposalInquiry> inspectProposal(Person resident, String proposalId) {
+		if (resident == null || proposalId == null || proposalId.isBlank()
+			|| !resident.isAlive() || world.people().stream().noneMatch(person -> person == resident)) {
+			return Optional.empty();
+		}
+		NormProposal proposal = world.proposal(proposalId).orElse(null);
+		if (proposal == null || !resident.campId().equals(proposal.campId())
+			|| proposal.status() != NormProposal.Status.OPEN || !validMeetingProposal(proposal)
+			|| !(Norm.NEED_FIRST_COMMON_STORE.equals(proposal.normId())
+				|| Norm.CARE_FIRST_COMMON_STORE.equals(proposal.normId()))) {
+			return Optional.empty();
+		}
+		boolean known = proposal.knownBy().contains(resident.id());
+		boolean decisionCapable = resident.canMakeDecisions();
+		boolean reliable = known && proposalInformation(resident, proposal).isPresent();
+		int remaining = Math.max(0, 6 - resident.socialHours());
+		return Optional.of(new ProposalInquiry(proposal.proposalId(), proposal.normId(), proposal.allocationUnitCap(),
+			proposal.proposedDay(), known, decisionCapable, reliable, remaining,
+			decisionCapable && remaining > 0 && reliable,
+			known && decisionCapable ? Optional.of(proposalOpinion(resident, proposal)) : Optional.empty()));
+	}
+
 	public long lastMeetingDay(String campId) {
 		return lastMeetingDays.getOrDefault(campId, Long.MIN_VALUE);
 	}
@@ -253,8 +298,7 @@ public final class NormSystem {
 	}
 
 	private MeetingPlan planProposal(NormProposal proposal, List<Person> active, List<Person> present, int adults) {
-		if (world.ledger().event(proposal.originEventId()).isEmpty() || proposal.proposedDay() > world.day()
-			|| proposal.rounds() >= MAX_DELIBERATION_ROUNDS) {
+		if (!validMeetingProposal(proposal)) {
 			return new MeetingPlan(new MeetingResult("invalid_proposal", proposal.proposalId(), adults, 0,
 				proposal.rounds(), ""), proposal, active, List.of(), null, null);
 		}
@@ -262,10 +306,7 @@ public final class NormSystem {
 		SocialInformation information = null;
 		for (Person person : present) {
 			if (!proposal.knownBy().contains(person.id())) continue;
-			information = person.information().stream().filter(known -> known.kind() == SocialInformation.Kind.NORM_PROPOSAL
-				&& known.objectId().equals(proposal.proposalId()) && known.confidence() >= 0.5)
-				.filter(known -> validProposalSource(known, proposal))
-				.sorted(Comparator.comparing(SocialInformation::informationId)).findFirst().orElse(null);
+			information = proposalInformation(person, proposal).orElse(null);
 			if (information != null) { source = person; break; }
 		}
 		boolean canIntroduce = information != null;
@@ -275,6 +316,18 @@ public final class NormSystem {
 			: participants.size() < 2 ? "insufficient_participants" : "ready";
 		return new MeetingPlan(new MeetingResult(status, proposal.proposalId(), adults, participants.size(),
 			proposal.rounds(), "deliberating"), proposal, active, participants, source, information);
+	}
+
+	private boolean validMeetingProposal(NormProposal proposal) {
+		return world.ledger().event(proposal.originEventId()).isPresent() && proposal.proposedDay() <= world.day()
+			&& proposal.rounds() < MAX_DELIBERATION_ROUNDS;
+	}
+
+	private Optional<SocialInformation> proposalInformation(Person person, NormProposal proposal) {
+		return person.information().stream().filter(known -> known.kind() == SocialInformation.Kind.NORM_PROPOSAL
+			&& known.objectId().equals(proposal.proposalId()) && known.confidence() >= 0.5)
+			.filter(known -> validProposalSource(known, proposal))
+			.sorted(Comparator.comparing(SocialInformation::informationId)).findFirst();
 	}
 
 	private boolean validProposalSource(SocialInformation information, NormProposal proposal) {
@@ -801,29 +854,43 @@ public final class NormSystem {
 	}
 
 	private NormProposal.Position positionFor(Person person, NormProposal proposal) {
+		return proposalOpinion(person, proposal).position();
+	}
+
+	private ProposalOpinion proposalOpinion(Person person, NormProposal proposal) {
+		List<ProposalFactor> factors = new ArrayList<>();
+		// Preserve every original double addition and its order, including both hunger terms.
 		double score = 35;
 		if (person.knowsNorm(NEIGHBOR_REQUESTS)) {
 			score += 15;
+			factors.add(new ProposalFactor(ProposalFactorKind.NEIGHBOR_REQUESTS, 15));
 		}
 		if (person.hunger() > config.foodAccessThreshold()) {
 			score += 15;
+			factors.add(new ProposalFactor(ProposalFactorKind.PERSONAL_HUNGER, 15));
 		}
 		if (world.peopleInHousehold(person.householdId()).stream()
 			.anyMatch(member -> member.hunger() > config.foodAccessThreshold())) {
 			score += 10;
+			factors.add(new ProposalFactor(ProposalFactorKind.HOUSEHOLD_HUNGER, 10));
 		}
 		score += Math.min(15, person.grievance() * 2);
+		factors.add(new ProposalFactor(ProposalFactorKind.GRIEVANCE, Math.min(15, person.grievance() * 2)));
 		score += person.trustIn(proposal.proposerId()) * 0.15;
+		factors.add(new ProposalFactor(ProposalFactorKind.PROPOSER_TRUST, person.trustIn(proposal.proposerId()) * 0.15));
 		long stock = world.availableNutrition(StorageOwner.household(person.householdId()));
 		long reserve = world.peopleInHousehold(person.householdId()).size() * (long) config.dailyHunger() * 3;
 		if (stock > reserve) {
 			score -= 20;
+			factors.add(new ProposalFactor(ProposalFactorKind.HOUSEHOLD_SURPLUS, -20));
 		}
 		if (proposal.allocationUnitCap() >= 3 && stock > reserve) {
 			score -= 10;
+			factors.add(new ProposalFactor(ProposalFactorKind.LARGE_ALLOCATION, -10));
 		}
-		return score >= 55 ? NormProposal.Position.SUPPORT
+		NormProposal.Position position = score >= 55 ? NormProposal.Position.SUPPORT
 			: score < 40 ? NormProposal.Position.OPPOSE : NormProposal.Position.UNDECIDED;
+		return new ProposalOpinion(position, score, factors);
 	}
 
 	private NormProposal.Position positionFor(Person person, Norm norm) {

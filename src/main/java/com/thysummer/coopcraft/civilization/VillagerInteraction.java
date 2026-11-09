@@ -111,14 +111,8 @@ public final class VillagerInteraction {
 			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_action", action));
 		}
 		player.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting.inspect_" + VillagerWorkGoal.invitationStatus(villager)));
-		if (state != null && state.survivalEnabled() && state.normsEnabled()) {
-			String resident = state.residentId(villager.getUUID()).orElse(null);
-			var open = state.world().proposalsForCamp(state.campOwner().id()).stream()
-				.filter(proposal -> proposal.status() == com.thysummer.coopcraft.civilization.simulation.NormProposal.Status.OPEN).toList();
-			boolean known = resident != null && open.stream().anyMatch(proposal -> proposal.knownBy().contains(resident));
-			player.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting." +
-				(open.isEmpty() ? "agenda_none" : known ? "agenda_known" : "agenda_unknown")));
-		}
+		VillagerMeetingInquiry.inspect(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY)
+			.forEach(player::sendSystemMessage);
 		player.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting.hint"));
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
 		player.sendSystemMessage(SettlementCommands.reservesMessage(settlement.name(),
