@@ -20,6 +20,7 @@ public final class NormSystem {
 	private final Set<String> chargedSupervision = new LinkedHashSet<>();
 	private final Map<String, Integer> commonAllocations = new HashMap<>();
 	private long lastPropagationDay = Long.MIN_VALUE;
+	private final Map<String, Long> lastMeetingDays = new HashMap<>();
 
 	public NormSystem(SimulationWorld world, SimulationConfig config) {
 		this.world = world;
@@ -153,15 +154,136 @@ public final class NormSystem {
 
 	public void processSocialPhase(java.util.Collection<Person> residents, boolean commonStoreMeeting) {
 		List<Person> active = activeResidents(residents);
-		observeRefusals(active);
-		observeShortages(active);
-		if (config.publicStorageEnabled()) {
-			createProposals(active);
-		}
+		observeSocialDay(active);
 		if (commonStoreMeeting) {
 			conveneCommonStoreMeeting(active);
 		}
 		deliberate(active);
+	}
+
+	/** Close the current day's personal experiences without convening or deliberating. */
+	public void observeSocialDay(java.util.Collection<Person> residents) {
+		List<Person> active = activeResidents(residents);
+		observeRefusals(active);
+		observeShortages(active);
+		if (config.publicStorageEnabled()) createProposals(active);
+	}
+
+	public record MeetingResult(String status, String proposalId, int adultCount, int participants,
+		int round, String outcome) {
+		public boolean held() { return status.equals("held"); }
+	}
+
+	private record MeetingPlan(MeetingResult result, NormProposal proposal, List<Person> active,
+		List<Person> participants, Person source, SocialInformation information) {}
+
+	public long lastMeetingDay(String campId) {
+		return lastMeetingDays.getOrDefault(campId, Long.MIN_VALUE);
+	}
+
+	/** Only the persistence adapter restores this; switching modes never clears it. */
+	public void restoreLastMeetingDay(String campId, long day) {
+		if (day != Long.MIN_VALUE && (day < 0 || day > world.day())) {
+			throw new IllegalArgumentException("Invalid restored meeting day");
+		}
+		lastMeetingDays.put(campId, day);
+	}
+
+	/** Read-only: introductions are planned, never learned, until a meeting can progress. */
+	public MeetingResult inspectCommonStoreMeeting(java.util.Collection<Person> active,
+		java.util.Collection<Person> onsite, String campId) {
+		return planMeeting(active, onsite, campId).result();
+	}
+
+	/** Caller supplies verified physical attendance; absent residents remain in the denominator. */
+	public MeetingResult holdCommonStoreMeeting(java.util.Collection<Person> active,
+		java.util.Collection<Person> onsite, String campId, String location) {
+		if (location == null || location.isBlank() || location.length() > 96) {
+			throw new IllegalArgumentException("A bounded meeting location is required");
+		}
+		MeetingPlan plan = planMeeting(active, onsite, campId);
+		if (!plan.result().status().equals("ready")) return plan.result();
+		NormProposal proposal = plan.proposal();
+		for (Person participant : plan.participants()) {
+			if (!proposal.knownBy().contains(participant.id())) {
+				world.recordSocialEvent(EventType.INFORMATION_SHARED,
+					List.of(plan.source().id(), participant.id()),
+					Map.of("proposalId", proposal.proposalId(), "meeting", "common-store-v1", "location", location),
+					List.of(plan.information().sourceEventId()));
+				learn(participant, plan.information().propagate(world.day(), plan.source().id()));
+			}
+			proposal.updatePosition(participant.id(), positionFor(participant, proposal));
+		}
+		Map<String, String> evidence = new LinkedHashMap<>();
+		evidence.put("meeting", "common-store-v1");
+		evidence.put("location", location);
+		evidence.put("adultCount", Integer.toString(plan.result().adultCount()));
+		evidence.put("supportCount", Integer.toString(countPosition(proposal, plan.participants(), NormProposal.Position.SUPPORT)));
+		evidence.put("opposeCount", Integer.toString(countPosition(proposal, plan.participants(), NormProposal.Position.OPPOSE)));
+		String outcome = deliberateProposal(proposal, plan.participants(), plan.active(), evidence);
+		lastMeetingDays.put(campId, world.day());
+		return new MeetingResult("held", proposal.proposalId(), plan.result().adultCount(),
+			plan.participants().size(), proposal.rounds(), outcome);
+	}
+
+	private MeetingPlan planMeeting(java.util.Collection<Person> residents,
+		java.util.Collection<Person> onsite, String campId) {
+		List<Person> active = activeResidents(residents).stream().filter(person -> person.campId().equals(campId)).toList();
+		List<Person> present = activeResidents(onsite).stream().filter(active::contains)
+			.filter(Person::canMakeDecisions).filter(person -> person.socialHours() < 6).toList();
+		int adults = (int) active.stream().filter(Person::canMakeDecisions).count();
+		if (lastMeetingDay(campId) == world.day()) {
+			return emptyMeeting("already_held", adults, active);
+		}
+		List<NormProposal> open = world.proposalsForCamp(campId).stream()
+			.filter(proposal -> proposal.status() == NormProposal.Status.OPEN)
+			.sorted(Comparator.comparingLong(NormProposal::proposedDay).thenComparing(NormProposal::proposalId)).toList();
+		if (open.isEmpty()) return emptyMeeting("no_proposal", adults, active);
+		MeetingPlan first = null;
+		for (NormProposal proposal : open) {
+			MeetingPlan plan = planProposal(proposal, active, present, adults);
+			if (plan.result().status().equals("ready")) return plan;
+			if (first == null || (first.result().status().equals("no_informed_resident")
+				&& !plan.result().status().equals("no_informed_resident"))) first = plan;
+		}
+		return first;
+	}
+
+	private MeetingPlan planProposal(NormProposal proposal, List<Person> active, List<Person> present, int adults) {
+		if (world.ledger().event(proposal.originEventId()).isEmpty() || proposal.proposedDay() > world.day()
+			|| proposal.rounds() >= MAX_DELIBERATION_ROUNDS) {
+			return new MeetingPlan(new MeetingResult("invalid_proposal", proposal.proposalId(), adults, 0,
+				proposal.rounds(), ""), proposal, active, List.of(), null, null);
+		}
+		Person source = null;
+		SocialInformation information = null;
+		for (Person person : present) {
+			if (!proposal.knownBy().contains(person.id())) continue;
+			information = person.information().stream().filter(known -> known.kind() == SocialInformation.Kind.NORM_PROPOSAL
+				&& known.objectId().equals(proposal.proposalId()) && known.confidence() >= 0.5)
+				.filter(known -> validProposalSource(known, proposal))
+				.sorted(Comparator.comparing(SocialInformation::informationId)).findFirst().orElse(null);
+			if (information != null) { source = person; break; }
+		}
+		boolean canIntroduce = information != null;
+		List<Person> participants = present.stream()
+			.filter(person -> proposal.knownBy().contains(person.id()) || canIntroduce).toList();
+		String status = participants.isEmpty() ? "no_informed_resident"
+			: participants.size() < 2 ? "insufficient_participants" : "ready";
+		return new MeetingPlan(new MeetingResult(status, proposal.proposalId(), adults, participants.size(),
+			proposal.rounds(), "deliberating"), proposal, active, participants, source, information);
+	}
+
+	private boolean validProposalSource(SocialInformation information, NormProposal proposal) {
+		return world.ledger().event(information.sourceEventId())
+			.filter(event -> event.type() == EventType.NORM_PROPOSED && event.day() == proposal.proposedDay()
+				&& proposal.proposalId().equals(event.context().get("proposalId"))
+				&& event.actors().equals(List.of(proposal.proposerId())))
+			.isPresent();
+	}
+
+	private MeetingPlan emptyMeeting(String status, int adults, List<Person> active) {
+		return new MeetingPlan(new MeetingResult(status, "", adults, 0, 0, ""), null, active, List.of(), null, null);
 	}
 
 	public void startDay(java.util.Collection<Person> residents) {
@@ -525,26 +647,40 @@ public final class NormSystem {
 				.filter(person -> person.campId().equals(proposal.campId()))
 				.filter(person -> person.canMakeDecisions())
 				.toList();
-			for (Person participant : participants) {
-				if (participant.socialHours() < 6) {
-					participant.addSocialHours(1);
-				}
-			}
-			proposal.advanceRound();
-			long deliberationEvent = world.recordSocialEvent(
-				EventType.NORM_DELIBERATED,
-				participants.stream().map(Person::id).toList(),
-				Map.of("proposalId", proposal.proposalId(), "round", Integer.toString(proposal.rounds()),
-					"participants", Integer.toString(participants.size())),
-				List.of(proposal.originEventId())
-			);
-			Decision decision = evaluate(proposal, participants, active);
+			deliberateProposal(proposal, participants, active, Map.of());
+		}
+	}
+
+	/** Shared decision formula for standalone experiments and verified physical meetings. */
+	private String deliberateProposal(NormProposal proposal, List<Person> participants, List<Person> active,
+		Map<String, String> meetingEvidence) {
+		for (Person participant : participants) {
+			if (participant.socialHours() < 6) participant.addSocialHours(1);
+		}
+		proposal.advanceRound();
+		Decision decision = evaluate(proposal, participants, active);
+		String outcome = decision.adopt() ? (world.norm(proposal.campId(), proposal.normId()).isEmpty() ? "adopted" : "revised")
+			: proposal.rounds() >= MAX_DELIBERATION_ROUNDS ? (decision.reason().equals("deliberating") ? "expired" : "rejected")
+			: "deliberating";
+		Map<String, String> context = new LinkedHashMap<>(meetingEvidence);
+		context.put("proposalId", proposal.proposalId());
+		context.put("round", Integer.toString(proposal.rounds()));
+		context.put("participants", Integer.toString(participants.size()));
+		if (!meetingEvidence.isEmpty()) {
+			context.put("normId", proposal.normId());
+			context.put("meetingOutcome", outcome);
+			context.put("reason", decision.reason());
 			if (decision.adopt()) {
-				adopt(proposal, deliberationEvent, participants);
-			} else if (proposal.rounds() >= MAX_DELIBERATION_ROUNDS) {
-				reject(proposal, deliberationEvent, decision.reason());
+				context.put("previousCap", Integer.toString(world.norm(proposal.campId(), proposal.normId()).map(Norm::allocationUnitCap).orElse(0)));
+				context.put("newCap", Integer.toString(proposal.allocationUnitCap()));
 			}
 		}
+		long deliberationEvent = world.recordSocialEvent(EventType.NORM_DELIBERATED,
+			participants.stream().map(Person::id).toList(), context, List.of(proposal.originEventId()));
+		Map<String, String> frozen = meetingEvidence.isEmpty() ? Map.of() : context;
+		if (decision.adopt()) adopt(proposal, deliberationEvent, participants, frozen);
+		else if (proposal.rounds() >= MAX_DELIBERATION_ROUNDS) reject(proposal, deliberationEvent, decision.reason(), participants, frozen);
+		return outcome;
 	}
 
 	private Decision evaluate(NormProposal proposal, List<Person> participants, List<Person> active) {
@@ -570,7 +706,7 @@ public final class NormSystem {
 		return new Decision(adopt, reason);
 	}
 
-	private void adopt(NormProposal proposal, long deliberationEvent, List<Person> participants) {
+	private void adopt(NormProposal proposal, long deliberationEvent, List<Person> participants, Map<String, String> meetingEvidence) {
 		Optional<Norm> existing = world.norm(proposal.campId(), proposal.normId());
 		int previousCap = existing.map(Norm::allocationUnitCap).orElse(0);
 		Set<String> participantIds = participants.stream().map(Person::id).collect(java.util.stream.Collectors.toSet());
@@ -578,17 +714,20 @@ public final class NormSystem {
 		supporters.retainAll(participantIds);
 		Set<String> opponents = positions(proposal, NormProposal.Position.OPPOSE);
 		opponents.retainAll(participantIds);
+		Set<String> informed = meetingEvidence.isEmpty() ? proposal.knownBy() : participantIds;
 		int stability = existing.map(norm -> Math.max(20, norm.stability())).orElse(40);
 		Norm norm = new Norm(
 			proposal.normId(), proposal.campId(), proposal.allocationUnitCap(), supporters, opponents,
-			proposal.knownBy(), stability, Norm.Status.ACTIVE, existing.map(Norm::revisionHistory).orElse(List.of())
+			informed, stability, Norm.Status.ACTIVE, existing.map(Norm::revisionHistory).orElse(List.of())
 		);
 		EventType eventType = existing.isEmpty() ? EventType.NORM_ADOPTED : EventType.NORM_REVISED;
+		Map<String, String> context = new LinkedHashMap<>(meetingEvidence);
+		context.putAll(Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "previousCap",
+			Integer.toString(previousCap), "newCap", Integer.toString(proposal.allocationUnitCap())));
 		long eventId = world.recordSocialEvent(
 			eventType,
-			proposal.knownBy().stream().sorted().toList(),
-			Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "previousCap",
-				Integer.toString(previousCap), "newCap", Integer.toString(proposal.allocationUnitCap())),
+			informed.stream().sorted().toList(),
+			context,
 			List.of(proposal.originEventId(), deliberationEvent)
 		);
 		norm.recordRevision(new Norm.Revision(
@@ -598,7 +737,7 @@ public final class NormSystem {
 		world.registerNorm(norm);
 		proposal.conclude(NormProposal.Status.ADOPTED);
 		SocialInformation.Kind kind = existing.isEmpty() ? SocialInformation.Kind.NORM_ADOPTION : SocialInformation.Kind.NORM_REVISION;
-		for (String personId : proposal.knownBy().stream().sorted().toList()) {
+		for (String personId : informed.stream().sorted().toList()) {
 			Person person = world.person(personId);
 			person.observeNorm(proposal.normId());
 			SocialInformation information = new SocialInformation(
@@ -609,11 +748,14 @@ public final class NormSystem {
 		}
 	}
 
-	private void reject(NormProposal proposal, long deliberationEvent, String reason) {
+	private void reject(NormProposal proposal, long deliberationEvent, String reason, List<Person> participants,
+		Map<String, String> meetingEvidence) {
+		Map<String, String> context = new LinkedHashMap<>(meetingEvidence);
+		context.putAll(Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "reason", reason));
 		world.recordSocialEvent(
 			EventType.NORM_REJECTED,
-			proposal.knownBy().stream().sorted().toList(),
-			Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "reason", reason),
+			meetingEvidence.isEmpty() ? proposal.knownBy().stream().sorted().toList() : participants.stream().map(Person::id).toList(),
+			context,
 			List.of(proposal.originEventId(), deliberationEvent)
 		);
 		proposal.conclude(reason.equals("deliberating") ? NormProposal.Status.EXPIRED : NormProposal.Status.REJECTED);
@@ -630,7 +772,8 @@ public final class NormSystem {
 			});
 		} else if (information.kind() == SocialInformation.Kind.NORM_ADOPTION
 			|| information.kind() == SocialInformation.Kind.NORM_REVISION) {
-			world.norm(recipient.campId(), information.objectId()).ifPresent(norm -> {
+			world.norm(recipient.campId(), information.objectId())
+				.filter(norm -> knowsCurrentRevision(norm, information)).ifPresent(norm -> {
 				recipient.observeNorm(norm.normId());
 				norm.learn(recipient.id(), positionFor(recipient, norm) == NormProposal.Position.SUPPORT);
 			});
@@ -640,6 +783,16 @@ public final class NormSystem {
 			&& (recipient.hunger() > config.foodAccessThreshold() || recipient.trustIn(information.subjectId()) >= 40)) {
 			recipient.increaseGrievance(1);
 		}
+	}
+
+	private boolean knowsCurrentRevision(Norm norm, SocialInformation information) {
+		// An old result remains historical information, never evidence of knowing a new revision.
+		if (norm.revisionHistory().isEmpty()
+			|| norm.revisionHistory().getLast().eventId() != information.sourceEventId()) return false;
+		EventType expected = information.kind() == SocialInformation.Kind.NORM_ADOPTION
+			? EventType.NORM_ADOPTED : EventType.NORM_REVISED;
+		return world.ledger().event(information.sourceEventId()).filter(event -> event.type() == expected
+			&& norm.normId().equals(event.context().get("normId"))).isPresent();
 	}
 
 	private NormProposal.Position positionFor(Person person, NormProposal proposal) {

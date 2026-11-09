@@ -14,6 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.npc.Villager;
@@ -85,6 +86,8 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager first = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
 		Villager second = helper.spawn(EntityType.VILLAGER, new BlockPos(3, 0, 3));
+		first.setNoAi(true);
+		second.setNoAi(true);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(first, second));
 		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
 		String firstPerson = state.residentId(first.getUUID()).orElseThrow();
@@ -107,13 +110,16 @@ public final class SettlementNormGameTest implements FabricGameTest {
 			&& event.actors().equals(List.of(firstPerson, state.campOwner().id()))), "The refusal must be a real public-store event");
 
 		advanceDay(helper, data, settlement);
+		helper.assertTrue(state.world().ledger().events().stream().noneMatch(event -> event.type() == EventType.NORM_DELIBERATED),
+			"Daily settlement must observe experiences without an automatic meeting");
+		holdMeeting(helper, data, settlement);
 		NormProposal proposal = state.world().proposalsForCamp(state.campOwner().id()).stream().findFirst().orElseThrow();
 		helper.assertValueEqual(NormProposal.Status.OPEN, proposal.status(), "The first meeting must leave the proposal open");
 		helper.assertValueEqual(1, proposal.rounds(), "The first deliberation must be recorded");
 		helper.assertTrue(proposal.knownBy().contains(firstPerson) && proposal.knownBy().contains(secondPerson),
-			"Both loaded residents must learn the proposal at the public-store meeting");
+			"Both onsite residents must learn the proposal at the explicit public-store meeting");
 		SimulationEvent deliberation = lastEvent(state, EventType.NORM_DELIBERATED);
-		helper.assertValueEqual(2, deliberation.actors().size(), "Only the two loaded residents may deliberate");
+		helper.assertValueEqual(2, deliberation.actors().size(), "Only the two onsite residents may deliberate");
 
 		SettlementSavedData reloaded = reload(helper, data);
 		Settlement reloadedSettlement = reloaded.find(bell).orElseThrow();
@@ -125,6 +131,7 @@ public final class SettlementNormGameTest implements FabricGameTest {
 			.anyMatch(information -> information.objectId().equals(proposal.proposalId())), "Reload must preserve proposal knowledge");
 
 		advanceDay(helper, reloaded, reloadedSettlement);
+		holdMeeting(helper, reloaded, reloadedSettlement);
 		Norm norm = reloadedState.world().norm(reloadedState.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE).orElseThrow();
 		helper.assertValueEqual(2, norm.allocationUnitCap(), "The adopted rule must choose the hunger-driven cap");
 		helper.assertValueEqual(NormProposal.Status.ADOPTED, reloadedState.world().proposal(proposal.proposalId()).orElseThrow().status(),
@@ -169,6 +176,8 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager first = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
 		Villager second = helper.spawn(EntityType.VILLAGER, new BlockPos(3, 0, 3));
+		first.setNoAi(true);
+		second.setNoAi(true);
 		Villager child = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 4));
 		child.setBaby(true);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(first, second));
@@ -194,6 +203,9 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		helper.assertValueEqual(0, SettlementSimulationService.eat(data, settlement, first.getUUID()),
 			"The adult's next meal must be refused and create a real conflict");
 		advanceDay(helper, data, settlement);
+		helper.assertTrue(state.world().ledger().events().stream().noneMatch(event -> event.type() == EventType.NORM_DELIBERATED),
+			"Daily settlement must observe experiences without an automatic meeting");
+		holdMeeting(helper, data, settlement);
 		NormProposal proposal = state.world().proposalsForCamp(state.campOwner().id()).stream()
 			.filter(candidate -> candidate.normId().equals(Norm.CARE_FIRST_COMMON_STORE)).findFirst().orElseThrow();
 		helper.assertValueEqual(1, proposal.allocationUnitCap(), "The care proposal must add one dependent ration");
@@ -201,6 +213,7 @@ public final class SettlementNormGameTest implements FabricGameTest {
 			"Only the two adults may deliberate the care rule");
 
 		advanceDay(helper, data, settlement);
+		holdMeeting(helper, data, settlement);
 		Norm care = state.world().norm(state.campOwner().id(), Norm.CARE_FIRST_COMMON_STORE).orElseThrow();
 		helper.assertValueEqual(1, care.allocationUnitCap(), "The care rule must be adopted with one bonus ration");
 		helper.assertValueEqual(4, state.remainingFoodUnits(childPerson),
@@ -238,6 +251,29 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		second.kill();
 		child.kill();
 		helper.succeed();
+	}
+
+
+	private static void holdMeeting(GameTestHelper helper, SettlementSavedData data, Settlement settlement) {
+		ServerPlayer organizer = helper.makeMockServerPlayerInLevel();
+		BlockPos store = data.getStockpile(settlement).orElseThrow();
+		organizer.setPos(store.getX() + 0.5, store.getY() + 0.5, store.getZ() + 0.5);
+		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
+		CompoundTag before = data.save(new CompoundTag(), helper.getLevel().registryAccess());
+		SettlementMeetings.Result preview = SettlementMeetings.inspect(helper.getLevel(), data, settlement, organizer);
+		helper.assertValueEqual("ready", preview.status(), "The real onsite meeting must be ready: " + preview.status());
+		helper.assertValueEqual(before, data.save(new CompoundTag(), helper.getLevel().registryAccess()),
+			"The real meeting preview must not mutate simulation state");
+		SettlementMeetings.Result result = SettlementMeetings.hold(helper.getLevel(), data, settlement, organizer);
+		helper.assertTrue(result.held(), "The explicitly organized meeting must progress: " + result.status());
+		helper.assertValueEqual(2, result.discussion().participants(), "Only the two onsite adults may participate");
+		CompoundTag after = data.save(new CompoundTag(), helper.getLevel().registryAccess());
+		helper.assertValueEqual("already_held", SettlementMeetings.hold(helper.getLevel(), data, settlement, organizer).status(),
+			"A repeated command must not start a second meeting on the same core day");
+		helper.assertValueEqual(after, data.save(new CompoundTag(), helper.getLevel().registryAccess()),
+			"Repeated hold must not learn, spend time, advance a proposal or move resources");
+		state.world().assertConservation();
+		organizer.discard();
 	}
 
 	private static void advanceDay(GameTestHelper helper, SettlementSavedData data, Settlement settlement) {

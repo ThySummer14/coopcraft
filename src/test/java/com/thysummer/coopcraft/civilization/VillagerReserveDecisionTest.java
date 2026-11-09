@@ -70,6 +70,8 @@ class VillagerReserveDecisionTest {
 					String key = "coopcraft.simulation.detail.gift_reserve_" + detail;
 					assertTrue(json.has(key), locale + ": " + key);
 					assertFalse(json.get(key).getAsString().isBlank());
+					assertEquals(1, json.get(key).getAsString().split("%s", -1).length - 1,
+						locale + ": " + key + " must display the recorded detail value");
 				}
 				assertEquals(3, json.get("coopcraft.interaction.accepted").getAsString().split("%s", -1).length - 1);
 				assertEquals(2, json.get("coopcraft.interaction.refused").getAsString().split("%s", -1).length - 1);

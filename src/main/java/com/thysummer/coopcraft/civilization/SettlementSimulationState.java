@@ -238,6 +238,7 @@ public final class SettlementSimulationState {
 		tag.putBoolean("SkillsEnabled", skillsEnabled);
 		tag.putBoolean("NormsEnabled", normsEnabled);
 		tag.putLong("LastSurvivalDay", lastSurvivalDay);
+		tag.putLong("LastMeetingDay", norms.lastMeetingDay(campOwner().id()));
 		tag.putLong("FoodAllocationDay", foodAllocationDay);
 		ListTag allocations = new ListTag();
 		for (Map.Entry<String, Integer> entry : foodAllocations.entrySet().stream()
@@ -371,6 +372,20 @@ public final class SettlementSimulationState {
 			}
 			state.foodAllocations.put(allocation.getString("PersonId"), units);
 		}
+		long lastMeetingDay = Long.MIN_VALUE;
+		long savedMeetingDay = tag.getLong("LastMeetingDay");
+		if (tag.contains("LastMeetingDay", ListTag.TAG_LONG)
+			&& (savedMeetingDay == Long.MIN_VALUE || (savedMeetingDay >= 0 && savedMeetingDay <= state.world.day()))) {
+			lastMeetingDay = savedMeetingDay;
+		} else {
+			// Legacy rounds reserve only their own current core day; they do not prove attendance.
+			boolean deliberatedToday = state.world.ledger().eventsAtDay(state.world.day()).stream()
+				.filter(event -> event.type() == EventType.NORM_DELIBERATED)
+				.anyMatch(event -> state.world.proposal(event.context().getOrDefault("proposalId", ""))
+					.filter(proposal -> proposal.campId().equals(state.campOwner().id())).isPresent());
+			if (deliberatedToday) lastMeetingDay = state.world.day();
+		}
+		state.norms.restoreLastMeetingDay(state.campOwner().id(), lastMeetingDay);
 		state.norms.restoreChargedSupervision();
 		return state;
 	}

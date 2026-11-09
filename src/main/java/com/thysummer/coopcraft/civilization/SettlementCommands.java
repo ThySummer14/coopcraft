@@ -54,6 +54,9 @@ public final class SettlementCommands {
 		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
+		settlement.then(LiteralArgumentBuilder.<S>literal("meeting")
+			.executes(ctx -> handler.run(ctx, "meeting", ""))
+			.then(LiteralArgumentBuilder.<S>literal("hold").executes(ctx -> handler.run(ctx, "meeting", "hold"))));
 		settlement.then(LiteralArgumentBuilder.<S>literal("events")
 			.executes(ctx -> handler.run(ctx, "events", ""))
 			.then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, SettlementEvents.MAX_COUNT))
@@ -104,6 +107,24 @@ public final class SettlementCommands {
 		if (settlement == null) {
 			source.sendFailure(message("no_settlement"));
 			return 0;
+		}
+		if (action.equals("meeting")) {
+			SettlementMeetings.Result result = option.equals("hold")
+				? SettlementMeetings.hold(level, data, settlement, player)
+				: SettlementMeetings.inspect(level, data, settlement, player);
+			Component feedback = message("meeting_" + result.status());
+			if (option.equals("hold") && !result.held()) source.sendFailure(feedback);
+			else source.sendSuccess(() -> feedback, false);
+			send(source, "meeting_day", result.coreDay(), result.lastMeetingDay() == result.coreDay()
+				? message("meeting_used") : message("meeting_unused"));
+			if (!result.discussion().proposalId().isEmpty() && !result.status().equals("invalid_proposal")) {
+				send(source, "meeting_summary", result.discussion().participants(),
+					result.discussion().adultCount(), result.discussion().round());
+			}
+			if (!result.location().isEmpty()) send(source, "meeting_location", result.location());
+			if (!result.discussion().proposalId().isEmpty()) send(source, "meeting_agenda", result.discussion().proposalId());
+			if (result.held()) send(source, "meeting_outcome", Component.translatable("coopcraft.simulation.meeting." + result.discussion().outcome()));
+			return option.equals("hold") && !result.held() ? 0 : 1;
 		}
 		if (action.equals("construction") && option.isEmpty()) {
 			showConstruction(source, data, settlement);

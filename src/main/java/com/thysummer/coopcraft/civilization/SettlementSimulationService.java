@@ -504,8 +504,9 @@ public final class SettlementSimulationService {
 		Map<UUID, Person> active = activeResidents(level, data, settlement, state);
 		if (!active.isEmpty()) {
 			if (state.normsEnabled()) {
+				// Observe the closing core day before advancing it; no virtual attendance.
+				state.norms().observeSocialDay(active.values());
 				state.norms().startDay(active.values());
-				state.norms().processSocialPhase(active.values(), true);
 			}
 			survival(state).advanceDay(active.values());
 			for (UUID villagerId : active.keySet()) {
@@ -613,7 +614,7 @@ public final class SettlementSimulationService {
 		data.setDirty();
 	}
 
-	private static Map<UUID, Person> activeResidents(
+	static Map<UUID, Person> activeResidents(
 		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement,
@@ -626,9 +627,10 @@ public final class SettlementSimulationService {
 				continue;
 			}
 			if (level.getEntity(villagerId) instanceof Villager villager
-				&& villager.isAlive()
+				&& villager.isAlive() && !villager.isRemoved() && villager.level() == level
 				&& villager.distanceToSqr(settlement.center().getCenter()) <= 64.0 * 64.0) {
-				active.put(villagerId, state.world().person(entry.getValue()));
+				Person person = state.world().person(entry.getValue());
+				if (person.isAlive() && person.campId().equals(state.campOwner().id())) active.put(villagerId, person);
 			}
 		}
 		return active;
