@@ -88,6 +88,7 @@
 	"coopcraft.interaction.action.build": "Building",
 	"coopcraft.interaction.action.eat": "Heading to the stockpile to eat",
 	"coopcraft.interaction.action.craft": "Crafting tools",
+	"coopcraft.interaction.action.craft_first_workbench": "Handcrafting the first workbench beside the communal store",
 	"coopcraft.interaction.action.craft_materials": "Crafting communal building supplies",
 	"coopcraft.interaction.action.polish": "Polishing a stone pickaxe",
 	"coopcraft.interaction.action.grind": "Grinding smooth stone",

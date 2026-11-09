@@ -19,6 +19,7 @@ import net.minecraft.world.item.Items;
 public final class SettlementMaterialCrafting {
 	public enum Recipe {
 		PLANKS(Items.OAK_PLANKS, 4, Items.OAK_LOG, 1),
+		CRAFTING_TABLE(Items.CRAFTING_TABLE, 1, Items.OAK_PLANKS, 4),
 		STICKS(Items.STICK, 8, Items.OAK_LOG, 1),
 		DOOR(Items.OAK_DOOR, 3, Items.OAK_PLANKS, 6),
 		BED(Items.WHITE_BED, 1, Items.WHITE_WOOL, 3, Items.OAK_PLANKS, 3),

@@ -46,6 +46,7 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos forageTarget;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
+	private SettlementStarterCrafting.Ticket currentStarterCraft;
 	private Settlement settlement;
 	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
@@ -157,6 +158,7 @@ public class VillagerWorkGoal extends Goal {
 		forageTarget = null;
 		currentBuildTarget = null;
 		currentMaterialRecipe = null;
+		currentStarterCraft = null;
 		settlement = null;
 		progress = 0;
 		searchCooldown = 0;
@@ -447,6 +449,7 @@ public class VillagerWorkGoal extends Goal {
 		refreshMeetingInvitation();
 		if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
 		if (action == null) return;
+		if (action == Action.CRAFT_FIRST_WORKBENCH && !isTargetValid()) { stop(); return; }
 		if (foodTicket != null) {
 			villager.getNavigation().stop();
 			if (!foodTicket.waiting()) {
@@ -496,6 +499,7 @@ public class VillagerWorkGoal extends Goal {
 			case CRAFT_PICKAXE -> craftPickaxe();
 			case CRAFT_STICKS -> craftSticks();
 			case CRAFT_MATERIALS -> craftMaterials();
+			case CRAFT_FIRST_WORKBENCH -> craftFirstWorkbench();
 			case BUILD -> ConstructionSystem.buildNext(
 				(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
 			);
@@ -558,6 +562,8 @@ public class VillagerWorkGoal extends Goal {
 		if (shouldEat()) {
 			return Action.EAT;
 		}
+		currentStarterCraft = prepareStarterCrafting();
+		if (currentStarterCraft != null) return Action.CRAFT_FIRST_WORKBENCH;
 		if (canCraftPickaxe()) {
 			return Action.CRAFT_PICKAXE;
 		}
@@ -576,6 +582,33 @@ public class VillagerWorkGoal extends Goal {
 		}
 		BlockPos gatherTarget = chooseGatherTarget();
 		return gatherTarget == null ? null : Action.GATHER;
+	}
+
+	private SettlementStarterCrafting.Ticket prepareStarterCrafting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		if (!SettlementStarterCrafting.eligible(data, settlement)) return null;
+		BlockPos store = data.getStockpile(settlement).orElse(null);
+		if (store == null) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return null;
+		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
+		return SettlementStarterCrafting.prepare(data, settlement, villager.getUUID(), stockpile,
+			() -> SettlementSavedData.get(level) == data && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading()
+				&& level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition())
+				&& level.isPositionEntityTicking(villager.blockPosition()) && binding.valid());
+	}
+
+	private void craftFirstWorkbench() {
+		// tick() can be driven directly: do not rely only on canContinueToUse or a prior claim.
+		if (currentStarterCraft == null || target == null || settlement == null
+			|| !(villager.level() instanceof ServerLevel level) || !target.equals(currentStarterCraft.store())
+			|| villager.distanceToSqr(target.getCenter()) > INTERACTION_DISTANCE_SQUARED
+			|| !SettlementStarterCrafting.valid(currentStarterCraft, settlementData(), settlement, villager.getUUID())) return;
+		Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+		SettlementStarterCrafting.finish(currentStarterCraft, settlementData(), settlement, villager.getUUID(), stockpile);
 	}
 
 	private SettlementMaterialCrafting.Recipe chooseMaterialRecipe() {
@@ -605,7 +638,8 @@ public class VillagerWorkGoal extends Goal {
 		List<Map<Item, Integer>> demands = constructionMaterialDemands();
 		if (demands.isEmpty()) { return false; }
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		return SettlementMaterialCrafting.needsConstructionLogs(stockpile, villager.getInventory(),
+		return SettlementStarterCrafting.needsLog(settlementData(), settlement, stockpile)
+			|| SettlementMaterialCrafting.needsConstructionLogs(stockpile, villager.getInventory(),
 			settlementData().simulationOf(settlement).orElse(null), demands, hasCraftingStation());
 	}
 
@@ -640,6 +674,9 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).orElse(null);
+		}
+		if (action == Action.CRAFT_FIRST_WORKBENCH) {
+			return currentStarterCraft == null ? null : currentStarterCraft.store();
 		}
 		if (action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE) {
 			return settlementData().getGrindingStation(settlement).orElse(null);
@@ -714,7 +751,7 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null) {
 			return false;
 		}
-		if (action == Action.BUILD && !constructionPathIsTicking()) {
+		if ((action == Action.BUILD || action == Action.CRAFT_FIRST_WORKBENCH) && !constructionPathIsTicking()) {
 			villager.getNavigation().stop();
 			travelTicks = 0;
 		}
@@ -799,9 +836,10 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean navigateTo(BlockPos pos) {
+		if (action == Action.CRAFT_FIRST_WORKBENCH && !navigationSearchRegionLoaded()) return false;
 		double speed = settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed();
 		boolean moving = villager.getNavigation().moveTo(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, speed);
-		if (!moving || action != Action.BUILD) {
+		if (!moving || (action != Action.BUILD && action != Action.CRAFT_FIRST_WORKBENCH)) {
 			return moving;
 		}
 		if (constructionPathIsTicking()) {
@@ -850,6 +888,10 @@ public class VillagerWorkGoal extends Goal {
 			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
+		}
+		if (action == Action.CRAFT_FIRST_WORKBENCH) {
+			return currentStarterCraft != null && target.equals(currentStarterCraft.store())
+				&& SettlementStarterCrafting.valid(currentStarterCraft, settlementData(), settlement, villager.getUUID());
 		}
 		Block station = action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE
 			? Blocks.STONECUTTER
@@ -1191,6 +1233,7 @@ public class VillagerWorkGoal extends Goal {
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
 		CRAFT_MATERIALS("craft_materials"),
+		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),

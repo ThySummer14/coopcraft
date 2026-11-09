@@ -16,7 +16,7 @@ public final class ConstructionWorkshop {
 		return center.distSqr(station) <= 12 * 12;
 	}
 
-	private static boolean supported(ConstructionPlan plan) {
+	static boolean supported(ConstructionPlan plan) {
 		if (plan == null || !ConstructionPlanner.STARTER_WORKSHOP.equals(plan.id())
 			|| plan.instructions().size() != 1) return false;
 		ConstructionInstruction part = plan.instructions().getFirst();

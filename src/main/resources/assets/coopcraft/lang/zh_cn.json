@@ -88,6 +88,7 @@
 	"coopcraft.interaction.action.build": "施工",
 	"coopcraft.interaction.action.eat": "前往公仓进食",
 	"coopcraft.interaction.action.craft": "制作工具",
+	"coopcraft.interaction.action.craft_first_workbench": "在公仓旁徒手准备首个工作台",
 	"coopcraft.interaction.action.craft_materials": "制作公共建筑材料",
 	"coopcraft.interaction.action.polish": "打磨石镐",
 	"coopcraft.interaction.action.grind": "磨制平滑石",
