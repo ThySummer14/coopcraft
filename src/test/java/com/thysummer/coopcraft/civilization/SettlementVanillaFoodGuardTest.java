@@ -109,8 +109,8 @@ class SettlementVanillaFoodGuardTest {
 		for (int slot = 0; slot < stacks.length; slot++) {
 			assertSame(stacks[slot], SettlementVanillaFoodGuard.usableFoodView(inventory, slot));
 		}
-		// Vanilla counts bread at three and potatoes/carrots at one, while berries add no breeding points.
-		assertEquals(24, SettlementVanillaFoodGuard.foodPoints(inventory, Villager.FOOD_POINTS));
+		// Vanilla counts bread at four and potatoes/carrots at one, while berries add no breeding points.
+		assertEquals(26, SettlementVanillaFoodGuard.foodPoints(inventory, Villager.FOOD_POINTS));
 		assertEquals(5, named.getCount());
 		assertEquals(Component.literal("Keep this name"), named.get(DataComponents.CUSTOM_NAME));
 		assertEquals(unrelated, custom.get(DataComponents.CUSTOM_DATA).copyTag());
