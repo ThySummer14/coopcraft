@@ -178,6 +178,24 @@ public class VillagerWorkGoal extends Goal {
 		return goal.toggleInvitation(player, data, settlement);
 	}
 
+	/** Opaque, ephemeral identity for a server-owned dialog snapshot. Inspection has no side effects. */
+	static Object invitationIdentity(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		return goal != null && goal.hasValidInvitation() ? goal.meetingTicket : null;
+	}
+
+	static boolean invitationOwnedBy(Villager villager, java.util.UUID inviter) {
+		Object ticket = invitationIdentity(villager);
+		return ticket instanceof SettlementMeetingInvitations.Ticket invitation && invitation.inviter().equals(inviter);
+	}
+
+	static String requestMeetingInvitation(net.minecraft.server.level.ServerPlayer player, Villager villager,
+		SettlementSavedData data, Settlement settlement, boolean cancel, Object expectedTicket) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "unavailable";
+		return goal.requestInvitation(player, data, settlement, false, cancel, expectedTicket);
+	}
+
 	static void cancelMeetingInvitation(Villager villager) {
 		VillagerWorkGoal goal = goalOf(villager);
 		if (goal != null) {
@@ -195,16 +213,25 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private String toggleInvitation(net.minecraft.server.level.ServerPlayer player, SettlementSavedData data, Settlement requested) {
+		return requestInvitation(player, data, requested, true, false, null);
+	}
+
+	private String requestInvitation(net.minecraft.server.level.ServerPlayer player, SettlementSavedData data,
+		Settlement requested, boolean toggle, boolean cancel, Object expectedTicket) {
 		if (!(villager.level() instanceof ServerLevel level) || player.level() != level
 			|| !player.isAlive() || player.isRemoved() || player.isSpectator() || !villager.isAlive()
 			|| player.distanceToSqr(villager) > 16) return "unavailable";
 		refreshMeetingInvitation();
-		if (meetingTicket != null) {
-			if (SettlementMeetingInvitations.existing(meetingTicket, player.getUUID()).equals("already_invited")) return "already_invited";
+		String decision = toggle
+			? (meetingTicket == null ? "ready" : SettlementMeetingInvitations.existing(meetingTicket, player.getUUID()))
+			: SettlementMeetingInvitations.explicitRequest(meetingTicket, SettlementSavedData.get(level), level.getGameTime(),
+				level.getDayTime() / 24000L, player.getUUID(), cancel, expectedTicket);
+		if (decision.equals("cancelled")) {
 			if (action == Action.ATTEND_MEETING) stop();
 			else cancelMeetingInvitation();
-			return "cancelled";
+			return decision;
 		}
+		if (!decision.equals("ready")) return decision;
 		String gate = SettlementMeetingInvitations.gate(data, requested, villager.getUUID(), level.getDayTime() / 24000L);
 		if (!gate.equals("ready")) return gate;
 		if (action == Action.EAT || foodTicket != null) return "eating";

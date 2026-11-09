@@ -25,6 +25,13 @@ final class SettlementMeetingInvitations {
 	static String existing(Ticket ticket, UUID inviter) {
 		return ticket.inviter().equals(inviter) ? "cancelled" : "already_invited";
 	}
+	/** Read-only command decision; only the goal applies cancellation or creates a ticket. */
+	static String explicitRequest(Ticket current, SettlementSavedData data, long tick, long day,
+		UUID inviter, boolean cancel, Object expectedTicket) {
+		boolean valid = current != null && current.matches(data, tick, day);
+		if (!cancel) return valid ? "already_invited" : "ready";
+		return valid && current == expectedTicket && current.inviter().equals(inviter) ? "cancelled" : "stale";
+	}
 	static boolean cancelOnStop(boolean attending) { return attending; }
 
 	static boolean waitingPositionValid(boolean waiting, double distanceSquared) {

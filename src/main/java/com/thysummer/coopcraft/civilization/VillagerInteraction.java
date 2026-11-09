@@ -1,6 +1,8 @@
 package com.thysummer.coopcraft.civilization;
 
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
+import java.util.ArrayList;
+import java.util.List;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -62,7 +64,11 @@ public final class VillagerInteraction {
 				String result = VillagerWorkGoal.inviteToMeeting(serverPlayer, villager, claim.data(), claim.settlement());
 				serverPlayer.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting." + result, nameOf(villager)));
 			}
-			case DESCRIBE -> describe(serverPlayer, villager, claim.settlement(), claim.data());
+			case DESCRIBE -> {
+				if (!ResidentDialogService.open(serverPlayer, villager, claim.data(), claim.settlement())) {
+					describe(serverPlayer, villager, claim.settlement(), claim.data());
+				}
+			}
 			default -> throw new IllegalStateException("Unexpected resident interaction route: " + route);
 		}
 		return InteractionResult.CONSUME;
@@ -137,11 +143,17 @@ public final class VillagerInteraction {
 	}
 
 	private static void describe(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		inspectLines(player, villager, settlement, data).forEach(player::sendSystemMessage);
+	}
+
+	/** Shared read-only description for chat compatibility and the resident window. */
+	static List<Component> inspectLines(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		List<Component> lines = new ArrayList<>();
 		ServerLevel level = (ServerLevel) villager.level();
-		Component name = nameOf(villager);
+		Component name = Component.literal(nameOf(villager).getString());
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		int satiety = satietyOf(data, settlement, state, villager);
-		player.sendSystemMessage(Component.translatable(
+		lines.add(Component.translatable(
 			"coopcraft.interaction.inspect",
 			name,
 			Component.translatable("coopcraft.work_role." + LaborAllocator.roleOf(level, data, settlement, villager.getUUID()).id()),
@@ -150,28 +162,29 @@ public final class VillagerInteraction {
 		VillagerWorkGoal.WorkStatus status = VillagerWorkGoal.statusOf(villager);
 		Component action = Component.translatable("coopcraft.interaction.action." + status.action());
 		if (status.blocker() != null) {
-			player.sendSystemMessage(Component.translatable(
+			lines.add(Component.translatable(
 				"coopcraft.interaction.inspect_action_blocked",
 				action,
 				Component.translatable("coopcraft.interaction.blocker." + status.blocker())
 			));
 		} else if (status.target() != null) {
-			player.sendSystemMessage(Component.translatable(
+			lines.add(Component.translatable(
 				"coopcraft.interaction.inspect_action_target", action, status.target().toShortString()
 			));
 		} else {
-			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_action", action));
+			lines.add(Component.translatable("coopcraft.interaction.inspect_action", action));
 		}
-		player.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting.inspect_" + VillagerWorkGoal.invitationStatus(villager)));
+		lines.add(Component.translatable("coopcraft.interaction.meeting.inspect_" + VillagerWorkGoal.invitationStatus(villager)));
 		VillagerMeetingInquiry.inspect(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY)
-			.forEach(player::sendSystemMessage);
-		player.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting.hint"));
+			.forEach(lines::add);
+		lines.add(Component.translatable("coopcraft.interaction.meeting.hint"));
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		player.sendSystemMessage(SettlementCommands.reservesMessage(settlement.name(),
+		lines.add(SettlementCommands.reservesMessage(settlement.name(),
 			SettlementReserves.inspect(data, settlement, stockpile)));
 		if (isFood(player.getMainHandItem())) {
-			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_hint"));
+			lines.add(Component.translatable("coopcraft.interaction.inspect_hint"));
 		}
+		return List.copyOf(lines);
 	}
 
 	private static OfferResult refuse(ServerPlayer player, Villager villager, String reason) {
@@ -181,7 +194,7 @@ public final class VillagerInteraction {
 		return new OfferResult(false, reason, 0);
 	}
 
-	private static Component nameOf(Villager villager) {
+	static Component nameOf(Villager villager) {
 		return villager.getCustomName() == null
 			? Component.literal(VillagerNames.fullName(villager.getUUID())) : villager.getCustomName();
 	}

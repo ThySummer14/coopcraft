@@ -460,5 +460,22 @@
 	"coopcraft.interaction.membership.orphan": "%s has a resident record, but its home settlement record cannot be found. Resident actions and vanilla trading are unavailable until the record is repaired.",
 	"coopcraft.interaction.membership.conflict": "%s has conflicting resident records across dimensions. Resident actions and vanilla trading are unavailable until the conflict is resolved.",
 	"coopcraft.interaction.membership.unavailable": "Cannot verify %s’s resident records in the current server dimensions. Resident actions and vanilla trading are temporarily unavailable.",
-	"coopcraft.interaction.membership.away": "%s belongs to %s in %s and is currently away in %s. Return them home to inspect local work and reserves, offer food, or invite them. Vanilla trading is unavailable."
+	"coopcraft.interaction.membership.away": "%s belongs to %s in %s and is currently away in %s. Return them home to inspect local work and reserves, offer food, or invite them. Vanilla trading is unavailable.",
+	"coopcraft.resident_dialog.current_information": "Current resident information",
+	"coopcraft.resident_dialog.meaning": "Opinions shown here are not votes. Accepting an invitation does not mean the resident has arrived.",
+	"coopcraft.resident_dialog.result": "Result: %s",
+	"coopcraft.resident_dialog.gift": "Try giving 1 food item from current main hand",
+	"coopcraft.resident_dialog.invite": "Invite",
+	"coopcraft.resident_dialog.cancel": "Cancel invitation",
+	"coopcraft.resident_dialog.refresh": "Refresh",
+	"coopcraft.resident_dialog.pending": "Waiting for the server…",
+	"coopcraft.resident_dialog.unavailable": "This resident is unavailable. Move closer, keep a clear line of sight, and try again.",
+	"coopcraft.resident_dialog.replaced": "Another resident conversation has been opened.",
+	"coopcraft.resident_dialog.sequence": "Conversation requests are out of sync. Reopen the window.",
+	"coopcraft.resident_dialog.gift_accepted": "The resident accepted one food item from your current main hand.",
+	"coopcraft.resident_dialog.gift_hint": "Try offering one food item from your current main hand. The resident decides when you act.",
+	"coopcraft.resident_dialog.meeting_hint": "An invitation only attempts travel, not attendance, discussion, or voting. Cancel applies only to your last viewed invitation.",
+	"coopcraft.interaction.meeting.stale": "%s's invitation has expired or changed. Refresh the resident dialog.",
+	"coopcraft.resident_dialog.gift_unavailable": "Your main hand has no food supported by the current mode. Food with custom components cannot be offered.",
+	"coopcraft.resident_dialog.own_invitation": "This resident has your active invitation. You may try cancelling the invitation last shown here."
 }

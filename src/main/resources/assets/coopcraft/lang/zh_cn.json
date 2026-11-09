@@ -460,5 +460,22 @@
 	"coopcraft.interaction.membership.orphan": "%s 的居民档案仍在，但找不到所属聚落记录。修复档案前，居民操作和原版交易暂不可用。",
 	"coopcraft.interaction.membership.conflict": "%s 在不同维度有冲突的居民归属记录。解决冲突前，居民操作和原版交易暂不可用。",
 	"coopcraft.interaction.membership.unavailable": "暂时无法核实 %s 在当前服务器维度中的居民归属。居民操作和原版交易暂不可用。",
-	"coopcraft.interaction.membership.away": "%s 属于 %s（家园维度：%s），当前在异地维度 %s。返回家园后可查看当地工作和储备、赠送食物或发出邀请；原版交易不可用。"
+	"coopcraft.interaction.membership.away": "%s 属于 %s（家园维度：%s），当前在异地维度 %s。返回家园后可查看当地工作和储备、赠送食物或发出邀请；原版交易不可用。",
+	"coopcraft.resident_dialog.current_information": "当前居民信息",
+	"coopcraft.resident_dialog.meaning": "这里显示当前意见，不代表投票；接受邀请也不代表已经到场。",
+	"coopcraft.resident_dialog.result": "结果：%s",
+	"coopcraft.resident_dialog.gift": "尝试赠送当前主手中的1件食物",
+	"coopcraft.resident_dialog.invite": "发出邀请",
+	"coopcraft.resident_dialog.cancel": "取消邀请",
+	"coopcraft.resident_dialog.refresh": "刷新",
+	"coopcraft.resident_dialog.pending": "等待服务器回应…",
+	"coopcraft.resident_dialog.unavailable": "当前无法与这位居民交谈，请靠近并保持视线畅通后重试。",
+	"coopcraft.resident_dialog.replaced": "已打开另一段居民对话。",
+	"coopcraft.resident_dialog.sequence": "对话请求不同步，请重新打开窗口。",
+	"coopcraft.resident_dialog.gift_accepted": "居民已接受当前主手中的1件食物。",
+	"coopcraft.resident_dialog.gift_hint": "尝试赠送当前主手中的1件食物；居民是否接受将在操作时确认。",
+	"coopcraft.resident_dialog.meeting_hint": "邀请只表示尝试赴会，不保证出席、讨论或投票；取消只针对你上次查看的邀请。",
+	"coopcraft.interaction.meeting.stale": "%s 的邀请已失效或发生变化，请刷新居民界面。",
+	"coopcraft.resident_dialog.gift_unavailable": "主手没有可用于当前模式的食物；带有自定义组件的食物也无法赠送。",
+	"coopcraft.resident_dialog.own_invitation": "这位居民已有你的有效邀请；可尝试取消上次查看的这张邀请。"
 }

@@ -405,3 +405,14 @@
 - 新增13项JUnit：5项全局claim/来源/登记/死亡回归、1项全局出生与重复扫描票据保持、7项独立互动路由/模式组合/NBT/双语/Mixin注册回归。两组纯Java实验再次复跑保持原结果；完整build和JUnit以如下CI最终记录为准，不把共享逻辑测试当作Mixin执行或实际交易验收。
 
 - 验证完成：代码提交 `4575db3e` 的[居民独立互动构建](https://github.com/ThySummer14/coopcraft/actions/runs/42555335248)已通过完整build和643项JUnit，0失败/0跳过，新增13项回归全过。206行配给与48行多人顺序CSV同最终核心源码本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42555335248/artifacts/13647535430)内 `coopcraft-0.1.0.jar` 为775548字节，SHA-256 `bc3ececdf9c34dde331111d4c9cab99895486fea10079123082c4f07f0fbf409`。本轮仍是聊天式互动，不含独立GUI；没有启动Minecraft客户端、服务器或GameTest。真实Mixin应用、双手及重要物品交互、已开交易菜单返还、跨维度传送与死亡仍待用户统一验收。
+
+
+## 第三十四增量：独立居民GUI与服务端会话
+
+- 真正窗口接入本地唯一成员普通主手右键，复用现有资料/意见/赠粮/邀请服务。正文滚动，四个明确动作及关闭固定，不暂停世界；原Shift快捷、重要物品、非成员行为和33轮交易隔离保留，不支持新协议的客户端只降级原聊天。
+- 服务端绑定玩家、level、实际居民、data/settlement/member引用，逐次校验距离、视线、加载/ticking和全局归属。视线前先短路不合格场景并核对射线矩形区块已加载。真实菜单走closeContainer后重验，不手工返还。
+- token与连续请求号先认领后执行，重复包仅重发原快照/ack，不改取消票引用。明确INVITE不切换成取消，CANCEL匹配玩家及原票；GUI关闭和刷新不能重新提交赠送。失效/卸载/断线/停服与2400 tick空闲清理，不改NBT与DataVersion19。
+- 客户端仅OPEN创建窗口，UPDATE要求当前实际屏幕、同token、新revision和合法ack；CLOSE不能关闭后续窗口。resize保留请求状态，正文刷新不setScreen，世界改变与死亡/断线清理。协议对动作、计数、列表、文本及完整组件结构/编码设边界，保留正常本地化。
+- 审查发现并修正关闭revision不递增导致客户端忽略CLOSE，以及未来/倒退ack、可变/隐形超大Component和等待文案遮挡。静态API与单元接缝不能代替实际Mixin、渲染或联机时序；没有启动Minecraft客户端、服务器或GameTest。
+
+- 新增28项JUnit源码：6项服务端会话/Registry、5项场景与成员门禁/真实赠粮服务守恒、6项codec、8项客户端接收状态机、3项明确邀请。服务端实际包handler、Screen绘制和真实World仍不由这些纯接缝代验；本地两组纯Java实验再次复跑，最终完整build/JUnit以下方CI记录为准。

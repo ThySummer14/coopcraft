@@ -72,6 +72,68 @@ class SettlementMeetingInvitationsTest {
 	}
 
 	@Test
+	void explicitInvitesNeverToggleExistingConsentOrRenewItsDeadline() {
+		Fixture f = fixture();
+		var ticket = f.ticket();
+		CompoundTag before = f.save();
+		var information = List.copyOf(f.person().information());
+		var resources = f.state.world().inventoryTotals();
+		var events = List.copyOf(f.state.world().ledger().events());
+		var knownBy = java.util.Set.copyOf(f.proposal().knownBy());
+		int socialHours = f.person().socialHours();
+		f.data.setDirty(false);
+		for (int i = 0; i < 20; i++) {
+			for (UUID requester : List.of(INVITER, new UUID(30, 99))) {
+				assertEquals("already_invited", SettlementMeetingInvitations.explicitRequest(
+					ticket, f.data, 101 + i, 0, requester, false, ticket));
+				assertEquals(INVITER, ticket.inviter());
+				assertEquals(1300, ticket.deadline());
+				assertTrue(ticket.matches(f.data, 101 + i, 0));
+			}
+		}
+		assertEquals("ready", SettlementMeetingInvitations.explicitRequest(null, f.data, 101, 0, INVITER, false, ticket));
+		assertEquals(before, f.save());
+		assertFalse(f.data.isDirty());
+		assertEquals(information, f.person().information());
+		assertEquals(resources, f.state.world().inventoryTotals());
+		assertEquals(events, f.state.world().ledger().events());
+		assertEquals(knownBy, f.proposal().knownBy());
+		assertEquals(socialHours, f.person().socialHours());
+	}
+
+	@Test
+	void explicitCancelRequiresLiveTicketOwnerAndExactSnapshotIdentity() {
+		Fixture f = fixture();
+		var ticket = f.ticket();
+		var replacement = f.ticket();
+		assertNotSame(ticket, replacement);
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 101, 0, new UUID(30, 99), true, ticket));
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 101, 0, INVITER, true, null));
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 101, 0, INVITER, true, replacement));
+		assertEquals("cancelled", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 101, 0, INVITER, true, ticket));
+		assertTrue(ticket.matches(f.data, 101, 0), "Decision seam does not itself stop or cancel a goal");
+		ticket.cancel();
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 102, 0, INVITER, true, ticket));
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(replacement, f.data, 102, 0, INVITER, true, ticket));
+		assertTrue(replacement.matches(f.data, 102, 0), "Old snapshot cannot cancel newly issued consent");
+		assertEquals("cancelled", SettlementMeetingInvitations.explicitRequest(replacement, f.data, 102, 0, INVITER, true, replacement));
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(null, f.data, 102, 0, INVITER, true, ticket));
+		assertEquals(1300, replacement.deadline());
+	}
+
+	@Test
+	void explicitCommandsRejectExpiredTicketsWithoutMutatingReadOnlyInspection() {
+		Fixture f = fixture();
+		var ticket = f.ticket();
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 1300, 0, INVITER, true, ticket));
+		assertEquals("ready", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 1300, 0, INVITER, false, ticket));
+		assertTrue(ticket.matches(f.data, 100, 0), "Read-only decisions do not expire the original object");
+		assertEquals(1300, ticket.deadline());
+		assertFalse(ticket.valid(f.data, 1300, 0), "Production refresh still permanently expires consent");
+		assertEquals("stale", SettlementMeetingInvitations.explicitRequest(ticket, f.data, 100, 0, INVITER, true, ticket));
+	}
+
+	@Test
 	void stoppingOrdinaryWorkPreservesPendingWhileStoppingAttendanceCancels() {
 		assertFalse(SettlementMeetingInvitations.cancelOnStop(false));
 		assertTrue(SettlementMeetingInvitations.cancelOnStop(true));
@@ -230,7 +292,7 @@ class SettlementMeetingInvitationsTest {
 			try (var stream = getClass().getResourceAsStream("/assets/coopcraft/lang/" + locale + ".json")) {
 				assertNotNull(stream);
 				var json = JsonParser.parseReader(new InputStreamReader(stream, StandardCharsets.UTF_8)).getAsJsonObject();
-				for (String result : List.of("accepted", "cancelled", "already_invited", "disabled", "day_pending",
+				for (String result : List.of("accepted", "cancelled", "already_invited", "stale", "disabled", "day_pending",
 					"already_held", "no_proposal", "not_member", "unavailable", "hungry", "exhausted", "eating", "store_unavailable")) {
 					String key = "coopcraft.interaction.meeting." + result;
 					assertTrue(json.has(key), locale + ": " + key);
