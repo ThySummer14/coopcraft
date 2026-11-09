@@ -352,6 +352,7 @@
 	"coopcraft.interaction.reason.wrong_level": "you are not in the same level",
 	"coopcraft.interaction.reason.reserve_target_met": "the public store meets the current reserve target; no gift needed for now",
 	"coopcraft.interaction.reason.below_reserve_target": "the public store is below the current reserve target",
+	"coopcraft.simulation.reason.stockpile_full": "The physical public store could not accept the gift",
 	"coopcraft.simulation.reason.reserve_target_met": "The public store met the reserve target at the time of the offer",
 	"coopcraft.simulation.reason.below_reserve_target": "The public store was below the reserve target at the time of the offer",
 	"coopcraft.simulation.detail.gift_reserve_target": "Reserve target at offer",

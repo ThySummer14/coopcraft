@@ -352,6 +352,7 @@
 	"coopcraft.interaction.reason.wrong_level": "你们不在同一个世界",
 	"coopcraft.interaction.reason.reserve_target_met": "公仓已达到当前储备目标，暂时不需要",
 	"coopcraft.interaction.reason.below_reserve_target": "公仓低于当前储备目标，愿意收下",
+	"coopcraft.simulation.reason.stockpile_full": "实体公仓未能装入这份礼物",
 	"coopcraft.simulation.reason.reserve_target_met": "赠粮时公仓已达到储备目标，暂时不需要",
 	"coopcraft.simulation.reason.below_reserve_target": "赠粮时公仓低于储备目标",
 	"coopcraft.simulation.detail.gift_reserve_target": "赠粮时备粮目标",

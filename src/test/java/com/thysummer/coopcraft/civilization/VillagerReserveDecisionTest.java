@@ -60,6 +60,12 @@ class VillagerReserveDecisionTest {
 					assertFalse(json.get(key).getAsString().isBlank());
 					assertFalse(json.get(key).getAsString().contains("%"), "Reasons need no formatting arguments");
 				}
+				for (String reason : List.of("reserve_target_met", "below_reserve_target", "unsupported_food",
+					"already_full", "remembers_help", "hungry", "welcomed", "transfer_failed", "stockpile_full")) {
+					String key = "coopcraft.simulation.reason." + reason;
+					assertTrue(json.has(key), locale + ": " + key);
+					assertFalse(json.get(key).getAsString().isBlank());
+				}
 				for (String detail : List.of("target", "points", "nutrition")) {
 					String key = "coopcraft.simulation.detail.gift_reserve_" + detail;
 					assertTrue(json.has(key), locale + ": " + key);
