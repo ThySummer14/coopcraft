@@ -48,6 +48,10 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
 	private final SettlementFoodRequests foodRequests = new SettlementFoodRequests();
+	// Transient, dimension-local retry timing; intentionally absent from NBT and dirty tracking.
+	private final ConstructionSiteRetries constructionSiteRetries = new ConstructionSiteRetries();
+
+	ConstructionSiteRetries constructionSiteRetries() { return constructionSiteRetries; }
 
 	SettlementFoodRequests foodRequests() { return foodRequests; }
 

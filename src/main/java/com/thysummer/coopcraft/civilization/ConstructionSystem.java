@@ -32,7 +32,7 @@ public final class ConstructionSystem {
 				if (candidate == null || !ConstructionMaterials.hasAll(stockpile, data.simulationOf(settlement).orElse(null), candidate)) {
 					continue;
 				}
-				BlockPos origin = chooseOrigin(level, settlement, candidate);
+				BlockPos origin = chooseOrigin(level, data, settlement, candidate);
 				if (origin == null) {
 					continue;
 				}
@@ -202,15 +202,26 @@ public final class ConstructionSystem {
 		}
 	}
 
-	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {
+	private static BlockPos chooseOrigin(ServerLevel level, SettlementSavedData data, Settlement settlement, ConstructionPlan plan) {
 		if (ConstructionSite.isHousing(plan)) {
-			return ConstructionSite.firstReady(plan, settlement.center(), siteProbe(level))
-				.map(ConstructionSite.Result::origin).orElse(null);
+			return chooseHousingOrigin(data, settlement, plan, level.getGameTime(), siteProbe(level));
 		}
 		for (BlockPos origin : ConstructionSite.candidates(settlement.center())) {
 			if (canPlace(level, plan, origin)) return origin;
 		}
 		return null;
+	}
+
+	/** New housing only, after material checks. Failure throttles never cache world observations. */
+	static BlockPos chooseHousingOrigin(SettlementSavedData data, Settlement settlement, ConstructionPlan plan,
+		long gameTime, ConstructionSite.Probe probe) {
+		ConstructionSiteRetries retries = data.constructionSiteRetries();
+		if (retries.shouldWait(settlement, plan, gameTime)) return null;
+		BlockPos origin = ConstructionSite.firstReady(plan, settlement.center(), probe)
+			.map(ConstructionSite.Result::origin).orElse(null);
+		if (origin == null) retries.failed(settlement, plan, gameTime);
+		else retries.succeeded(settlement, plan);
+		return origin;
 	}
 
 	private static boolean canPlace(ServerLevel level, ConstructionPlan plan, BlockPos origin) {
@@ -244,8 +255,13 @@ public final class ConstructionSystem {
 	/** Read-only new-job diagnostics; an existing job is deliberately never re-sited. */
 	public static List<ConstructionSite.Result> inspectSites(ServerLevel level, SettlementSavedData data,
 		Settlement settlement, ConstructionPlan plan) {
+		return inspectSites(data, settlement, plan, siteProbe(level));
+	}
+
+	static List<ConstructionSite.Result> inspectSites(SettlementSavedData data, Settlement settlement,
+		ConstructionPlan plan, ConstructionSite.Probe probe) {
 		if (data.getConstructionJob(settlement).isPresent()) return List.of();
-		return ConstructionSite.inspectCandidates(plan, settlement.center(), siteProbe(level));
+		return ConstructionSite.inspectCandidates(plan, settlement.center(), probe);
 	}
 
 	private static ConstructionSite.Probe siteProbe(ServerLevel level) {
