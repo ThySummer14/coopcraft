@@ -41,7 +41,9 @@ public final class SettlementSimulationService {
 		int requested
 	) {
 		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		int moved = MinecraftStockpileAdapter.importToSimulation(container, state.world(), state.campOwner(), resourceType, requested);
+		int moved = resourceType != null && resourceType.isFood()
+			? MinecraftFoodAgeAdapter.importToSimulation(container, state, resourceType, requested)
+			: MinecraftStockpileAdapter.importToSimulation(container, state.world(), state.campOwner(), resourceType, requested);
 		if (moved > 0) {
 			data.setDirty();
 		}
@@ -56,7 +58,9 @@ public final class SettlementSimulationService {
 		Container container
 	) {
 		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		int moved = MinecraftStockpileAdapter.exportToContainer(state.world(), state.campOwner(), batchId, requested, container);
+		int moved = state.world().batch(batchId).resourceType().isFood()
+			? MinecraftFoodAgeAdapter.exportToContainer(state, batchId, requested, container)
+			: MinecraftStockpileAdapter.exportToContainer(state.world(), state.campOwner(), batchId, requested, container);
 		if (moved > 0) {
 			data.setDirty();
 		}
@@ -334,7 +338,8 @@ public final class SettlementSimulationService {
 		}
 		String personId = state.residentId(villager.getUUID()).orElse(null);
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (personId == null || resourceType == null) {
+		// Existing personal recipes use materials; food must not bypass its age-preserving handoff.
+		if (personId == null || resourceType == null || resourceType.isFood()) {
 			return 0;
 		}
 		int remaining = requested;

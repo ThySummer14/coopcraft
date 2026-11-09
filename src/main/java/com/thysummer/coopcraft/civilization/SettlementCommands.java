@@ -330,7 +330,9 @@ public final class SettlementCommands {
 			int amount = (int) Math.min(requested - moved, batch.quantity());
 			int transferred = SettlementSimulationService.exportToStockpile(data, settlement, batch.batchId(), amount, stockpile);
 			moved += transferred;
-			if (moved == requested || transferred < amount) {
+			// Different food ages have different stack identities. A later valid batch may fit
+			// even when an expired or differently aged earlier batch cannot be exported.
+			if (moved == requested || (!type.isFood() && transferred < amount)) {
 				break;
 			}
 		}

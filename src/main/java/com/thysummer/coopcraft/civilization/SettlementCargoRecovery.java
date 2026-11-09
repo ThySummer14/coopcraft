@@ -82,14 +82,16 @@ public final class SettlementCargoRecovery extends SavedData {
 		Container source = inventory.get();
 		if (source == null || source.getContainerSize() > MAX_CARGO_SLOTS) return 0;
 		var claim = claims.uniqueClaim().orElseThrow();
-		// Ordinary real-inventory food has no expiry metadata. Preserve its remaining transport
-		// types including personal rations; survival's abstract food authority is unchanged.
+		// Explicit age-marked food remains real custody in either mode, including unknown formats.
+		// Ordinary food keeps the earlier mode-specific personal-ration boundary.
 		boolean preserveFood = !SettlementSimulationService.isSurvivalEnabled(claim.data(), claim.settlement());
 		CargoRecord record = new CargoRecord(deceasedId, position, safeName(name), new ArrayList<>());
 		// Move only actual source contents. Repeated callbacks see the drained inventory.
 		for (int slot = 0; slot < source.getContainerSize(); slot++) {
 			ItemStack stack = source.getItem(slot);
-			if (!SettlementCargo.isMaterial(stack) && !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
+			boolean agedFood = SettlementFoodAge.isMarked(stack)
+				&& SettlementFoodAge.ordinaryFoodType(new ItemStack(stack.getItem())).isPresent();
+			if (!SettlementCargo.isMaterial(stack) && !agedFood && !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
 			ItemStack removed = source.removeItem(slot, stack.getCount());
 			if (!removed.isEmpty()) record.stacks.add(removed.copy());
 		}

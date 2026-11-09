@@ -30,7 +30,8 @@ class SettlementCareAllocationPersistenceTest {
 	@Test
 	void splitCareMealIsIdenticalWithRepeatedReloadsAfterBasicAllowance() {
 		Fixture uninterrupted = fixture();
-		Fixture restored = fixture();
+		// Compare two paths from the same world identity, including its persisted food clock.
+		Fixture restored = reloadUnchanged(uninterrupted);
 		assertEquals(40, feed(uninterrupted, 2));
 		assertEquals(40, feed(restored, 2));
 		assertEquals(0, careEvents(restored).size());
@@ -51,7 +52,8 @@ class SettlementCareAllocationPersistenceTest {
 	@Test
 	void nextDayUsesFreshActualTotalsBeforeAndAfterReload() {
 		Fixture uninterrupted = fixture();
-		Fixture restored = fixture();
+		// Compare two paths from the same world identity, including its persisted food clock.
+		Fixture restored = reloadUnchanged(uninterrupted);
 		feed(uninterrupted, 3);
 		feed(restored, 3);
 		for (Fixture f : List.of(uninterrupted, restored)) {
@@ -75,7 +77,8 @@ class SettlementCareAllocationPersistenceTest {
 	@Test
 	void enablingNormsUsesFoodAlreadyReceivedWithoutBackfillingPractices() {
 		Fixture uninterrupted = fixture();
-		Fixture restored = fixture();
+		// Compare two paths from the same world identity, including its persisted food clock.
+		Fixture restored = reloadUnchanged(uninterrupted);
 		for (Fixture f : List.of(uninterrupted, restored)) {
 			f.state().setNormsEnabled(false);
 			feed(f, 2);
@@ -94,7 +97,8 @@ class SettlementCareAllocationPersistenceTest {
 	@Test
 	void togglingNormsWithExistingCacheStillMatchesThePersistedQuota() {
 		Fixture uninterrupted = fixture();
-		Fixture restored = fixture();
+		// Compare two paths from the same world identity, including its persisted food clock.
+		Fixture restored = reloadUnchanged(uninterrupted);
 		for (Fixture f : List.of(uninterrupted, restored)) {
 			feed(f, 1);
 			f.state().setNormsEnabled(false);

@@ -71,7 +71,7 @@ public final class SettlementNeeds {
 		}
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			int points = SettlementFood.points(stack.getItem());
+			int points = SettlementFood.points(stack);
 			if (points > 0) {
 				inventory.removeItem(slot, 1);
 				inventory.setChanged();
@@ -94,7 +94,7 @@ public final class SettlementNeeds {
 			return false;
 		}
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			int points = SettlementFood.points(inventory.getItem(slot).getItem());
+			int points = SettlementFood.points(inventory.getItem(slot));
 			if (points > 0) {
 				return true;
 			}

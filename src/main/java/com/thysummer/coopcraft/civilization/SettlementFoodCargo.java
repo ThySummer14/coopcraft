@@ -12,7 +12,8 @@ public final class SettlementFoodCargo {
 	private SettlementFoodCargo() { }
 
 	public static boolean isFood(ItemStack stack) {
-		return stack != null && !stack.isEmpty() && (stack.is(Items.SWEET_BERRIES) || stack.is(Items.POTATO));
+		return stack != null && !stack.isEmpty() && !SettlementFoodAge.isMarked(stack)
+			&& (stack.is(Items.SWEET_BERRIES) || stack.is(Items.POTATO));
 	}
 
 	public static int retainedFoodPoints(SettlementSavedData data, Settlement camp, UUID actor) {
@@ -32,7 +33,7 @@ public final class SettlementFoodCargo {
 
 	private static int offeredCount(ItemStack stack, int surplus) {
 		if (!isFood(stack)) return 0;
-		int points = SettlementFood.points(stack.getItem());
+		int points = SettlementFood.points(stack);
 		return points <= 0 ? 0 : Math.min(stack.getCount(), surplus / points);
 	}
 
@@ -56,7 +57,7 @@ public final class SettlementFoodCargo {
 			if (count == 0) continue;
 			int accepted = SettlementStockpile.insert(store, stack.copyWithCount(count));
 			if (accepted == 0) continue;
-			surplus -= accepted * SettlementFood.points(stack.getItem());
+			surplus -= accepted * SettlementFood.points(stack);
 			stack.shrink(accepted);
 			inventory.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
 			moved += accepted;

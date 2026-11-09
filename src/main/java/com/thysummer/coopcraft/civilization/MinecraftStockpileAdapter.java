@@ -116,6 +116,9 @@ public final class MinecraftStockpileAdapter {
 			throw new IllegalArgumentException("Batch does not belong to the settlement camp");
 		}
 		ResourceType resourceType = batch.resourceType();
+		// Food requires a persistent settlement clock and its original harvest age.
+		// A bare SimulationWorld cannot identify that clock across saves or dimensions.
+		if (resourceType.isFood()) throw new IllegalArgumentException("Food export requires MinecraftFoodAgeAdapter");
 		int amount = (int) Math.min(requested, batch.quantity());
 		int inserted = SettlementStockpile.insert(container, new ItemStack(itemFor(resourceType), amount));
 		if (inserted == 0) {

@@ -29,11 +29,14 @@ import com.thysummer.coopcraft.civilization.simulation.WorkType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 
 public final class SettlementSimulationState {
 	private final Settlement settlement;
 	private final SimulationWorld world;
 	private final NormSystem norms;
+	private final UUID foodClockId;
+	private final Tag invalidFoodClockTag;
 	static final int DAILY_FOOD_UNIT_CAP = 3;
 
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
@@ -49,16 +52,29 @@ public final class SettlementSimulationState {
 	private long lastSurvivalDay = Long.MIN_VALUE;
 	private long foodAllocationDay = Long.MIN_VALUE;
 
-	private SettlementSimulationState(Settlement settlement, SimulationWorld world) {
+	private SettlementSimulationState(Settlement settlement, SimulationWorld world, UUID foodClockId,
+		Tag invalidFoodClockTag) {
 		this.settlement = settlement;
 		this.world = world;
 		this.norms = new NormSystem(world, SimulationConfig.defaults(), DAILY_FOOD_UNIT_CAP);
+		this.foodClockId = foodClockId;
+		this.invalidFoodClockTag = invalidFoodClockTag;
 	}
 
 	public static SettlementSimulationState create(Settlement settlement) {
+		return create(settlement, UUID.randomUUID(), null);
+	}
+
+	private static SettlementSimulationState create(Settlement settlement, UUID foodClockId,
+		Tag invalidFoodClockTag) {
 		SimulationWorld world = new SimulationWorld();
 		world.registerCamp(new Camp(campId(settlement), settlement.name()));
-		return new SettlementSimulationState(settlement, world);
+		return new SettlementSimulationState(settlement, world, foodClockId, invalidFoodClockTag);
+	}
+
+	/** Independent of camp IDs and mode toggles; a corrupt saved identity remains unavailable. */
+	public Optional<UUID> foodClockId() {
+		return Optional.ofNullable(foodClockId);
 	}
 
 	public SimulationWorld world() {
@@ -230,6 +246,12 @@ public final class SettlementSimulationState {
 
 	CompoundTag save() {
 		CompoundTag tag = new CompoundTag();
+		if (foodClockId != null) {
+			tag.putUUID("FoodClockId", foodClockId);
+		} else {
+			// Retain malformed or future data verbatim rather than silently giving it a fresh clock.
+			tag.put("FoodClockId", invalidFoodClockTag.copy());
+		}
 		tag.putLong("Day", world.day());
 		tag.putLong("NextBatchId", world.nextBatchId());
 		tag.putBoolean("SurvivalEnabled", survivalEnabled);
@@ -307,7 +329,10 @@ public final class SettlementSimulationState {
 	}
 
 	static SettlementSimulationState load(Settlement settlement, CompoundTag tag) {
-		SettlementSimulationState state = create(settlement);
+		UUID foodClockId = !tag.contains("FoodClockId") ? UUID.randomUUID()
+			: tag.hasUUID("FoodClockId") ? tag.getUUID("FoodClockId") : null;
+		Tag invalidFoodClockTag = foodClockId == null ? tag.get("FoodClockId").copy() : null;
+		SettlementSimulationState state = create(settlement, foodClockId, invalidFoodClockTag);
 		state.survivalEnabled = tag.contains("SurvivalEnabled") && tag.getBoolean("SurvivalEnabled");
 		state.productionEnabled = tag.contains("ProductionEnabled") && tag.getBoolean("ProductionEnabled");
 		state.growthEnabled = tag.contains("GrowthEnabled") && tag.getBoolean("GrowthEnabled");

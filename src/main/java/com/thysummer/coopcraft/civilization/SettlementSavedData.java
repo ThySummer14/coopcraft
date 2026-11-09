@@ -682,9 +682,11 @@ public final class SettlementSavedData extends SavedData {
 			data.settlements.values().stream()
 				.filter(settlement -> settlement.id().equals(settlementId))
 				.findFirst()
-				.ifPresent(settlement -> data.simulations.put(
-					settlementId, SettlementSimulationState.load(settlement, simulationTag)
-				));
+				.ifPresent(settlement -> {
+					data.simulations.put(settlementId, SettlementSimulationState.load(settlement, simulationTag));
+					// Persist a newly assigned clock for legacy states, even without further activity.
+					if (!simulationTag.contains("FoodClockId")) data.setDirty();
+				});
 		}
 		return data;
 	}

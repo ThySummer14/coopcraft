@@ -172,7 +172,7 @@ public final class SettlementStockpile {
 		for (int slot = 0; slot < villagerInventory.getContainerSize() && remainingFoodPoints > retained; slot++) {
 			ItemStack stack = villagerInventory.getItem(slot);
 			if (!eligible.test(stack)) continue;
-			int points = SettlementFood.points(stack.getItem());
+			int points = SettlementFood.points(stack);
 			if (points <= 0) {
 				continue;
 			}
@@ -211,7 +211,7 @@ public final class SettlementStockpile {
 		int insertedTotal = 0;
 		for (int slot = 0; slot < stockpile.getContainerSize() && missingFoodPoints > 0; slot++) {
 			ItemStack stack = stockpile.getItem(slot);
-			int points = SettlementFood.points(stack.getItem());
+			int points = SettlementFood.points(stack);
 			if (points <= 0) {
 				continue;
 			}
@@ -265,7 +265,7 @@ public final class SettlementStockpile {
 		int insertedTotal = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item)) {
+			if (!stack.is(item) || SettlementFoodAge.isMarked(stack)) {
 				continue;
 			}
 			int inserted = insert(stockpile, stack);
@@ -306,7 +306,7 @@ public final class SettlementStockpile {
 		int total = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			int points = SettlementFood.points(stack.getItem());
+			int points = SettlementFood.points(stack);
 			if (points > 0) {
 				total += stack.getCount() * points;
 			}
