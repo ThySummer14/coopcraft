@@ -88,7 +88,23 @@ final class ResidentMeetingView {
 			lines.add(message("quota_refusal_context", access.refusedHunger(), access.refusedAvailableNutrition()));
 			lines.add(message("quota_retry_" + access.status().name().toLowerCase(Locale.ROOT)));
 		});
+		lines.addAll(foodDayHistory(data, settlement, resident));
 		return List.copyOf(lines);
+	}
+
+	/** A recorded closing-day streak and today's grievance are separate facts. */
+	static List<Component> foodDayHistory(SettlementSavedData data, Settlement settlement, UUID resident) {
+		if (data == null || settlement == null || resident == null
+			|| data.all().stream().noneMatch(current -> current == settlement)
+			|| !data.isMember(settlement, resident)) return List.of();
+		var state = data.simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled()) return List.of();
+		String personId = state.residentId(resident).orElse(null);
+		var person = state.world().people().stream().filter(candidate -> candidate.id().equals(personId)
+			&& candidate.campId().equals(state.campOwner().id())).findFirst().orElse(null);
+		if (person == null || !person.isAlive() || !person.hasFoodDayHistory()) return List.of();
+		return List.of(message("food_day_history", person.lastObservedFoodDay(), person.hungerStreak(),
+			SettlementSimulationService.OBSERVED_HUNGER_THRESHOLD), message("current_grievance", person.grievance()));
 	}
 
 	private static Component message(String suffix, Object... arguments) {

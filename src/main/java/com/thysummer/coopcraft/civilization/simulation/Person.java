@@ -38,6 +38,9 @@ public final class Person {
 	private int hunger;
 	private long hungerDays;
 	private int hungerStreak;
+	private long observedFoodDays;
+	private long lastObservedFoodDay = -1;
+	private long lastObservedFoodGameDay = -1;
 	private int grievance;
 	private int socialHours;
 	private int previousSocialHours;
@@ -413,9 +416,41 @@ public final class Person {
 		energy = 100;
 	}
 
+	public boolean hasFoodDayHistory() { return observedFoodDays > 0; }
+	public long observedFoodDays() { return observedFoodDays; }
+	public long lastObservedFoodDay() { return lastObservedFoodDay; }
+	public long lastObservedFoodGameDay() { return lastObservedFoodGameDay; }
+
+	/** Records only a witnessed closing day, never an inferred offline meal outcome. */
+	void observeFoodDay(long coreDay, long gameDay, int threshold) {
+		if (coreDay < 0 || gameDay < 0) throw new IllegalArgumentException("Negative observation day");
+		if (hasFoodDayHistory() && (coreDay <= lastObservedFoodDay || gameDay <= lastObservedFoodGameDay)) return;
+		if (!hasFoodDayHistory() || coreDay - lastObservedFoodDay != 1 || gameDay - lastObservedFoodGameDay != 1) {
+			hungerStreak = 0;
+		}
+		if (hunger > threshold) recordHungerDay(); else recordFoodAccessDay();
+		if (observedFoodDays < Long.MAX_VALUE) observedFoodDays++;
+		lastObservedFoodDay = coreDay;
+		lastObservedFoodGameDay = gameDay;
+	}
+
+	/** Restore an entire validated observation record; partial records must not be inferred. */
+	public void restoreFoodDayHistory(long observations, long hungryDays, int streak, long coreDay, long gameDay) {
+		if (observations <= 0 || coreDay < 0 || gameDay < 0 || observations - 1 > coreDay || observations - 1 > gameDay
+			|| hungryDays < 0 || hungryDays > observations || streak < 0 || streak > hungryDays
+			|| (observations < Long.MAX_VALUE && hungryDays == observations && streak == 0)) {
+			throw new IllegalArgumentException("Invalid food day history");
+		}
+		observedFoodDays = observations;
+		hungerDays = hungryDays;
+		hungerStreak = streak;
+		lastObservedFoodDay = coreDay;
+		lastObservedFoodGameDay = gameDay;
+	}
+
 	void recordHungerDay() {
-		hungerDays++;
-		hungerStreak++;
+		if (hungerDays < Long.MAX_VALUE) hungerDays++;
+		if (hungerStreak < Integer.MAX_VALUE) hungerStreak++;
 	}
 
 	void recordFoodAccessDay() {

@@ -28,6 +28,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 public final class SettlementSimulationService {
+	static final int OBSERVED_HUNGER_THRESHOLD = 100 - SettlementNeeds.HUNGRY_AT;
 	private SettlementSimulationService() {
 	}
 
@@ -536,13 +537,8 @@ public final class SettlementSimulationService {
 			return;
 		}
 		Map<UUID, Person> active = activeResidents(level, data, settlement, state);
+		if (!closeObservedDay(data, settlement, state, currentDay, active)) return;
 		if (!active.isEmpty()) {
-			if (state.normsEnabled()) {
-				// Observe the closing core day before advancing it; no virtual attendance.
-				state.norms().observeSocialDay(active.values());
-				state.norms().startDay(active.values());
-			}
-			survival(state).advanceDay(active.values());
 			for (UUID villagerId : active.keySet()) {
 				syncSatiety(data, settlement, state, villagerId);
 			}
@@ -555,8 +551,33 @@ public final class SettlementSimulationService {
 				}
 			}
 		}
+	}
+
+	/** Server supplies physically active residents; recheck domain identity before recording outcomes. */
+	static boolean closeObservedDay(SettlementSavedData data, Settlement settlement, SettlementSimulationState state,
+		long currentDay, Map<UUID, Person> active) {
+		if (data.all().stream().noneMatch(candidate -> candidate == settlement)
+			|| data.simulationOf(settlement).orElse(null) != state || currentDay < 0 || !state.survivalEnabled() || currentDay <= state.lastSurvivalDay()) return false;
+		List<Person> eligible = active.entrySet().stream()
+			.filter(entry -> data.isMember(settlement, entry.getKey()))
+			.filter(entry -> state.residentId(entry.getKey()).filter(entry.getValue().id()::equals).isPresent())
+			.map(Map.Entry::getValue)
+			.filter(person -> person.isAlive() && person.campId().equals(state.campOwner().id())
+				&& state.world().allPeople().contains(person)).distinct().toList();
+		if (!eligible.isEmpty()) {
+			SurvivalSystem survival = survival(state);
+			// LastGameDay is the observed boundary, not an inferred previous calendar day.
+			// The real AI seeks an ordinary meal at satiety <= HUNGRY_AT.
+			survival.observeClosingDay(eligible, currentDay, OBSERVED_HUNGER_THRESHOLD - 1);
+			if (state.normsEnabled()) {
+				state.norms().observeSocialDay(eligible);
+				state.norms().startDay(eligible);
+			}
+			survival.advanceDay(eligible);
+		}
 		state.markSurvivalDay(currentDay);
 		data.setDirty();
+		return true;
 	}
 
 	public static boolean hasFood(SettlementSavedData data, Settlement settlement) {

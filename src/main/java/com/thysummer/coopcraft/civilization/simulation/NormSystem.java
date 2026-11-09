@@ -613,7 +613,10 @@ public final class NormSystem {
 
 	private void observeShortages(List<Person> active) {
 		for (Person person : active) {
-			if (person.hungerStreak() != 2) {
+			if (person.hungerStreak() != 2
+				|| (person.hasFoodDayHistory() && person.lastObservedFoodDay() != world.day())
+				|| world.ledger().eventsAtDay(world.day()).stream().anyMatch(event ->
+					event.type() == EventType.SHORTAGE_CONFLICT && event.actors().equals(List.of(person.id())))) {
 				continue;
 			}
 			long eventId = world.recordSocialEvent(

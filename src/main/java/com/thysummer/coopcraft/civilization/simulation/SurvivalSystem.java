@@ -16,6 +16,21 @@ public final class SurvivalSystem {
 		this.dailyHunger = config.dailyHunger();
 	}
 
+	public void observeClosingDay(Collection<Person> residents, long gameDay, int foodAccessThreshold) {
+		if (gameDay < 0 || foodAccessThreshold < 0 || foodAccessThreshold > 100) {
+			throw new IllegalArgumentException("Invalid food observation boundary or threshold");
+		}
+		List<Person> observed = List.copyOf(residents);
+		for (Person person : observed) {
+			if (!person.isAlive() || !world.allPeople().contains(person)) {
+				throw new IllegalArgumentException("Survival residents must be alive and registered");
+			}
+		}
+		for (Person person : observed) {
+			person.observeFoodDay(world.day(), gameDay, foodAccessThreshold);
+		}
+	}
+
 	public void advanceDay(Collection<Person> residents) {
 		for (Person person : residents) {
 			if (!person.isAlive() || !world.allPeople().contains(person)) {

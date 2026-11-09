@@ -261,6 +261,15 @@ public final class SettlementSimulationState {
 			resident.putString("AgeBand", person.ageBand().name());
 			resident.putLong("AgeDays", person.ageDays());
 			resident.putInt("Hunger", person.hunger());
+			if (person.hasFoodDayHistory()) {
+				CompoundTag history = new CompoundTag();
+				history.putLong("ObservedDays", person.observedFoodDays());
+				history.putLong("HungerDays", person.hungerDays());
+				history.putInt("HungerStreak", person.hungerStreak());
+				history.putLong("LastCoreDay", person.lastObservedFoodDay());
+				history.putLong("LastGameDay", person.lastObservedFoodGameDay());
+				resident.put("FoodDayHistory", history);
+			}
 			resident.putInt("RiskPreference", person.riskPreference());
 			if (!person.parents().isEmpty()) {
 				resident.put("Parents", saveStrings(person.parents()));
@@ -333,6 +342,7 @@ public final class SettlementSimulationState {
 			if (resident.contains("Social")) {
 				loadSocial(person, resident.getCompound("Social"));
 			}
+			loadFoodDayHistory(person, resident, tag.getLong("Day"), state.lastSurvivalDay);
 			state.world.registerPerson(person);
 			state.residentIds.put(resident.getUUID("VillagerId"), person.id());
 			if (resident.contains("Parents")) {
@@ -388,6 +398,24 @@ public final class SettlementSimulationState {
 		state.norms.restoreLastMeetingDay(state.campOwner().id(), lastMeetingDay);
 		state.norms.restoreChargedSupervision();
 		return state;
+	}
+
+	private static void loadFoodDayHistory(Person person, CompoundTag resident, long coreDay, long gameDay) {
+		if (!resident.contains("FoodDayHistory", ListTag.TAG_COMPOUND)) return;
+		CompoundTag history = resident.getCompound("FoodDayHistory");
+		if (!history.contains("ObservedDays", ListTag.TAG_LONG) || !history.contains("HungerDays", ListTag.TAG_LONG)
+			|| !history.contains("HungerStreak", ListTag.TAG_INT) || !history.contains("LastCoreDay", ListTag.TAG_LONG)
+			|| !history.contains("LastGameDay", ListTag.TAG_LONG)) return;
+		long lastCore = history.getLong("LastCoreDay");
+		long lastGame = history.getLong("LastGameDay");
+		// Saves occur after advancement. Future and partial histories carry no evidence.
+		if (lastCore >= coreDay || lastGame > gameDay) return;
+		try {
+			person.restoreFoodDayHistory(history.getLong("ObservedDays"), history.getLong("HungerDays"),
+				history.getInt("HungerStreak"), lastCore, lastGame);
+		} catch (IllegalArgumentException invalidHistory) {
+			// Optional metadata from old/corrupt saves must never manufacture a second hungry day.
+		}
 	}
 
 	private static CompoundTag saveSocial(Person person) {

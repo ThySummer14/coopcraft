@@ -496,5 +496,7 @@
 	"coopcraft.resident_dialog.quota_retry_cap_not_raised": "当前份额未高于被拒时的上限，尚不具备因提高份额而再次尝试的条件。",
 	"coopcraft.resident_dialog.quota_retry_allocation_mismatch": "当前已领记录无法与当时被拒的件数核对，不凭这条历史追加进食尝试。",
 	"coopcraft.resident_dialog.quota_retry_allowance_spent": "提高后的当日份额也已用尽，不能凭旧拒绝记录反复补领。",
-	"coopcraft.resident_dialog.quota_retry_no_food": "当前份额已有增加，但公仓没有可用食物营养；有粮后才会再次尝试。"
+	"coopcraft.resident_dialog.quota_retry_no_food": "当前份额已有增加，但公仓没有可用食物营养；有粮后才会再次尝试。",
+	"coopcraft.resident_dialog.food_day_history": "截至观察核心日%s，记录中连续%s个相邻日终仍达到主动进食阈值（饥饿≥%s）；缺席或暂停的日子不补算。",
+	"coopcraft.resident_dialog.current_grievance": "当前不满%s/100，参与既有提案与意见计算；这不是固定投票结果。"
 }

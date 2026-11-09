@@ -496,5 +496,7 @@
 	"coopcraft.resident_dialog.quota_retry_cap_not_raised": "The current allowance is not larger than at refusal, so it does not qualify for an additional attempt.",
 	"coopcraft.resident_dialog.quota_retry_allocation_mismatch": "Current allocations do not reconcile with the refused count. This history cannot trigger an additional attempt.",
 	"coopcraft.resident_dialog.quota_retry_allowance_spent": "The enlarged daily allowance is also exhausted. The old refusal cannot grant repeated extra meals.",
-	"coopcraft.resident_dialog.quota_retry_no_food": "The allowance is larger, but the common store has no available food nutrition. Another attempt awaits food."
+	"coopcraft.resident_dialog.quota_retry_no_food": "The allowance is larger, but the common store has no available food nutrition. Another attempt awaits food.",
+	"coopcraft.resident_dialog.food_day_history": "Through observed core day %s, %s consecutive day ends still met the eating threshold (hunger ≥ %s). Absent or paused days are not filled in.",
+	"coopcraft.resident_dialog.current_grievance": "Current grievance: %s/100. It contributes to existing proposals and opinions; it does not fix a vote."
 }
