@@ -747,3 +747,7 @@
 - RecipeManager三个getRecipeFor重载与getRecipesFor对标记原料拒绝查询，含缓存holder；普通输入放行。官方RecipeCache使用全组件键；营火无配方回退原物并split掉落保留组件，已核对。配方书搬料的库存匹配使用isSameItemSameComponents，不能从普通原料请求选择标记堆。
 - 没有开启survival自动采集返仓，没有时钟/NBT/死亡遗物格式迁移，无批次或营养补偿。未接管堆肥销毁、第三方直接库存/营养改写或人为给非协议小麦贴标签的专用加工；hasFarmSeeds调度提示未改，可能尝试空转但不会种植标记食物。不能宣称全转换保护、实时腐坏或可玩物流已完成。
 - 测试覆盖只读真实库存视图、普通自定义食品、未知/坏标记、NBT往返、混合配方与各查询handler取消；静态源码接线测试与编译不等于运行时Mixin成功应用。完整build/JUnit与产物结果待下方CI记录，未启动Minecraft客户端、服务端或GameTest。
+
+- 首次CI（85aa06f4，run 42620492317）主代码及客户端编译通过，但1153项中1个新测试失败：期望24、实际26。官方映射BREAD→cut.px及Villager静态初始化iconst_4证明面包原版繁殖计分为4而非3；只修正该测试注释和期望，不改生产计分或删断言。
+
+- 验证完成：修正提交 `38fa7b23` 的[消费隔离构建](https://github.com/ThySummer14/coopcraft/actions/runs/42621028863)通过完整build及1153项JUnit，0失败/0跳过；新增18项（只读库存8、配方handler4、静态接线6）全部通过。206行配给及48行请求顺序CSV与前版逐字一致。[构建包](https://github.com/ThySummer14/coopcraft/actions/runs/42621028863/artifacts/13677036540)内运行jar为998874字节，SHA-256 `93b62267768f36d8e3d382915b31f4150c0d4edf58658102097efac8ee7a51d6`；源码jar为418573字节，SHA-256 `d42ea67e8eb95889482b12b8037c105f6e2a66480050b29b7bee2d3d5dba8594`。已解包核对8个Mixin注册、helper/客户端提示、565条双语资源与5份原蓝图。未启动Minecraft客户端、服务器或GameTest，未执行运行时Mixin应用测试；实际互动、烹饪、原版AI与其他模组兼容性仍待用户验收。自动食物返仓尚未开启，当前带日期食品即使新鲜也仅作货物，先送回来源公仓。升级前备份整个世界。
