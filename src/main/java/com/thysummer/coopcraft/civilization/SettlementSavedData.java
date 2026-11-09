@@ -45,6 +45,10 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, SettlementStage> stages = new LinkedHashMap<>();
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
+	private final SettlementFoodRequests foodRequests = new SettlementFoodRequests();
+
+	SettlementFoodRequests foodRequests() { return foodRequests; }
+
 	private final Map<UUID, SettlementSimulationState> simulations = new LinkedHashMap<>();
 
 	public static SettlementSavedData get(ServerLevel level) {
@@ -160,6 +164,7 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	void registerMember(Settlement settlement, UUID villagerId, long joinedDay) {
+		foodRequests.cancelResident(villagerId);
 		members.put(villagerId, new SettlementMember(villagerId, settlement.id(), joinedDay));
 		setDirty();
 	}
@@ -218,6 +223,7 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	public void removeMember(UUID villagerId) {
+		foodRequests.cancelResident(villagerId);
 		boolean changed = members.remove(villagerId) != null;
 		if (leaders.values().removeIf(leaderId -> leaderId.equals(villagerId))) {
 			changed = true;
@@ -248,6 +254,7 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	public void setStockpile(Settlement settlement, BlockPos pos) {
+		foodRequests.cancel(settlement);
 		stockpiles.put(settlement.id(), pos.immutable());
 		setDirty();
 	}

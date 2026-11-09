@@ -325,6 +325,7 @@ public final class Civilization {
 			for (Settlement settlement : data.all()) {
 				SettlementHousing.tick(level, data, settlement, level.getGameTime());
 				SettlementSimulationService.tick(level, data, settlement);
+				data.foodRequests().flush(data, settlement, level.getGameTime(), level.getDayTime() / 24000L);
 				SettlementNeeds.tick(level, data, settlement, level.getGameTime());
 				SettlementStockpile.tick(level, data, settlement, level.getGameTime());
 				SettlementStages.tick(level, data, settlement, level.getGameTime());

@@ -89,6 +89,7 @@ public final class SettlementSimulationService {
 			state.setSkillsEnabled(false);
 			state.setNormsEnabled(false);
 		}
+		data.foodRequests().cancel(settlement);
 		state.setSurvivalEnabled(enabled, currentDay(level));
 		data.setDirty();
 	}
@@ -155,6 +156,7 @@ public final class SettlementSimulationService {
 			throw new IllegalStateException("Norm mapping requires survival simulation to be enabled");
 		}
 		if (state.normsEnabled() != enabled) {
+			data.foodRequests().cancel(settlement);
 			state.setNormsEnabled(enabled);
 			data.setDirty();
 		}

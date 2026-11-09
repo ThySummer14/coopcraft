@@ -77,7 +77,7 @@ ACTIVE NEED_FIRST 是**外部设定的研究初始条件**：上限3、支持者
 - `target_reached_people` 个人行是0/1，合计为人数；`max_remaining_need` 个人行等于该人的需要，合计取最大值，**不求和**。`norm_events` 只在合计行填写，避免混淆领取者与监督者事件归属。
 - 每个个人行中的初始/最终公仓字段都是全场库存快照，**不可跨个人行再次求和**。`core_calls` 计真实进食调用，包括正额度但零返回的调用；不是社会请求事件数。`revisit_units` 是第二轮实领，全部0。
 
-**实际游戏边界：**全仓库调用检查显示，只有 `PrimitiveSocietySimulation.simulateDay` 调用优先排序（`src/main/java/com/thysummer/coopcraft/civilization/simulation/PrimitiveSocietySimulation.java:113`）。Minecraft居民AI经 `VillagerWorkGoal.java:272` → `SettlementNeeds.java:55` → `SettlementSimulationService.java:501` 个体进食；该路径记录规范分配，但**没有调用这个优先排序**。不能把模型排序说成游戏已有按需队列，也不能把固定ABC说成游戏实际到仓顺序。
+**研究时游戏基线（第二十五增量之前）：**当时全仓库调用检查显示，只有 `PrimitiveSocietySimulation.simulateDay` 调用优先排序（`src/main/java/com/thysummer/coopcraft/civilization/simulation/PrimitiveSocietySimulation.java:113`）。Minecraft居民AI经 `VillagerWorkGoal.java:272` → `SettlementNeeds.java:55` → `SettlementSimulationService.java:501` 个体进食；该路径记录规范分配，但**没有调用这个优先排序**。这组研究不能验证真实排队，也不能把固定ABC说成游戏实际到仓顺序。后续第二十五增量已将同一排序接入有限到仓窗口，见[到仓请求窗口](civilization-design.md#公仓到达请求窗口)；本工具与历史CSV仍保持原实验输入，不代替新队列及实际游戏验证。
 
 本工具没有调用完整 `simulateDay`：该方法还生产、传播、增加饥饿，并先分配后消费；它的请求短缺口径也不等于本入口的饥饿−5目标。这里只组合真实排序、真实生存进食、真实规范记录API进行有界干预，不宣称等价于完整纯模型一天或Minecraft一天。
 

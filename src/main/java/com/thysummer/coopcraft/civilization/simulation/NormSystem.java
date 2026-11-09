@@ -214,7 +214,7 @@ public final class NormSystem {
 			if (campOrder != 0) {
 				return campOrder;
 			}
-			if (isEnforced(first.campId())) {
+			if (isNeedFirstEnforced(first.campId())) {
 				int hunger = Integer.compare(second.hunger(), first.hunger());
 				if (hunger != 0) {
 					return hunger;
@@ -690,7 +690,8 @@ public final class NormSystem {
 			.filter(norm -> supervisors(norm).size() >= 2);
 	}
 
-	private boolean isEnforced(String campId) {
+	/** Read-only: the existing active norm and same-camp decision-capable supervisors with time left. */
+	public boolean isNeedFirstEnforced(String campId) {
 		return enforcedNorm(campId).isPresent();
 	}
 

@@ -53,6 +53,7 @@ public class VillagerWorkGoal extends Goal {
 	private int travelTicks;
 	private int approachIndex;
 	private long forageCooldownUntil;
+	private SettlementFoodRequests.Ticket foodTicket;
 
 	public VillagerWorkGoal(Villager villager) {
 		this.villager = villager;
@@ -137,6 +138,8 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void stop() {
+		if (foodTicket != null) foodTicket.cancel();
+		foodTicket = null;
 		action = null;
 		target = null;
 		forageTarget = null;
@@ -172,6 +175,7 @@ public class VillagerWorkGoal extends Goal {
 
 	public WorkStatus status() {
 		if (action != null) {
+			if (foodTicket != null && foodTicket.waiting()) return new WorkStatus("eat", target, "food_request_waiting");
 			if (action == Action.EAT && !hasFoodAvailable() && !hasPendingFoodRefusal()) {
 				return new WorkStatus("idle", null, "hungry_no_food");
 			}
@@ -228,6 +232,15 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void tick() {
+		if (foodTicket != null) {
+			villager.getNavigation().stop();
+			if (!foodTicket.waiting()) {
+				foodTicket = null;
+				progress = 0;
+				if (!isTargetValid()) stop();
+			}
+			return;
+		}
 		if (!navigateToTarget()) {
 			return;
 		}
@@ -259,6 +272,7 @@ public class VillagerWorkGoal extends Goal {
 			return;
 		}
 
+		if (action == Action.EAT && queuePreparedMeal()) return;
 		switch (action) {
 			case GATHER -> gather();
 			case FORAGE, HARVEST_CROP -> forage();
@@ -277,6 +291,47 @@ public class VillagerWorkGoal extends Goal {
 			return;
 		}
 		stop();
+	}
+
+	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
+	private boolean queuePreparedMeal() {
+		SettlementSavedData data = settlementData();
+		Settlement requestSettlement = settlement;
+		if (!SettlementFoodRequests.enabled(data, requestSettlement)) return false;
+		ServerLevel level = (ServerLevel) villager.level();
+		BlockPos store = target;
+		Map<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> identities = new java.util.LinkedHashMap<>();
+		if (!level.isLoaded(store) || SettlementStockpile.getStockpile(level, data, requestSettlement) == null) {
+			stop();
+			return true;
+		}
+		identities.put(store, level.getBlockEntity(store));
+		Map<BlockPos, BlockState> states = new java.util.LinkedHashMap<>();
+		states.put(store, level.getBlockState(store));
+		if (states.get(store).getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+			&& states.get(store).getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+				!= net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+			BlockPos partner = store.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(states.get(store)));
+			if (!level.isLoaded(partner)) { stop(); return true; }
+			identities.put(partner, level.getBlockEntity(partner));
+			states.put(partner, level.getBlockState(partner));
+		}
+		foodTicket = data.foodRequests().submit(data, requestSettlement, villager.getUUID(), level.getGameTime(),
+			level.getDayTime() / 24000L, foodTicket, () -> action == Action.EAT && settlement == requestSettlement
+				&& store.equals(target) && villager.isAlive() && !villager.isRemoved()
+				&& level.getEntity(villager.getUUID()) == villager
+				&& level.isPositionEntityTicking(villager.blockPosition()) && level.isPositionEntityTicking(store)
+				&& villager.distanceToSqr(store.getCenter()) <= INTERACTION_DISTANCE_SQUARED
+				&& data.getStockpile(requestSettlement).filter(store::equals).isPresent()
+				&& identities.entrySet().stream().allMatch(entry -> level.isLoaded(entry.getKey())
+					&& level.getBlockEntity(entry.getKey()) == entry.getValue())
+				&& states.entrySet().stream().allMatch(entry -> SettlementFoodRequests.sameStoreState(
+					entry.getValue(), level.getBlockState(entry.getKey())))
+				&& SettlementStockpile.getStockpile(level, data, requestSettlement) != null,
+			() -> SettlementNeeds.eat(level, data, requestSettlement, villager));
+		if (foodTicket == null) return false;
+		villager.getNavigation().stop();
+		return true;
 	}
 
 	private Action chooseAction() {
@@ -590,6 +645,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (!level.isLoaded(target) || !level.isPositionEntityTicking(target)) return false;
 		if (action == Action.EAT) {
+			if (foodTicket != null) return true; // Queue revalidates attendance even after stock runs out.
 			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
 				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
 				&& (hasFoodAvailable() || hasPendingFoodRefusal());

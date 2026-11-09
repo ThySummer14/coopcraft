@@ -43,6 +43,9 @@ public final class SettlementSimulationState {
 	private boolean growthEnabled;
 	private boolean skillsEnabled;
 	private boolean normsEnabled;
+	private long foodRequestModeVersion;
+
+	long foodRequestModeVersion() { return foodRequestModeVersion; }
 	private long lastSurvivalDay = Long.MIN_VALUE;
 	private long foodAllocationDay = Long.MIN_VALUE;
 
@@ -111,6 +114,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setNormsEnabled(boolean enabled) {
+		if (normsEnabled != enabled) foodRequestModeVersion++;
 		normsEnabled = enabled;
 	}
 
@@ -119,6 +123,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setSurvivalEnabled(boolean enabled, long currentDay) {
+		if (survivalEnabled != enabled) foodRequestModeVersion++;
 		survivalEnabled = enabled;
 		lastSurvivalDay = currentDay;
 	}
