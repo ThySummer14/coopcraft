@@ -104,7 +104,9 @@ class SettlementReservesTest {
 	@Test void emptyPopulationAndMixedFoodKeepExplicitUnits() {
 		var data = new SettlementSavedData();
 		var settlement = data.getOrCreate(BlockPos.ZERO, "Mixed", 0);
-		var chest = new SimpleContainer(new ItemStack(Items.BREAD, 2), new ItemStack(Items.SWEET_BERRIES, 2));
+		assertEquals(4, SettlementFood.points(Items.BREAD));
+		assertEquals(1, SettlementFood.points(Items.SWEET_BERRIES));
+		var chest = new SimpleContainer(new ItemStack(Items.BREAD, 1), new ItemStack(Items.SWEET_BERRIES, 4));
 		assertEquals(0, SettlementReserves.inspect(data, settlement, chest).goal());
 		assertFalse(SettlementForaging.reserveLow(data, settlement, null));
 		assertTrue(data.simulationOf(settlement).isEmpty());
