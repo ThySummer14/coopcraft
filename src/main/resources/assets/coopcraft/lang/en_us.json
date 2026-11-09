@@ -512,5 +512,20 @@
 	"coopcraft.resident_dialog.meal_retry_no_food": "The common store still has no food nutrition. The unfinished meal awaits a real restock.",
 	"coopcraft.resident_dialog.social_work_day_pending": "Social work record awaits day settlement; no current-day time factor is inferred.",
 	"coopcraft.resident_dialog.social_work_cost": "Core day %s: %s social hours spent today, %s last cycle; gathering/crafting/construction time factor 6/%s (personality, hunger and applicable skills apply separately).",
-	"coopcraft.resident_dialog.social_work_exhausted": "Core day %s: %s social hours spent today, %s last cycle; wood/stone gathering paused, food gathering/crafting/construction time factor 6/%s."
+	"coopcraft.resident_dialog.social_work_exhausted": "Core day %s: %s social hours spent today, %s last cycle; wood/stone gathering paused, food gathering/crafting/construction time factor 6/%s.",
+	"coopcraft.command.settlement.construction_sites_existing": "An existing construction job keeps its saved site. Use /coop settlement construction and status to inspect it; this survey does not move or repair it.",
+	"coopcraft.command.settlement.construction_sites_none": "There is no pending residential plan to survey.",
+	"coopcraft.command.settlement.construction_sites_ready": "Housing %s: the first currently acceptable site is %s.",
+	"coopcraft.command.settlement.construction_sites_blocked": "Housing %s: none of %s checked candidate sites is currently acceptable.",
+	"coopcraft.command.settlement.construction_sites_reason": "%s candidate(s): %s. First origin %s; first affected position %s.",
+	"coopcraft.command.settlement.construction_sites_scope": "Read-only snapshot of the fixed, same-height candidates. No clearing, terrain changes, materials or job changes. Materials, builder access, internal layout and later changes still require separate checks.",
+	"coopcraft.command.settlement.construction_site_plan_unavailable": "the blueprint is unavailable",
+	"coopcraft.command.settlement.construction_site_unsupported_layout": "the layout is outside this rectangular-floor/perimeter-door check",
+	"coopcraft.command.settlement.construction_site_out_of_bounds": "a required position is outside build height or the world border",
+	"coopcraft.command.settlement.construction_site_not_ticking": "a required position is unloaded or outside entity-ticking chunks",
+	"coopcraft.command.settlement.construction_site_foundation_unsupported": "the entire floor needs stable, dry full-block support immediately below it",
+	"coopcraft.command.settlement.construction_site_volume_occupied": "the future building volume contains a block, fluid or vegetation",
+	"coopcraft.command.settlement.construction_site_entrance_obstructed": "the space outside a door lacks clear headroom",
+	"coopcraft.command.settlement.construction_site_entrance_unsupported": "a door lacks safe outside footing at floor level or one block below",
+	"coopcraft.command.settlement.construction_sites_plan_unavailable": "Housing %s: the blueprint is unavailable; no candidate site was inspected."
 }

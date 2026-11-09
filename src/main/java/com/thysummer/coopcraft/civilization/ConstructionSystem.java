@@ -1,5 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
@@ -16,7 +18,6 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.phys.AABB;
 
 public final class ConstructionSystem {
-	private static final int[] BUILD_DISTANCES = {6, 12, 18};
 
 	private ConstructionSystem() {
 	}
@@ -202,13 +203,10 @@ public final class ConstructionSystem {
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {
-		for (int distance : BUILD_DISTANCES) {
-			for (Direction direction : Direction.Plane.HORIZONTAL) {
-				BlockPos origin = settlement.center().relative(direction, distance);
-				if (canPlace(level, plan, origin)) {
-					return origin;
-				}
-			}
+		ConstructionSite.Probe probe = siteProbe(level);
+		boolean housing = ConstructionSite.isHousing(plan);
+		for (BlockPos origin : ConstructionSite.candidates(settlement.center())) {
+			if (housing ? ConstructionSite.inspect(plan, origin, probe).ready() : canPlace(level, plan, origin)) return origin;
 		}
 		return null;
 	}
@@ -221,6 +219,45 @@ public final class ConstructionSystem {
 			}
 		}
 		return true;
+	}
+
+	/** Current housing projects only; no material checks, job creation or persistent writes. */
+	public static List<ConstructionSite.Result> inspectNewHousingSites(ServerLevel level, SettlementSavedData data,
+		Settlement settlement) {
+		if (data.getConstructionJob(settlement).isPresent()) return List.of();
+		List<ConstructionSite.Result> results = new ArrayList<>();
+		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
+			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
+			if (plan == null) {
+				if (project.blueprintId().equals(ConstructionPlanner.STONE_COTTAGE)) {
+					results.add(new ConstructionSite.Result(project.blueprintId(), settlement.center(), "plan_unavailable", null));
+				}
+			} else if (ConstructionSite.isHousing(plan)) {
+				results.addAll(inspectSites(level, data, settlement, plan));
+			}
+		}
+		return List.copyOf(results);
+	}
+
+	/** Read-only new-job diagnostics; an existing job is deliberately never re-sited. */
+	public static List<ConstructionSite.Result> inspectSites(ServerLevel level, SettlementSavedData data,
+		Settlement settlement, ConstructionPlan plan) {
+		if (data.getConstructionJob(settlement).isPresent()) return List.of();
+		return ConstructionSite.inspectCandidates(plan, settlement.center(), siteProbe(level));
+	}
+
+	private static ConstructionSite.Probe siteProbe(ServerLevel level) {
+		return new ConstructionSite.Probe() {
+			public boolean inBounds(BlockPos position) {
+				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
+			}
+			public boolean ticking(BlockPos position) {
+				return level.isLoaded(position) && level.isPositionEntityTicking(position);
+			}
+			public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
+				return level.getBlockState(position);
+			}
+		};
 	}
 
 	public record BuildTarget(ConstructionJob job, ConstructionInstruction instruction, BlockPos position) {

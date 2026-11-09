@@ -512,5 +512,20 @@
 	"coopcraft.resident_dialog.meal_retry_no_food": "公仓仍无可用食物营养，这餐需等待实际补货。",
 	"coopcraft.resident_dialog.social_work_day_pending": "社会劳动记录待日结，当前不推算本日工时系数。",
 	"coopcraft.resident_dialog.social_work_cost": "核心日%s：本日已付%s社交小时，上轮%s小时；采集/加工/施工的社会时间倍率为6/%s（另计性格、饥饿与适用技能）。",
-	"coopcraft.resident_dialog.social_work_exhausted": "核心日%s：本日已付%s社交小时，上轮%s小时；木石采集暂停，其余采食/加工/施工的社会时间倍率为6/%s。"
+	"coopcraft.resident_dialog.social_work_exhausted": "核心日%s：本日已付%s社交小时，上轮%s小时；木石采集暂停，其余采食/加工/施工的社会时间倍率为6/%s。",
+	"coopcraft.command.settlement.construction_sites_existing": "现有工程沿用保存的工地。请用 /coop settlement construction 和 status 检查；此查询不迁移或修复工程。",
+	"coopcraft.command.settlement.construction_sites_none": "当前没有可检查的待建住宅计划。",
+	"coopcraft.command.settlement.construction_sites_ready": "住宅 %s：当前首个通过保守选址检查的位置为 %s。",
+	"coopcraft.command.settlement.construction_sites_blocked": "住宅 %s：本次检查的 %s 处候选均未通过。",
+	"coopcraft.command.settlement.construction_sites_reason": "%s 处候选：%s。首个原点 %s；首个相关位置 %s。",
+	"coopcraft.command.settlement.construction_sites_scope": "仅查看固定同高候选的当前状态，不清场、不改地形、不扣材料、不改工程。材料、施工寻路、室内布局及后续变化仍须另行检查。",
+	"coopcraft.command.settlement.construction_site_plan_unavailable": "蓝图不可用",
+	"coopcraft.command.settlement.construction_site_unsupported_layout": "布局不符合本轮矩形底板与外围门检查范围",
+	"coopcraft.command.settlement.construction_site_out_of_bounds": "所需位置超出建造高度或世界边界",
+	"coopcraft.command.settlement.construction_site_not_ticking": "所需位置未加载或不在实体活动区块",
+	"coopcraft.command.settlement.construction_site_foundation_unsupported": "完整底板的下一层需要稳定、无液体的完整方块支撑",
+	"coopcraft.command.settlement.construction_site_volume_occupied": "未来建筑体积内有方块、液体或植被",
+	"coopcraft.command.settlement.construction_site_entrance_obstructed": "门外落脚位置上方净空被占据",
+	"coopcraft.command.settlement.construction_site_entrance_unsupported": "门外在底板同高或低一格处没有安全落脚支撑",
+	"coopcraft.command.settlement.construction_sites_plan_unavailable": "住宅 %s：蓝图不可用，尚未检查候选工地。"
 }

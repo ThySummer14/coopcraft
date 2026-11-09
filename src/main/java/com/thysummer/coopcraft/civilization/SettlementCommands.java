@@ -63,6 +63,7 @@ public final class SettlementCommands {
 				.executes(ctx -> handler.run(ctx, "events", "count"))));
 		settlement.then(LiteralArgumentBuilder.<S>literal("construction")
 			.executes(ctx -> handler.run(ctx, "construction", ""))
+			.then(LiteralArgumentBuilder.<S>literal("sites").executes(ctx -> handler.run(ctx, "construction", "sites")))
 			.then(LiteralArgumentBuilder.<S>literal("adopt").requires(admin)
 				.then(RequiredArgumentBuilder.<S, String>argument("fingerprint", StringArgumentType.word())
 					.executes(ctx -> handler.run(ctx, "construction", "adopt")))));
@@ -128,6 +129,16 @@ public final class SettlementCommands {
 		}
 		if (action.equals("construction") && option.isEmpty()) {
 			showConstruction(source, data, settlement);
+			return 1;
+		}
+		if (action.equals("construction") && option.equals("sites")) {
+			if (data.getConstructionJob(settlement).isPresent()) {
+				send(source, "construction_sites_existing");
+			} else {
+				for (Component line : constructionSiteMessages(ConstructionSystem.inspectNewHousingSites(level, data, settlement))) {
+					source.sendSuccess(() -> line, false);
+				}
+			}
 			return 1;
 		}
 		if (action.equals("events")) {
@@ -246,6 +257,36 @@ public final class SettlementCommands {
 
 	static Component constructionBlocker(String blocker) {
 		return Component.translatable("coopcraft.interaction.blocker.construction_" + blocker);
+	}
+
+	/** Projects an immutable read-only survey; it cannot claim a site or start a saved job. */
+	static List<Component> constructionSiteMessages(List<ConstructionSite.Result> results) {
+		if (results.isEmpty()) return List.of(message("construction_sites_none"));
+		List<Component> lines = new ArrayList<>();
+		Map<ResourceLocation, List<ConstructionSite.Result>> projects = new LinkedHashMap<>();
+		for (var result : results) projects.computeIfAbsent(result.blueprintId(), ignored -> new ArrayList<>()).add(result);
+		for (var project : projects.entrySet()) {
+			if (project.getValue().stream().allMatch(result -> result.reason().equals("plan_unavailable"))) {
+				lines.add(message("construction_sites_plan_unavailable", project.getKey().toString()));
+				continue;
+			}
+			var ready = project.getValue().stream().filter(ConstructionSite.Result::ready).findFirst();
+			if (ready.isPresent()) {
+				lines.add(message("construction_sites_ready", project.getKey().toString(), ready.get().origin().toShortString()));
+				continue;
+			}
+			lines.add(message("construction_sites_blocked", project.getKey().toString(), project.getValue().size()));
+			Map<String, List<ConstructionSite.Result>> reasons = new LinkedHashMap<>();
+			for (var result : project.getValue()) reasons.computeIfAbsent(result.reason(), ignored -> new ArrayList<>()).add(result);
+			for (var reason : reasons.entrySet()) {
+				var first = reason.getValue().getFirst();
+				Object position = first.position() == null ? message("construction_unknown") : first.position().toShortString();
+				lines.add(message("construction_sites_reason", reason.getValue().size(),
+					message("construction_site_" + reason.getKey()), first.origin().toShortString(), position));
+			}
+		}
+		lines.add(message("construction_sites_scope"));
+		return List.copyOf(lines);
 	}
 
 	static <S> int eventCount(CommandContext<S> context, String option) {
