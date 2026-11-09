@@ -529,3 +529,5 @@
 - 未启动Minecraft客户端、服务器或GameTest。自动回归及最终构建记录以下方CI为准。
 
 - 新增28项JUnit源码：20项真实蓝图/受控Probe的地基、室内、四向/多门、两档落脚、未知位置零读取、预算、旧job与无床住宅防绕过；8项命令权限/输入、只读结果、缺蓝图、分组、重载和双语参数。最终静态独立审查未发现阻断，529个语言键一致；完整编译与正式JUnit以下方CI为准，模拟核心源码未改变。
+
+- 验证完成：代码提交 `8aca58a3` 的[住宅工地构建](https://github.com/ThySummer14/coopcraft/actions/runs/42576395191)通过完整build和823项JUnit，0失败/0跳过，新增28项全部通过。CI的206行配给与48行多人顺序CSV与未改变核心的上轮本地结果逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42576395191/artifacts/13655148616)内 `coopcraft-0.1.0.jar` 为887593字节，SHA-256 `b03126e7ac8bbd1877723a1aa4def943511b73420f3cb194938cc1f0cc39bc32`。未启动Minecraft客户端、服务器或GameTest；Probe和命令投影测试不能代替真实地形、实体寻路、高处施工或联机验收。没有改蓝图、物品事务、NBT或既有job；新房型与退入门廊的入口模型另轮实现。升级前仍备份，保留第三十九增量新事件写入后不可降级加载的限制。
