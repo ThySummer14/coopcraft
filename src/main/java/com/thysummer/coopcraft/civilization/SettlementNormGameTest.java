@@ -133,20 +133,20 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		advanceDay(helper, reloaded, reloadedSettlement);
 		holdMeeting(helper, reloaded, reloadedSettlement);
 		Norm norm = reloadedState.world().norm(reloadedState.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE).orElseThrow();
-		helper.assertValueEqual(2, norm.allocationUnitCap(), "The adopted rule must choose the hunger-driven cap");
+		helper.assertValueEqual(4, norm.allocationUnitCap(), "The adopted rule must increase the actual three-fish baseline");
 		helper.assertValueEqual(NormProposal.Status.ADOPTED, reloadedState.world().proposal(proposal.proposalId()).orElseThrow().status(),
 			"The second deliberation must adopt the supported proposal");
 		SimulationEvent adoption = lastEvent(reloadedState, EventType.NORM_ADOPTED);
 		helper.assertTrue(reloadedState.world().ledger().traceAncestry(adoption.eventId()).stream()
 			.anyMatch(event -> event.type() == EventType.SHARE_REFUSED), "The adopted rule must trace back to the real refusal");
-		helper.assertValueEqual(2, reloadedState.remainingFoodUnits(firstPerson), "The new rule must replace the fixed three-fish allowance");
+		helper.assertValueEqual(4, reloadedState.remainingFoodUnits(firstPerson), "The new rule must replace the fixed three-fish allowance");
 		helper.assertValueEqual(1, reloadedState.world().person(firstPerson).previousSocialHours(), "The prior meeting must reserve one social hour");
 		helper.assertValueEqual(120, SettlementSimulationService.gatherWorkDuration(
 			reloaded, reloadedSettlement, first.getUUID(), 100
 		), "One hour of deliberation must reduce real gathering time");
-		helper.assertValueEqual(40, SettlementSimulationService.eat(reloaded, reloadedSettlement, first.getUUID()),
-			"The next real meal must consume exactly two fish");
-		helper.assertValueEqual(15L, reloadedState.world().batch(stock.batchId()).quantity(), "Seventeen remaining fish minus two must leave fifteen");
+		helper.assertValueEqual(80, SettlementSimulationService.eat(reloaded, reloadedSettlement, first.getUUID()),
+			"The next real meal must consume exactly four fish");
+		helper.assertValueEqual(13L, reloadedState.world().batch(stock.batchId()).quantity(), "Seventeen remaining fish minus four must leave thirteen");
 		helper.assertValueEqual(EventType.NORM_ENFORCED, lastEvent(reloadedState, EventType.NORM_ENFORCED).type(),
 			"Applying the new cap must be observable");
 		helper.assertValueEqual(0, chest.countItem(Items.COD), "Abstract meals must never consume the real chest twice");
@@ -155,7 +155,7 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		SettlementSavedData finalReload = reload(helper, reloaded);
 		Settlement finalSettlement = finalReload.find(bell).orElseThrow();
 		SettlementSimulationState finalState = finalReload.simulationOf(finalSettlement).orElseThrow();
-		helper.assertValueEqual(2, finalState.world().norm(finalState.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
+		helper.assertValueEqual(4, finalState.world().norm(finalState.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
 			.orElseThrow().allocationUnitCap(), "The active rule must survive a second reload");
 		helper.assertValueEqual(0, finalState.remainingFoodUnits(firstPerson), "Reload must not bypass the new daily cap");
 		helper.assertValueEqual(1, finalState.world().norm(finalState.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)

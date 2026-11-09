@@ -523,7 +523,7 @@ class SettlementCommonStoreMeetingTest {
 			var feedback = SettlementMeetingFeedback.inspect(f.state, preview);
 			assertTrue(feedback.completedDetails().isEmpty(), "No predicted votes before an actual meeting");
 			assertEquals(3, feedback.agenda().orElseThrow().currentCap());
-			assertEquals(2, feedback.agenda().orElseThrow().proposedCap());
+			assertEquals(4, feedback.agenda().orElseThrow().proposedCap());
 			assertTrue(feedback.agenda().orElseThrow().defaultValue());
 			SettlementMeetingFeedback.messages(new SettlementMeetings.Result("ready", f.state.world().day(),
 				Long.MIN_VALUE, "0,64,0", preview, feedback));

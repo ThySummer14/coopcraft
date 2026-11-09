@@ -52,7 +52,7 @@ public final class SettlementSimulationState {
 	private SettlementSimulationState(Settlement settlement, SimulationWorld world) {
 		this.settlement = settlement;
 		this.world = world;
-		this.norms = new NormSystem(world, SimulationConfig.defaults());
+		this.norms = new NormSystem(world, SimulationConfig.defaults(), DAILY_FOOD_UNIT_CAP);
 	}
 
 	public static SettlementSimulationState create(Settlement settlement) {

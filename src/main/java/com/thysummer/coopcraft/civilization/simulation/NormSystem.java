@@ -17,14 +17,28 @@ public final class NormSystem {
 
 	private final SimulationWorld world;
 	private final SimulationConfig config;
+	private final Integer defaultBaseAllowance;
 	private final Set<String> chargedSupervision = new LinkedHashSet<>();
 	private final Map<String, Integer> commonAllocations = new HashMap<>();
 	private long lastPropagationDay = Long.MIN_VALUE;
 	private final Map<String, Long> lastMeetingDays = new HashMap<>();
 
 	public NormSystem(SimulationWorld world, SimulationConfig config) {
+		this(world, config, null);
+	}
+
+	/** Adapter baseline for new proposals only; care bonuses and saved proposals are unchanged. */
+	public NormSystem(SimulationWorld world, SimulationConfig config, int defaultBaseAllowance) {
+		this(world, config, Integer.valueOf(defaultBaseAllowance));
+		if (defaultBaseAllowance < 1 || defaultBaseAllowance > 4) {
+			throw new IllegalArgumentException("Default base allowance must be between 1 and 4");
+		}
+	}
+
+	private NormSystem(SimulationWorld world, SimulationConfig config, Integer defaultBaseAllowance) {
 		this.world = world;
 		this.config = config;
+		this.defaultBaseAllowance = defaultBaseAllowance;
 	}
 
 	/**
@@ -701,8 +715,10 @@ public final class NormSystem {
 	private int proposedCap(Person person, Optional<Norm> existing) {
 		long householdStock = world.availableNutrition(StorageOwner.household(person.householdId()));
 		long householdNeed = world.peopleInHousehold(person.householdId()).size() * (long) config.dailyHunger() * 3;
-		if (existing.isPresent()) {
-			int current = existing.get().allocationUnitCap();
+		if (defaultBaseAllowance != null || existing.isPresent()) {
+			// Legacy experiments use even dormant norms; the adapter actually falls back to its default.
+			int current = defaultBaseAllowance == null ? existing.orElseThrow().allocationUnitCap()
+				: existing.filter(Norm::isActive).map(Norm::allocationUnitCap).orElse(defaultBaseAllowance);
 			return Math.max(1, Math.min(4, householdStock > householdNeed ? current - 1 : current + 1));
 		}
 		return person.hunger() > config.foodAccessThreshold() ? 2 : 1;
