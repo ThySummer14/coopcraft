@@ -229,7 +229,7 @@ public final class ConstructionSystem {
 		for (ConstructionPlanner.Project project : ConstructionPlanner.projects(data, settlement)) {
 			ConstructionPlan plan = BlueprintManager.get(project.blueprintId());
 			if (plan == null) {
-				if (project.blueprintId().equals(ConstructionPlanner.STONE_COTTAGE)) {
+				if (ConstructionPlanner.isHousingBlueprint(project.blueprintId())) {
 					results.add(new ConstructionSite.Result(project.blueprintId(), settlement.center(), "plan_unavailable", null));
 				}
 			} else if (ConstructionSite.isHousing(plan)) {

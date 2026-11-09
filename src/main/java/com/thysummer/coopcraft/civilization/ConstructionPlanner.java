@@ -14,6 +14,7 @@ import net.minecraft.world.item.Item;
 public final class ConstructionPlanner {
 	public static final ResourceLocation CAMPFIRE_HEARTH = CoopCraft.id("campfire_hearth");
 	public static final ResourceLocation STONE_COTTAGE = CoopCraft.id("stone_cottage");
+	public static final ResourceLocation TIMBER_PORCH_CABIN = CoopCraft.id("timber_porch_cabin_v1");
 
 	private ConstructionPlanner() {
 	}
@@ -24,9 +25,14 @@ public final class ConstructionPlanner {
 			projects.add(new Project(CAMPFIRE_HEARTH));
 		}
 		if (housingPlan(data, settlement).needsHousing()) {
-			projects.add(new Project(STONE_COTTAGE));
+			projects.add(new Project(TIMBER_PORCH_CABIN));
 		}
 		return List.copyOf(projects);
+	}
+
+	/** Versioned new-house selection never changes a saved job's plan or instruction index. */
+	public static boolean isHousingBlueprint(ResourceLocation id) {
+		return STONE_COTTAGE.equals(id) || TIMBER_PORCH_CABIN.equals(id);
 	}
 
 	/** A paused saved job must not trigger production for a different or unverified plan. */

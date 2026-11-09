@@ -120,7 +120,7 @@ public final class SettlementHousingGameTest implements FabricGameTest {
 
 	private static boolean hasHousingProject(SettlementSavedData data, Settlement settlement) {
 		return ConstructionPlanner.projects(data, settlement).stream()
-			.anyMatch(project -> project.blueprintId().equals(ConstructionPlanner.STONE_COTTAGE));
+			.anyMatch(project -> ConstructionPlanner.isHousingBlueprint(project.blueprintId()));
 	}
 
 	private static void placeBed(GameTestHelper helper, BlockPos foot) {

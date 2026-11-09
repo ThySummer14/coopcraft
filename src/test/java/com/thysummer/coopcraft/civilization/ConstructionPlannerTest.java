@@ -73,7 +73,7 @@ class ConstructionPlannerTest {
 		data.registerMember(settlement, UUID.randomUUID(), 0);
 
 		assertEquals(
-			List.of(ConstructionPlanner.CAMPFIRE_HEARTH, ConstructionPlanner.STONE_COTTAGE),
+			List.of(ConstructionPlanner.CAMPFIRE_HEARTH, ConstructionPlanner.TIMBER_PORCH_CABIN),
 			ConstructionPlanner.projects(data, settlement).stream().map(ConstructionPlanner.Project::blueprintId).toList()
 		);
 	}
@@ -86,7 +86,7 @@ class ConstructionPlannerTest {
 		data.setStage(settlement, SettlementStage.AGRICULTURAL);
 
 		assertEquals(
-			List.of(ConstructionPlanner.STONE_COTTAGE),
+			List.of(ConstructionPlanner.TIMBER_PORCH_CABIN),
 			ConstructionPlanner.projects(data, settlement).stream().map(ConstructionPlanner.Project::blueprintId).toList()
 		);
 	}
@@ -100,7 +100,7 @@ class ConstructionPlannerTest {
 		data.setHearth(settlement, new BlockPos(5, 64, 9));
 
 		assertEquals(
-			List.of(ConstructionPlanner.STONE_COTTAGE),
+			List.of(ConstructionPlanner.TIMBER_PORCH_CABIN),
 			ConstructionPlanner.projects(data, settlement).stream().map(ConstructionPlanner.Project::blueprintId).toList()
 		);
 

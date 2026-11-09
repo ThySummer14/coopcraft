@@ -213,6 +213,10 @@ public final class CivilizationGameTest implements FabricGameTest {
 			data.getGrindingStation(settlement).orElseThrow(),
 			"The stonecutter must become the grinding station"
 		);
+		// Keep this legacy cottage/material regression explicit when the default future house changes.
+		BlockPos legacyOrigin = ConstructionSystem.inspectSites(helper.getLevel(), data, settlement, plan).stream()
+			.filter(ConstructionSite.Result::ready).map(ConstructionSite.Result::origin).findFirst().orElseThrow();
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, legacyOrigin));
 		ConstructionSystem.BuildTarget firstTarget = ConstructionSystem.nextBuildTarget(
 			helper.getLevel(), data, settlement
 		).orElseThrow();

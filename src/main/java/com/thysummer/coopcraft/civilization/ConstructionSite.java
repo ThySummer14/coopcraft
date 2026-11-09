@@ -60,7 +60,7 @@ public final class ConstructionSite {
 
 	/** Known residential IDs remain residential even when a malformed reload removes their beds. */
 	public static boolean isHousing(ConstructionPlan plan) {
-		return plan != null && (plan.id().equals(ConstructionPlanner.STONE_COTTAGE)
+		return plan != null && (ConstructionPlanner.isHousingBlueprint(plan.id())
 			|| plan.instructions().stream().anyMatch(part -> part.state().getBlock() instanceof BedBlock));
 	}
 
