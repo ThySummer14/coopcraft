@@ -191,14 +191,24 @@ class SettlementFoodCargoTest {
 		assertFalse(SettlementFoodCargo.hasSurplus(null, camp, f.actor, f.bag));
 	}
 
-	@Test void survivalFoodStillImportsImmediatelyAndNeverUsesSurplusReturn() {
+	@Test void survivalBerriesRequireAgedArrivalWhilePotatoesKeepTheirExistingImport() {
 		Fixture f = new Fixture(); var state = f.data.getOrCreateSimulation(f.camp);
 		state.mapResident(f.actor, false, 0); state.setSurvivalEnabled(true, 0); state.setProductionEnabled(true);
 		var ripe = Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3);
 		assertEquals(4, SettlementForaging.harvest(f.data, f.camp, f.actor, f.bag, () -> true, () -> true, () -> true,
 			() -> ripe, () -> List.of(new ItemStack(Items.SWEET_BERRIES, 4)), block -> true));
-		assertEquals(0, f.bag.countItem(Items.SWEET_BERRIES));
 		long harvestDay = state.world().day();
+		assertEquals(4, f.bag.countItem(Items.SWEET_BERRIES));
+		assertTrue(SettlementFoodAge.isMarked(f.bag.getItem(0)));
+		assertEquals(harvestDay, SettlementFoodAge.read(f.bag.getItem(0)).orElseThrow().harvestDay());
+		assertFalse(f.surplus(), "Survival cargo must not use ordinary surplus/ration rules");
+		assertEquals(0L, state.world().inventoryTotals().getOrDefault(ResourceType.WILD_FRUIT, 0L));
+		f.tick(0);
+		assertEquals(4, f.bag.countItem(Items.SWEET_BERRIES));
+		assertTrue(f.store.isEmpty());
+		assertEquals(4, f.finish(f.prepare()).moved());
+		assertEquals(0, f.bag.countItem(Items.SWEET_BERRIES));
+		assertTrue(f.store.isEmpty(), "Accepted survival cargo must not leave a second physical copy");
 		var fruit = state.world().batches().stream().filter(batch -> batch.resourceType() == ResourceType.WILD_FRUIT).findFirst().orElseThrow();
 		assertEquals(harvestDay, fruit.harvestDay()); assertEquals(harvestDay + 3, fruit.expiryDay());
 		f.bag.setItem(0, new ItemStack(Items.POTATO, 5));
