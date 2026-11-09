@@ -439,3 +439,5 @@
 - 本地纯Java配给206行与多人顺序48行实验已复跑通过，并保持上轮结果；完整build、JUnit、最终提交和运行包以下方验证记录为准。未启动Minecraft客户端、服务器或GameTest，实际自主恢复、现场路径、窗口与联机仍待用户统一验收。
 
 - 新增12项JUnit源码：7项恢复资格、真实两轮会议、40 tick批次及重复/中途降额回归，5项冻结拒绝与当前状态投影、两次以上重载、双语与完整窗口codec预算；原会议视图测试增加12行回执/4行意见的预算断言。独立静态审查未发现阻断；另在纯simulation等价夹具确认首轮deliberating、次轮adopted且cap=4、hunger=40，不把它当作完整Minecraft依赖测试。
+
+- 验证完成：代码提交 `7472db45` 的[提额后再次取粮构建](https://github.com/ThySummer14/coopcraft/actions/runs/42562839720)通过完整build和707项JUnit，0失败/0跳过，新增12项回归全部通过。206行配给与48行多人顺序CSV同最终核心源码的本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42562839720/artifacts/13649334763)内 `coopcraft-0.1.0.jar` 为845533字节，SHA-256 `909a330a3452928ca12214927165827f29c874809719024c9aa8aabeac2561a2`。未启动Minecraft客户端、服务器或GameTest；真实自主寻路、实体到仓、窗口可读性与联机行为仍待用户统一验收。单元回归使用真实共享决策、队列和核心消费，不把模拟在场条件当作实机到场证明。
