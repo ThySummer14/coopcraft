@@ -24,8 +24,9 @@ class ResidentDialogPayloadTest {
     private RegistryFriendlyByteBuf buffer() { return new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY); }
     private ResidentDialogPayload.Snapshot snapshot() {
         return new ResidentDialogPayload.Snapshot(Component.translatable("entity.minecraft.villager"), "minecraft:overworld",
-            List.of(Component.translatable("coopcraft.resident_dialog.result", Component.literal("Ada"))), true, false, true,
-            Component.literal("Food"), Component.literal("Invitation is not arrival"));
+            List.of(Component.translatable("coopcraft.resident_dialog.result", Component.literal("Ada"))), true, false, true, true,
+            Component.literal("Food"), Component.literal("Invitation is not arrival"),
+            Component.literal("Proposal: Cottage\nArrived: 3; Cost: 4 food"));
     }
     @Test void allKindsAndActionsRoundTripWithLocalizedComponents() {
         for (var kind : ResidentDialogPayload.Kind.values()) {
@@ -56,7 +57,7 @@ class ResidentDialogPayloadTest {
         for (long request : new long[]{-1, 0, 1}) {
             var buf = buffer();
             try {
-                buf.writeUUID(UUID.randomUUID()); buf.writeVarLong(request); buf.writeVarInt(request == 1 ? 5 : 0);
+                buf.writeUUID(UUID.randomUUID()); buf.writeVarLong(request); buf.writeVarInt(request == 1 ? ResidentDialogActionPayload.Action.values().length : 0);
                 assertThrows(RuntimeException.class, () -> ResidentDialogActionPayload.STREAM_CODEC.decode(buf));
             } finally { buf.release(); }
         }
@@ -120,6 +121,96 @@ class ResidentDialogPayloadTest {
             header(frame, 0, 0); frame.writeVarInt(ResidentDialogPayload.MAX_COMPONENT_BYTES + 1);
             assertThrows(RuntimeException.class, () -> ResidentDialogPayload.STREAM_CODEC.decode(frame));
         } finally { frame.release(); }
+    }
+    @Test void versionedTypesAndStableActionOrdinals() {
+        assertEquals("coopcraft:resident_dialog_v2", ResidentDialogPayload.TYPE.id().toString());
+        assertEquals("coopcraft:resident_dialog_action_v2", ResidentDialogActionPayload.TYPE.id().toString());
+        assertArrayEquals(new ResidentDialogActionPayload.Action[]{
+            ResidentDialogActionPayload.Action.REFRESH, ResidentDialogActionPayload.Action.GIFT,
+            ResidentDialogActionPayload.Action.INVITE, ResidentDialogActionPayload.Action.CANCEL_INVITE,
+            ResidentDialogActionPayload.Action.CLOSE, ResidentDialogActionPayload.Action.HOLD_MEETING
+        }, ResidentDialogActionPayload.Action.values());
+    }
+    @Test void gatheringHintIsDeeplyDetachedIncludingTranslationArguments() {
+        var argument = Component.literal("Cottage");
+        var hint = Component.translatable("proposal", argument).append("\n3 residents; 4 food");
+        var snapshot = new ResidentDialogPayload.Snapshot(Component.empty(), "x", List.of(),
+            false, false, false, true, Component.empty(), Component.empty(), hint);
+        String expected = snapshot.gatheringHint().getString();
+        argument.append(" changed");
+        hint.append(" changed");
+        assertEquals(expected, snapshot.gatheringHint().getString());
+        var returned = (net.minecraft.network.chat.MutableComponent) snapshot.gatheringHint();
+        ((net.minecraft.network.chat.MutableComponent) ((TranslatableContents) returned.getContents()).getArgs()[0]).append(" changed");
+        returned.append(" changed again");
+        assertEquals(expected, snapshot.gatheringHint().getString());
+        assertEquals("Cottage", ((Component) ((TranslatableContents) snapshot.gatheringHint().getContents()).getArgs()[0]).getString());
+        assertTrue(snapshot.canHoldMeeting());
+    }
+    @Test void legacySourceConstructorDisablesMeeting() {
+        var snapshot = new ResidentDialogPayload.Snapshot(Component.empty(), "x", List.of(),
+            true, true, true, Component.empty(), Component.empty());
+        assertFalse(snapshot.canHoldMeeting());
+        assertEquals("", snapshot.gatheringHint().getString());
+    }
+    @Test void meetingHintAndCounterBoundariesRoundTrip() {
+        var snapshot = new ResidentDialogPayload.Snapshot(Component.empty(), "x".repeat(ResidentDialogPayload.MAX_DIMENSION_LENGTH),
+            Collections.nCopies(ResidentDialogPayload.MAX_LINES, Component.empty()), false, false, false, false,
+            Component.empty(), Component.empty(), Component.literal("x".repeat(ResidentDialogPayload.MAX_COMPONENT_LENGTH)));
+        var expected = new ResidentDialogPayload(ResidentDialogPayload.Kind.UPDATE, UUID.randomUUID(),
+            Long.MAX_VALUE, Long.MAX_VALUE, snapshot, Component.empty());
+        var buf = buffer();
+        try {
+            ResidentDialogPayload.STREAM_CODEC.encode(buf, expected);
+            assertEquals(expected, ResidentDialogPayload.STREAM_CODEC.decode(buf));
+            assertFalse(expected.snapshot().canHoldMeeting());
+            assertEquals(0, buf.readableBytes());
+        } finally { buf.release(); }
+    }
+    @Test void oversizedAndInvisibleGatheringHintFailsConstructionAndDecode() {
+        var invisible = Component.empty().withStyle(style -> style.withInsertion("x".repeat(ResidentDialogPayload.MAX_COMPONENT_BYTES + 1)));
+        for (var hint : List.of(Component.literal("x".repeat(ResidentDialogPayload.MAX_COMPONENT_LENGTH + 1)), invisible)) {
+            assertThrows(IllegalArgumentException.class, () -> new ResidentDialogPayload.Snapshot(Component.empty(), "x", List.of(),
+                false, false, false, true, Component.empty(), Component.empty(), hint));
+        }
+        var buf = buffer();
+        try {
+            header(buf, 0, 0); writeComponent(buf, Component.empty()); buf.writeUtf("x"); buf.writeVarInt(0);
+            for (int i = 0; i < 4; i++) buf.writeBoolean(false);
+            writeComponent(buf, Component.empty()); writeComponent(buf, Component.empty());
+            writeComponent(buf, Component.literal("x".repeat(ResidentDialogPayload.MAX_COMPONENT_LENGTH + 1)));
+            writeComponent(buf, Component.empty());
+            assertThrows(RuntimeException.class, () -> ResidentDialogPayload.STREAM_CODEC.decode(buf));
+        } finally { buf.release(); }
+    }
+    @Test void invalidActionOrdinalsFailDecode() {
+        for (int ordinal : new int[]{-1, ResidentDialogActionPayload.Action.values().length, Integer.MAX_VALUE}) {
+            var buf = buffer();
+            try {
+                buf.writeUUID(UUID.randomUUID()); buf.writeVarLong(1); buf.writeVarInt(ordinal);
+                assertThrows(RuntimeException.class, () -> ResidentDialogActionPayload.STREAM_CODEC.decode(buf));
+            } finally { buf.release(); }
+        }
+    }
+    @Test void meetingActionContainsOnlyIntentAndEveryTruncatedPrefixFails() {
+        var full = buffer();
+        try {
+            var expected = new ResidentDialogActionPayload(UUID.randomUUID(), Long.MAX_VALUE, ResidentDialogActionPayload.Action.HOLD_MEETING);
+            ResidentDialogActionPayload.STREAM_CODEC.encode(full, expected);
+            assertEquals(expected.sessionId(), full.readUUID());
+            assertEquals(expected.requestId(), full.readVarLong());
+            assertEquals(5, full.readVarInt());
+            assertFalse(full.isReadable());
+            full.readerIndex(0);
+            assertEquals(expected, ResidentDialogActionPayload.STREAM_CODEC.decode(full));
+            for (int size = 0; size < full.writerIndex(); size++) {
+                var prefix = buffer();
+                try {
+                    prefix.writeBytes(full, 0, size);
+                    assertThrows(RuntimeException.class, () -> ResidentDialogActionPayload.STREAM_CODEC.decode(prefix));
+                } finally { prefix.release(); }
+            }
+        } finally { full.release(); }
     }
     @Test void everyTruncatedPrefixFails() {
         var full = buffer();

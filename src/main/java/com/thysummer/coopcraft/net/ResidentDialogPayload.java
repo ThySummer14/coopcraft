@@ -23,7 +23,7 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
     public static final int MAX_DIMENSION_LENGTH = 128;
     public static final int MAX_COMPONENT_LENGTH = 2048;
     public static final int MAX_COMPONENT_BYTES = 16384;
-    public static final Type<ResidentDialogPayload> TYPE = new Type<>(CoopCraft.id("resident_dialog"));
+    public static final Type<ResidentDialogPayload> TYPE = new Type<>(CoopCraft.id("resident_dialog_v2"));
     public static final StreamCodec<RegistryFriendlyByteBuf, ResidentDialogPayload> STREAM_CODEC = StreamCodec.of(
         (buf, value) -> value.write(buf), ResidentDialogPayload::read);
     public ResidentDialogPayload {
@@ -33,9 +33,16 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
     }
     @Override public Component message() { return freezeComponent(message); }
     public record Snapshot(Component title, String dimension, List<Component> lines, boolean canGift,
-                           boolean canInvite, boolean canCancel, Component giftHint, Component meetingHint) {
+                           boolean canInvite, boolean canCancel, boolean canHoldMeeting, Component giftHint,
+                           Component meetingHint, Component gatheringHint) {
+        /** Source compatibility only; both endpoints must still use the v2 wire format. */
+        public Snapshot(Component title, String dimension, List<Component> lines, boolean canGift,
+                        boolean canInvite, boolean canCancel, Component giftHint, Component meetingHint) {
+            this(title, dimension, lines, canGift, canInvite, canCancel, false, giftHint, meetingHint, Component.empty());
+        }
         public Snapshot {
             title = freezeComponent(title); giftHint = freezeComponent(giftHint); meetingHint = freezeComponent(meetingHint);
+            gatheringHint = freezeComponent(gatheringHint);
             Objects.requireNonNull(dimension);
             if (dimension.isEmpty() || dimension.length() > MAX_DIMENSION_LENGTH) throw new IllegalArgumentException("Invalid dimension");
             if (lines.size() > MAX_LINES) throw new IllegalArgumentException("Too many dialog lines");
@@ -44,6 +51,7 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
         @Override public Component title() { return freezeComponent(title); }
         @Override public Component giftHint() { return freezeComponent(giftHint); }
         @Override public Component meetingHint() { return freezeComponent(meetingHint); }
+        @Override public Component gatheringHint() { return freezeComponent(gatheringHint); }
         @Override public List<Component> lines() { return lines.stream().map(ResidentDialogPayload::freezeComponent).toList(); }
     }
     private static void checkComponent(Component value) {
@@ -61,6 +69,8 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
         if (hover != null && hover.getAction() == HoverEvent.Action.SHOW_TEXT)
             checkTree(hover.getValue(HoverEvent.Action.SHOW_TEXT), depth + 1, nodes);
     }
+    /** Validate and detach a whole view before enabling an action that relies on its contents. */
+    public static Component copyBoundedComponent(Component value) { return freezeComponent(value); }
     private static Component freezeComponent(Component value) {
         checkTree(value, 0, new int[]{0});
         checkComponent(value);
@@ -100,8 +110,10 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
             buf.writeVarInt(snapshot.lines.size());
             snapshot.lines.forEach(line -> writeComponent(buf, line));
             buf.writeBoolean(snapshot.canGift); buf.writeBoolean(snapshot.canInvite); buf.writeBoolean(snapshot.canCancel);
+            buf.writeBoolean(snapshot.canHoldMeeting);
             writeComponent(buf, snapshot.giftHint);
             writeComponent(buf, snapshot.meetingHint);
+            writeComponent(buf, snapshot.gatheringHint);
         }
         writeComponent(buf, message);
     }
@@ -118,8 +130,8 @@ public record ResidentDialogPayload(Kind kind, UUID sessionId, long revision, lo
             if (count < 0 || count > MAX_LINES) throw new IllegalArgumentException("Invalid dialog line count");
             List<Component> lines = new ArrayList<>(count);
             for (int i = 0; i < count; i++) lines.add(readComponent(buf));
-            snapshot = new Snapshot(title, dimension, lines, buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
-                readComponent(buf), readComponent(buf));
+            snapshot = new Snapshot(title, dimension, lines, buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                readComponent(buf), readComponent(buf), readComponent(buf));
         }
         return new ResidentDialogPayload(kind, id, revision, ack, snapshot, readComponent(buf));
     }

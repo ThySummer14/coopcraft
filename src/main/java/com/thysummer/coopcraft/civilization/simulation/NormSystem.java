@@ -243,6 +243,25 @@ public final class NormSystem {
 		return planMeeting(active, onsite, campId).result();
 	}
 
+	/** Opaque read-only identity/eligibility review. Opinions are deliberately not captured. */
+	public record MeetingReview(MeetingResult result, Object stamp) {}
+
+	private record ReviewedResident(Person person, String id, String camp, boolean adult, boolean hasTime) {}
+	private record ReviewStamp(NormSystem owner, long day, long lastMeetingDay, NormProposal proposal,
+		int cap, int revision, List<ReviewedResident> active, List<Person> participants,
+		Person source, SocialInformation information) {}
+
+	public MeetingReview reviewCommonStoreMeeting(java.util.Collection<Person> active,
+		java.util.Collection<Person> onsite, String campId) {
+		MeetingPlan plan = planMeeting(active, onsite, campId);
+		NormProposal proposal = plan.proposal();
+		return new MeetingReview(plan.result(), new ReviewStamp(this, world.day(), lastMeetingDay(campId), proposal,
+			proposal == null ? 0 : proposal.allocationUnitCap(), proposal == null ? 0 : proposal.revision(),
+			plan.active().stream().map(person -> new ReviewedResident(person, person.id(), person.campId(),
+				person.canMakeDecisions(), person.socialHours() < 6)).toList(),
+			List.copyOf(plan.participants()), plan.source(), plan.information()));
+	}
+
 	/** Caller supplies verified physical attendance; absent residents remain in the denominator. */
 	public MeetingResult holdCommonStoreMeeting(java.util.Collection<Person> active,
 		java.util.Collection<Person> onsite, String campId, String location) {

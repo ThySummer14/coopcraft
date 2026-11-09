@@ -477,5 +477,14 @@
 	"coopcraft.resident_dialog.meeting_hint": "邀请只表示尝试赴会，不保证出席、讨论或投票；取消只针对你上次查看的邀请。",
 	"coopcraft.interaction.meeting.stale": "%s 的邀请已失效或发生变化，请刷新居民界面。",
 	"coopcraft.resident_dialog.gift_unavailable": "主手没有可用于当前模式的食物；带有自定义组件的食物也无法赠送。",
-	"coopcraft.resident_dialog.own_invitation": "这位居民已有你的有效邀请；可尝试取消上次查看的这张邀请。"
+	"coopcraft.resident_dialog.own_invitation": "这位居民已有你的有效邀请；可尝试取消上次查看的这张邀请。",
+	"coopcraft.resident_dialog.hold_meeting": "召开会议",
+	"coopcraft.resident_dialog.hold_meeting_hint": "按上方预览召开一轮会议，每名参与者花费1社交小时并占用今日会期。情况变化时先刷新；不保证提案通过。",
+	"coopcraft.resident_dialog.gathering_title": "仓库会议：下方为实际待议事项，可能不同于居民意见区的议题。",
+	"coopcraft.resident_dialog.gathering_cost": "选择立即议事或继续邀请。有效会议花费每位参与者1社交小时并占用本聚落今日会期；不直接消耗或发放食物。",
+	"coopcraft.resident_dialog.gathering_ready": "可以尝试召开下方会议；仅现场合格居民参加，玩家只组织，不投票。",
+	"coopcraft.resident_dialog.gathering_unreviewable": "无法完整核验待议内容，请刷新后重试。本次未开会。",
+	"coopcraft.resident_dialog.receipt_title": "本窗口最近一次成功会议：以下为当次冻结回执和会后即时状态，刷新不重开会议。",
+	"coopcraft.resident_dialog.ration_title": "这位居民的现存口粮记录：按下方核心日核对，会议不会自动送粮。",
+	"coopcraft.command.settlement.meeting_review_changed": "会议预览已变化，请核对刷新后的议题、现场和代价后再点击。本次未开会、未扣工时。"
 }

@@ -35,7 +35,7 @@ public final class ResidentDialogScreen extends Screen {
     }
     private int left() { return Math.max(4, (width - 540) / 2); }
     private int bodyWidth() { return Math.max(24, width - 2 * left()); }
-    private int bottom() { return Math.max(9, height - 92); }
+    private int bottom() { return Math.max(9, height - 116); }
     private int viewportHeight() { return bottom() - 8; }
     private void paragraph(Component text) {
         lines.addAll(font.split(text, Math.max(16, bodyWidth() - 12)));
@@ -45,6 +45,8 @@ public final class ResidentDialogScreen extends Screen {
         lines.clear(); actions.clear();
         paragraph(data.snapshot().title());
         paragraph(Component.translatable("coopcraft.resident_dialog.result", data.message()));
+        paragraph(data.snapshot().gatheringHint());
+        paragraph(Component.translatable("coopcraft.resident_dialog.hold_meeting_hint"));
         paragraph(Component.translatable("coopcraft.resident_dialog.current_information"));
         for (Component line : data.snapshot().lines()) paragraph(line);
         paragraph(data.snapshot().giftHint());
@@ -54,6 +56,7 @@ public final class ResidentDialogScreen extends Screen {
         addAction("gift", Action.GIFT);
         addAction("invite", Action.INVITE);
         addAction("cancel", Action.CANCEL_INVITE);
+        addAction("hold_meeting", Action.HOLD_MEETING);
         addAction("refresh", Action.REFRESH);
         contentHeight = lines.size() * (font.lineHeight + 1);
         int buttonY = Math.max(0, height - 26);
@@ -71,14 +74,15 @@ public final class ResidentDialogScreen extends Screen {
         int index = actions.size();
         int buttonWidth = (bodyWidth() - 4) / 2;
         Button button = Button.builder(label, ignored -> ResidentDialogScreens.action(session, action))
-            .bounds(left() + (index % 2) * (buttonWidth + 4), height - 74 + (index / 2) * 24, buttonWidth, 20)
-            .tooltip(Tooltip.create(label)).build();
+            .bounds(left() + (index % 2) * (buttonWidth + 4), height - 98 + (index / 2) * 24, buttonWidth, 20)
+            .tooltip(Tooltip.create(action == Action.HOLD_MEETING
+                ? Component.translatable("coopcraft.resident_dialog.hold_meeting_hint") : label)).build();
         actions.add(addRenderableWidget(button));
     }
     private void layout() {
         scroll = Math.max(0, Math.min(scroll, Math.max(0, contentHeight - viewportHeight())));
         boolean ready = !ResidentDialogScreens.pending(session);
-        boolean[] enabled = { data.snapshot().canGift(), data.snapshot().canInvite(), data.snapshot().canCancel(), true };
+        boolean[] enabled = { data.snapshot().canGift(), data.snapshot().canInvite(), data.snapshot().canCancel(), data.snapshot().canHoldMeeting(), true };
         for (int i = 0; i < actions.size(); i++) {
             Button button = actions.get(i);
             button.active = ready && enabled[i];
@@ -110,7 +114,7 @@ public final class ResidentDialogScreen extends Screen {
         graphics.disableScissor();
         super.render(graphics, mouseX, mouseY, partialTick);
         if (ResidentDialogScreens.pending(session)) {
-            graphics.drawCenteredString(font, Component.translatable("coopcraft.resident_dialog.pending"), width / 2, Math.max(0, height - 88), 0xFFD080);
+            graphics.drawCenteredString(font, Component.translatable("coopcraft.resident_dialog.pending"), width / 2, Math.max(0, height - 112), 0xFFD080);
         }
     }
     @Override public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {}

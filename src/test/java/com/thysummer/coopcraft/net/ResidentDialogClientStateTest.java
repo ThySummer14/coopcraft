@@ -89,6 +89,24 @@ class ResidentDialogClientStateTest {
         assertEquals(IGNORE, state.accept(packet(ResidentDialogPayload.Kind.UPDATE, id, 2, 0), world, DIM, true, id, true));
         assertTrue(state.pending());
     }
+    @Test void holdMeetingUsesSinglePendingRequestAndClosedUpdateCannotReopen() {
+        open();
+        var request = state.request(id, HOLD_MEETING);
+        assertEquals(HOLD_MEETING, request.action());
+        assertEquals(1, request.requestId());
+        assertNull(state.request(id, HOLD_MEETING));
+        assertNull(state.request(id, REFRESH));
+        assertNull(state.synchronize(world, DIM, true, id)); // resizing keeps the same pending action
+        assertTrue(state.pending());
+        assertEquals(IGNORE, state.accept(packet(ResidentDialogPayload.Kind.UPDATE, id, 0, 1), world, DIM, true, id, true));
+        assertTrue(state.pending());
+        assertEquals(UPDATE, state.accept(packet(ResidentDialogPayload.Kind.UPDATE, id, 1, 1), world, DIM, true, id, true));
+        assertFalse(state.pending());
+        assertEquals(2, state.request(id, HOLD_MEETING).requestId());
+        assertEquals(3, state.terminate(id).requestId());
+        assertEquals(IGNORE, state.accept(packet(ResidentDialogPayload.Kind.UPDATE, id, 2, 2), world, DIM, true, null, false));
+        assertNull(state.sessionId());
+    }
     @Test void serverCloseTerminatesWithoutEcho() {
         open();
         assertEquals(ResidentDialogClientState.Decision.CLOSE, state.accept(packet(ResidentDialogPayload.Kind.CLOSE, id, 1, 0), world, DIM, true, id, true));

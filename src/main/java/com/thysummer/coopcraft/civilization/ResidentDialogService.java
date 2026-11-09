@@ -1,6 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
 import java.util.List;
+import java.util.ArrayList;
 import com.thysummer.coopcraft.CoopCraft;
 import com.thysummer.coopcraft.net.ResidentDialogActionPayload;
 import com.thysummer.coopcraft.net.ResidentDialogPayload;
@@ -32,6 +33,8 @@ public final class ResidentDialogService {
 		final Settlement settlement;
 		final Object member;
 		ResidentDialogPayload lastPayload;
+		SettlementMeetings.Preview observedMeeting;
+		List<Component> lastMeetingReceipt = List.of();
 		Binding(ServerPlayer player, Villager villager, SettlementSavedData data, Settlement settlement, ServerLevel level) {
 			this.player = player; this.villager = villager; this.data = data; this.settlement = settlement; this.level = level;
 			this.member = data.memberIdentity(villager.getUUID());
@@ -100,6 +103,12 @@ public final class ResidentDialogService {
 					String outcome = VillagerWorkGoal.requestMeetingInvitation(player, b.villager, b.data, b.settlement,
 						payload.action() == ResidentDialogActionPayload.Action.CANCEL_INVITE, session.observedInvitation());
 					yield Component.translatable("coopcraft.interaction.meeting." + outcome, safeName(b.villager));
+				}
+				case HOLD_MEETING -> {
+					// Use the review actually sent to this player, not the fresh preflight above.
+					var meeting = SettlementMeetings.holdReviewed(b.level, b.data, b.settlement, player, b.observedMeeting);
+					if (meeting.held()) b.lastMeetingReceipt = ResidentMeetingView.receipt(meeting);
+					yield ResidentMeetingView.status(meeting);
 				}
 				case CLOSE -> throw new IllegalStateException("Close was already handled");
 			};
@@ -187,7 +196,7 @@ public final class ResidentDialogService {
 			&& matchesClaim(SettlementMembershipClaims.resolve(b.level, villager.getUUID()), b.level.dimension(), b.data, b.settlement, b.member);
 	}
 
-	private record Prepared(ResidentDialogPayload.Snapshot snapshot, Object ticket) {}
+	private record Prepared(ResidentDialogPayload.Snapshot snapshot, Object ticket, SettlementMeetings.Preview meeting) {}
 
 	/** No ticket observation, packets, resource changes or invitation lifetime changes. */
 	private static Prepared prepare(ResidentDialogSession<Binding> session) {
@@ -201,12 +210,20 @@ public final class ResidentDialogService {
 		Component meetingHint = ticket != null
 			? (owned ? message("own_invitation") : Component.translatable("coopcraft.interaction.meeting.already_invited", safeName(b.villager)))
 			: canInvite ? message("meeting_hint") : Component.translatable("coopcraft.interaction.meeting." + gate, safeName(b.villager));
-		List<Component> lines = VillagerInteraction.inspectLines(b.player, b.villager, b.settlement, b.data).stream()
+		var meeting = SettlementMeetings.preview(b.level, b.data, b.settlement, b.player);
+		var meetingView = ResidentMeetingView.present(meeting.result());
+		boolean canHold = meetingView.canHold();
+		List<Component> details = new ArrayList<>(b.lastMeetingReceipt);
+		details.addAll(VillagerInteraction.inspectLines(b.player, b.villager, b.settlement, b.data));
+		details.addAll(ResidentMeetingView.rations(b.data, b.settlement, b.villager.getUUID(), safeName(b.villager),
+			b.level.getDayTime() / Level.TICKS_PER_DAY));
+		List<Component> lines = details.stream()
 			.limit(ResidentDialogPayload.MAX_LINES).map(ResidentDialogService::bounded).toList();
 		var snapshot = new ResidentDialogPayload.Snapshot(safeName(b.villager),
-			b.level.dimension().location().toString(), lines, canGift, canInvite, owned,
-			message(canGift ? "gift_hint" : "gift_unavailable"), bounded(meetingHint));
-		return new Prepared(snapshot, ticket);
+			b.level.dimension().location().toString(), lines, canGift, canInvite, owned, canHold,
+			message(canGift ? "gift_hint" : "gift_unavailable"), bounded(meetingHint),
+			meetingView.hint());
+		return new Prepared(snapshot, ticket, canHold ? meeting : null);
 	}
 
 	static boolean giftAvailable(ItemStack currentHand, boolean survival) {
@@ -218,6 +235,7 @@ public final class ResidentDialogService {
 		Prepared prepared = prepare(session);
 		var payload = new ResidentDialogPayload(kind, session.token, session.revision(), session.acknowledgedRequest(), prepared.snapshot(), bounded(result));
 		session.observeInvitation(prepared.ticket());
+		b.observedMeeting = prepared.meeting();
 		b.lastPayload = payload;
 		ServerPlayNetworking.send(b.player, payload);
 	}
@@ -243,6 +261,8 @@ public final class ResidentDialogService {
 		Binding b = session.binding;
 		if (!SESSIONS.remove(b.player.getUUID(), session)) return;
 		b.lastPayload = null;
+		b.observedMeeting = null;
+		b.lastMeetingReceipt = List.of();
 		if (session.revision() < Long.MAX_VALUE) session.nextRevision();
 		if (!notify || b.level.getServer().getPlayerList().getPlayer(b.player.getUUID()) != b.player) return;
 		try {

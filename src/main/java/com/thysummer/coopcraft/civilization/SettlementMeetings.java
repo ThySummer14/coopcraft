@@ -44,7 +44,77 @@ public final class SettlementMeetings {
 		}
 	}
 
-	private record Inspection(Result result, SettlementSimulationState state, List<Person> active, List<Person> present) {}
+	record Inspection(Result result, SettlementSimulationState state, List<Person> active, List<Person> present,
+		NormSystem.MeetingReview review) {}
+
+	/** Retained only by the server-side dialog session; clients cannot supply the stamp. */
+	static final class Preview {
+		private final Result result;
+		private final ReviewStamp stamp;
+		private Preview(Result result, ReviewStamp stamp) { this.result = result; this.stamp = stamp; }
+		Result result() { return result; }
+	}
+
+	record SceneIdentity(Object level, Object organizer, Object binding, BlockPos store,
+		Object container, Object partner, List<Object> residents, long gameDay) {
+		SceneIdentity { residents = List.copyOf(residents); }
+	}
+	private record ReviewStamp(SettlementSavedData data, Settlement settlement, SettlementSimulationState state,
+		long modeVersion, long lastSurvivalDay, SceneIdentity scene, List<Person> present, NormSystem.MeetingReview review,
+		SettlementMeetingFeedback.Agenda agenda) {}
+
+	static Preview preview(ServerLevel level, SettlementSavedData data, Settlement settlement, ServerPlayer player) {
+		Inspection inspection = inspectScene(level, data, settlement, player);
+		return preview(data, settlement, inspection, sceneIdentity(level, data, settlement, player, inspection));
+	}
+
+	static Result holdReviewed(ServerLevel level, SettlementSavedData data, Settlement settlement,
+		ServerPlayer player, Preview expected) {
+		Inspection inspection = inspectScene(level, data, settlement, player);
+		return holdReviewed(data, settlement, inspection,
+			sceneIdentity(level, data, settlement, player, inspection), expected);
+	}
+
+	// Production and tests share the pre-mutation review gate and actual meeting execution.
+	static Preview preview(SettlementSavedData data, Settlement settlement, Inspection inspection, SceneIdentity scene) {
+		if (!inspection.result().status().equals("ready")) return new Preview(inspection.result(), null);
+		SettlementSimulationState state = inspection.state();
+		return new Preview(inspection.result(), new ReviewStamp(data, settlement, state, state.foodRequestModeVersion(),
+			state.lastSurvivalDay(), scene, List.copyOf(inspection.present()), inspection.review(), inspection.result().feedback().agenda().orElse(null)));
+	}
+
+	static Result holdReviewed(SettlementSavedData data, Settlement settlement, Inspection inspection,
+		SceneIdentity scene, Preview expected) {
+		if (!inspection.result().status().equals("ready")) return inspection.result();
+		Preview current = preview(data, settlement, inspection, scene);
+		if (expected == null || expected.stamp == null || !expected.stamp.equals(current.stamp)) {
+			return blocked("review_changed", inspection.state(), inspection.result().location()).result();
+		}
+		return execute(data, inspection);
+	}
+
+	/** Membership records have value equality, but remove/rejoin must invalidate a prior review. */
+	static record ResidentIdentity(SettlementMember member, Object entity) {
+		@Override public boolean equals(Object other) {
+			return other instanceof ResidentIdentity identity && member == identity.member && entity == identity.entity;
+		}
+		@Override public int hashCode() {
+			return 31 * System.identityHashCode(member) + System.identityHashCode(entity);
+		}
+	}
+
+	private static SceneIdentity sceneIdentity(ServerLevel level, SettlementSavedData data, Settlement settlement,
+		ServerPlayer player, Inspection inspection) {
+		if (!inspection.result().status().equals("ready")) return null;
+		BlockPos store = data.getStockpile(settlement).orElseThrow();
+		var block = level.getBlockState(store);
+		Object partner = block.getBlock() instanceof ChestBlock && block.getValue(ChestBlock.TYPE) != ChestType.SINGLE
+			? level.getBlockEntity(store.relative(ChestBlock.getConnectedDirection(block))) : null;
+		List<Object> entities = data.membersOf(settlement).stream()
+			.map(member -> (Object) new ResidentIdentity(member, level.getEntity(member.villagerId()))).toList();
+		return new SceneIdentity(level, player, data.stockpileBindingToken(settlement), store,
+			level.getBlockEntity(store), partner, entities, level.getDayTime() / Level.TICKS_PER_DAY);
+	}
 
 	public static Result inspect(ServerLevel level, SettlementSavedData data, Settlement settlement, ServerPlayer player) {
 		return inspectScene(level, data, settlement, player).result();
@@ -53,6 +123,10 @@ public final class SettlementMeetings {
 	public static Result hold(ServerLevel level, SettlementSavedData data, Settlement settlement, ServerPlayer player) {
 		Inspection inspection = inspectScene(level, data, settlement, player);
 		if (!inspection.result().status().equals("ready")) return inspection.result();
+		return execute(data, inspection);
+	}
+
+	private static Result execute(SettlementSavedData data, Inspection inspection) {
 		SettlementSimulationState state = inspection.state();
 		// The command, entity lookup and deliberation are synchronous on the same server thread.
 		NormSystem.MeetingResult discussion = state.norms().holdCommonStoreMeeting(inspection.active(),
@@ -97,10 +171,11 @@ public final class SettlementMeetings {
 				villager.distanceToSqr(store.getCenter())).eligible();
 		}).map(Map.Entry::getValue).toList();
 		List<Person> population = List.copyOf(active.values());
-		NormSystem.MeetingResult discussion = state.norms().inspectCommonStoreMeeting(population, present, state.campOwner().id());
+		NormSystem.MeetingReview review = state.norms().reviewCommonStoreMeeting(population, present, state.campOwner().id());
+		NormSystem.MeetingResult discussion = review.result();
 		Result result = new Result(discussion.status(), state.world().day(), state.norms().lastMeetingDay(state.campOwner().id()),
 			location, discussion, SettlementMeetingFeedback.inspect(state, discussion));
-		return new Inspection(result, state, population, present);
+		return new Inspection(result, state, population, present, review);
 	}
 
 	private static boolean storeHalvesTicking(ServerLevel level, BlockPos store) {
@@ -119,6 +194,6 @@ public final class SettlementMeetings {
 		long last = state == null ? Long.MIN_VALUE : state.norms().lastMeetingDay(state.campOwner().id());
 		var discussion = new NormSystem.MeetingResult(status, "", 0, 0, 0, "");
 		return new Inspection(new Result(status, day, last, location, discussion,
-			SettlementMeetingFeedback.inspect(state, discussion)), state, List.of(), List.of());
+			SettlementMeetingFeedback.inspect(state, discussion)), state, List.of(), List.of(), null);
 	}
 }
