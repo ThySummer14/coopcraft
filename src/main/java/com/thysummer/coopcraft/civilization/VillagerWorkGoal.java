@@ -883,8 +883,9 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean shouldEat() {
-		return (settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
-			&& hasFoodAvailable()) || hasPendingFoodRefusal();
+		return SettlementFoodAccess.shouldEat(settlementData(), settlement, villager.getUUID(),
+			villager.level().getDayTime() / net.minecraft.world.level.Level.TICKS_PER_DAY,
+			settlementData().needsOf(settlement, villager.getUUID()).satiety(), hasFoodAvailable());
 	}
 
 	private boolean hasPendingFoodRefusal() {

@@ -2,6 +2,7 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import com.thysummer.coopcraft.net.ResidentDialogPayload;
 import net.minecraft.network.chat.Component;
@@ -81,10 +82,18 @@ final class ResidentMeetingView {
 			lines.add(command("meeting_day_pending"));
 		lines.add(SettlementCommands.rationMessage(new SettlementCommands.RationRow(name, row)));
 		lines.add(command("rations_explanation"));
+		SettlementFoodAccess.inspect(data, settlement, resident, gameDay).ifPresent(access -> {
+			lines.add(message("quota_refusal", access.coreDay(), access.refusalEventId(),
+				access.refusedAllocatedUnits(), access.refusedCap()));
+			lines.add(message("quota_refusal_context", access.refusedHunger(), access.refusedAvailableNutrition()));
+			lines.add(message("quota_retry_" + access.status().name().toLowerCase(Locale.ROOT)));
+		});
 		return List.copyOf(lines);
 	}
 
-	private static Component message(String suffix) { return Component.translatable("coopcraft.resident_dialog." + suffix); }
+	private static Component message(String suffix, Object... arguments) {
+		return Component.translatable("coopcraft.resident_dialog." + suffix, arguments);
+	}
 	private static Component command(String suffix, Object... arguments) {
 		return Component.translatable("coopcraft.command.settlement." + suffix, arguments);
 	}

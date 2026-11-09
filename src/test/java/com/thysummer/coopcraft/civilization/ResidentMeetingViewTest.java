@@ -95,6 +95,8 @@ class ResidentMeetingViewTest {
         var stock = f.state.world().inventoryTotals();
         var first = result(f, true);
         var receipt = ResidentMeetingView.receipt(first);
+        assertTrue(receipt.size() <= 12, "Keep the full-window ration feedback budget intact");
+        assertTrue(VillagerMeetingInquiry.inspect(f.data, f.settlement, id(1), 0).size() <= 4);
         var frozen = receipt.stream().map(Component::copy).toList();
         assertEquals("held", first.status());
         assertEquals(1, first.discussion().round());
@@ -104,6 +106,7 @@ class ResidentMeetingViewTest {
         f.state.norms().startDay(f.people()); f.state.world().advanceDay(); f.state.markSurvivalDay(1);
         assertEquals(3, SettlementRations.inspect(f.data, f.settlement).getFirst().dailyUnitCap());
         var second = result(f, true);
+        assertTrue(ResidentMeetingView.receipt(second).size() <= 12);
         assertEquals("adopted", second.discussion().outcome());
         assertEquals(2, SettlementRations.inspect(f.data, f.settlement).getFirst().dailyUnitCap());
         assertEquals(stock, f.state.world().inventoryTotals());

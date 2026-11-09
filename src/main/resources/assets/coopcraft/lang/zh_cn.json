@@ -486,5 +486,15 @@
 	"coopcraft.resident_dialog.gathering_unreviewable": "无法完整核验待议内容，请刷新后重试。本次未开会。",
 	"coopcraft.resident_dialog.receipt_title": "本窗口最近一次成功会议：以下为当次冻结回执和会后即时状态，刷新不重开会议。",
 	"coopcraft.resident_dialog.ration_title": "这位居民的现存口粮记录：按下方核心日核对，会议不会自动送粮。",
-	"coopcraft.command.settlement.meeting_review_changed": "会议预览已变化，请核对刷新后的议题、现场和代价后再点击。本次未开会、未扣工时。"
+	"coopcraft.command.settlement.meeting_review_changed": "会议预览已变化，请核对刷新后的议题、现场和代价后再点击。本次未开会、未扣工时。",
+	"coopcraft.resident_dialog.quota_refusal": "同一核心日%s的拒绝事件#%s：当时已领%s/%s件，因当日份额用尽被拒。",
+	"coopcraft.resident_dialog.quota_refusal_context": "冻结记录：当时饥饿%s，公仓可用营养%s；这些不是当前值。",
+	"coopcraft.resident_dialog.quota_retry_ready": "当前份额已提高且有存粮，可再次尝试到仓取粮；仍须实际抵达、排队并复核库存，不保证领取成功。",
+	"coopcraft.resident_dialog.quota_retry_day_pending": "再次尝试条件尚待当前游戏日结算；不能用旧核心日的拒绝记录提前补领。",
+	"coopcraft.resident_dialog.quota_retry_rules_disabled": "当前生存或规范映射已关闭，不根据此拒绝记录增加进食尝试。",
+	"coopcraft.resident_dialog.quota_retry_satisfied": "当前已达到进食目标，不因提高份额额外进食。",
+	"coopcraft.resident_dialog.quota_retry_cap_not_raised": "当前份额未高于被拒时的上限，尚不具备因提高份额而再次尝试的条件。",
+	"coopcraft.resident_dialog.quota_retry_allocation_mismatch": "当前已领记录无法与当时被拒的件数核对，不凭这条历史追加进食尝试。",
+	"coopcraft.resident_dialog.quota_retry_allowance_spent": "提高后的当日份额也已用尽，不能凭旧拒绝记录反复补领。",
+	"coopcraft.resident_dialog.quota_retry_no_food": "当前份额已有增加，但公仓没有可用食物营养；有粮后才会再次尝试。"
 }
