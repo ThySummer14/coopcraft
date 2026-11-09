@@ -54,6 +54,8 @@ public class VillagerWorkGoal extends Goal {
 	private int approachIndex;
 	private long forageCooldownUntil;
 	private SettlementFoodRequests.Ticket foodTicket;
+	private SettlementMeetingInvitations.Ticket meetingTicket;
+	private BlockPos meetingStore;
 
 	public VillagerWorkGoal(Villager villager) {
 		this.villager = villager;
@@ -62,6 +64,7 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public boolean canUse() {
+		refreshMeetingInvitation();
 		Optional<Settlement> workSettlement = findWorkSettlement();
 		if (workSettlement.isEmpty()) {
 			action = null;
@@ -80,6 +83,12 @@ public class VillagerWorkGoal extends Goal {
 			target = settlementData().getStockpile(settlement).orElse(null);
 			progress = 0;
 			return target != null;
+		}
+		if (meetingTicket != null && action != null && action != Action.ATTEND_MEETING && isTargetValid()) return true;
+		if (meetingTicket != null) {
+			action = Action.ATTEND_MEETING;
+			target = meetingStore;
+			return true;
 		}
 		if (villager.isBaby()) {
 			action = null;
@@ -126,6 +135,7 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public boolean canContinueToUse() {
+		refreshMeetingInvitation();
 		return action != null && isTargetValid() && findWorkSettlement().isPresent();
 	}
 
@@ -133,11 +143,13 @@ public class VillagerWorkGoal extends Goal {
 	public void start() {
 		progress = 0;
 		travelTicks = 0;
-		navigateToTarget();
+		if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
+		else navigateToTarget();
 	}
 
 	@Override
 	public void stop() {
+		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
 		if (foodTicket != null) foodTicket.cancel();
 		foodTicket = null;
 		action = null;
@@ -150,6 +162,174 @@ public class VillagerWorkGoal extends Goal {
 		searchCooldown = 0;
 		travelTicks = 0;
 		villager.getNavigation().stop();
+	}
+
+	private static VillagerWorkGoal goalOf(Villager villager) {
+		for (var wrapped : ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals()) {
+			if (wrapped.getGoal() instanceof VillagerWorkGoal goal) return goal;
+		}
+		return null;
+	}
+
+	static String inviteToMeeting(net.minecraft.server.level.ServerPlayer player, Villager villager,
+		SettlementSavedData data, Settlement settlement) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "unavailable";
+		return goal.toggleInvitation(player, data, settlement);
+	}
+
+	static void cancelMeetingInvitation(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal != null) {
+			if (goal.action == Action.ATTEND_MEETING) goal.stop();
+			else goal.cancelMeetingInvitation();
+		}
+	}
+
+	static String invitationStatus(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "none";
+		if (!goal.hasValidInvitation()) return "none";
+		if (goal.meetingTicket.waiting()) return "waiting";
+		return goal.action == Action.ATTEND_MEETING ? "travelling" : "pending";
+	}
+
+	private String toggleInvitation(net.minecraft.server.level.ServerPlayer player, SettlementSavedData data, Settlement requested) {
+		if (!(villager.level() instanceof ServerLevel level) || player.level() != level
+			|| !player.isAlive() || player.isRemoved() || player.isSpectator() || !villager.isAlive()
+			|| player.distanceToSqr(villager) > 16) return "unavailable";
+		refreshMeetingInvitation();
+		if (meetingTicket != null) {
+			if (SettlementMeetingInvitations.existing(meetingTicket, player.getUUID()).equals("already_invited")) return "already_invited";
+			if (action == Action.ATTEND_MEETING) stop();
+			else cancelMeetingInvitation();
+			return "cancelled";
+		}
+		String gate = SettlementMeetingInvitations.gate(data, requested, villager.getUUID(), level.getDayTime() / 24000L);
+		if (!gate.equals("ready")) return gate;
+		if (action == Action.EAT || foodTicket != null) return "eating";
+		BlockPos store = data.getStockpile(requested).orElse(null);
+		if (store == null || !level.isLoaded(store) || !level.isPositionEntityTicking(store)) return "store_unavailable";
+		Map<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> identities = new java.util.LinkedHashMap<>();
+		Map<BlockPos, BlockState> states = new java.util.LinkedHashMap<>();
+		states.put(store, level.getBlockState(store));
+		if (!(states.get(store).is(Blocks.CHEST) || states.get(store).is(Blocks.BARREL))) return "store_unavailable";
+		if (states.get(store).getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+			&& states.get(store).getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+				!= net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+			BlockPos partner = store.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(states.get(store)));
+			if (!level.isLoaded(partner) || !level.isPositionEntityTicking(partner)) return "store_unavailable";
+			states.put(partner, level.getBlockState(partner));
+		}
+		for (BlockPos pos : states.keySet()) {
+			var entity = level.getBlockEntity(pos);
+			if (entity == null || entity.isRemoved() || entity.getLevel() != level) return "store_unavailable";
+			identities.put(pos, entity);
+		}
+		meetingTicket = SettlementMeetingInvitations.create(data, requested, villager.getUUID(), player.getUUID(),
+			level.getGameTime(), level.getDayTime() / 24000L, () -> SettlementSavedData.get(level) == data
+				&& new SettlementMeetingInvitations.Presence(villager.isAlive() && !villager.isRemoved(),
+					level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition()),
+					level.isPositionEntityTicking(villager.blockPosition()), villager.level() == level,
+					!villager.isBaby(), !villager.isNoAi(), !villager.isSleeping(), !villager.isTrading(),
+					!villager.isPassenger(), villager.hurtTime == 0 && villager.getHealth() >= villager.getMaxHealth(),
+					action != Action.EAT && foodTicket == null, villager.distanceToSqr(requested.center().getCenter())).eligible()
+				&& player.level() == level && player.isAlive() && !player.isRemoved() && !player.isSpectator()
+				&& level.getServer().getPlayerList().getPlayer(player.getUUID()) == player
+				&& SettlementMeetingInvitations.withinSettlement(player.distanceToSqr(requested.center().getCenter()))
+				&& (meetingTicket == null || !meetingTicket.waiting()
+					|| SettlementMeetingInvitations.arrived(villager.distanceToSqr(store.getCenter())))
+				&& data.getStockpile(requested).filter(store::equals).isPresent()
+				&& identities.entrySet().stream().allMatch(entry -> level.isLoaded(entry.getKey())
+					&& level.isPositionEntityTicking(entry.getKey()) && level.getBlockEntity(entry.getKey()) == entry.getValue()
+					&& !entry.getValue().isRemoved() && entry.getValue().getLevel() == level)
+				&& states.entrySet().stream().allMatch(entry -> SettlementFoodRequests.sameStoreState(entry.getValue(), level.getBlockState(entry.getKey())))
+				&& SettlementStockpile.getStockpile(level, data, requested) != null);
+		if (meetingTicket == null) return "unavailable";
+		meetingStore = store;
+		return "accepted";
+	}
+
+	private void cancelMeetingInvitation() {
+		if (meetingTicket != null) meetingTicket.cancel();
+		meetingTicket = null;
+		meetingStore = null;
+	}
+
+	private boolean hasValidInvitation() {
+		return meetingTicket != null && meetingStore != null && villager.level() instanceof ServerLevel level
+			&& SettlementMeetingInvitations.waitingPositionValid(meetingTicket.waiting(), villager.distanceToSqr(meetingStore.getCenter()))
+			&& meetingTicket.matches(SettlementSavedData.get(level), level.getGameTime(), level.getDayTime() / 24000L);
+	}
+
+	private void refreshMeetingInvitation() {
+		if (meetingTicket == null) return;
+		if (!(villager.level() instanceof ServerLevel level)
+			|| !meetingTicket.valid(SettlementSavedData.get(level), level.getGameTime(), level.getDayTime() / 24000L)) {
+			cancelMeetingInvitation();
+			if (action == Action.ATTEND_MEETING) stop();
+		}
+	}
+
+	private void tickMeeting() {
+		if (meetingTicket == null || target == null) { stop(); return; }
+		ServerLevel level = (ServerLevel) villager.level();
+		boolean arrived = SettlementMeetingInvitations.arrived(villager.distanceToSqr(target.getCenter()));
+		if (!SettlementMeetingInvitations.waitingPositionValid(meetingTicket.waiting(), villager.distanceToSqr(target.getCenter()))) { stop(); return; }
+		if (arrived) {
+			villager.getNavigation().stop();
+			villager.getLookControl().setLookAt(target.getCenter());
+			meetingTicket.arrive(level.getGameTime());
+			return;
+		}
+		if (++travelTicks >= SettlementMeetingInvitations.MAX_TRAVEL_TICKS || !meetingPathTicking()) { stop(); return; }
+		if (!villager.getNavigation().isDone()) return;
+		if (travelTicks > 1 || !meetingSearchRegionLoaded()) { stop(); return; }
+		for (int vertical : new int[] {0, 1, -1}) {
+			for (Direction direction : Direction.Plane.HORIZONTAL) {
+				BlockPos candidate = target.relative(direction).above(vertical);
+				if (!level.isLoaded(candidate) || !level.isLoaded(candidate.above()) || !level.isLoaded(candidate.below())
+					|| !level.isPositionEntityTicking(candidate) || !level.isPositionEntityTicking(candidate.above())
+					|| !level.isPositionEntityTicking(candidate.below())
+					|| !level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
+					|| !level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
+					|| !level.getBlockState(candidate).getFluidState().isEmpty()
+					|| !level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) continue;
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach()) continue;
+				boolean safe = true;
+				for (int i = 0; i < path.getNodeCount(); i++) {
+					if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) { safe = false; break; }
+				}
+				if (safe && villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())) return;
+			}
+		}
+		stop();
+	}
+
+	/** PathNavigation builds a chunk-backed search region before returning any nodes. */
+	private boolean meetingSearchRegionLoaded() {
+		ServerLevel level = (ServerLevel) villager.level();
+		double followRange = villager.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
+		if (!Double.isFinite(followRange) || followRange < 0 || followRange > 256) return false;
+		int radius = (int) Math.ceil(followRange) + 16;
+		BlockPos origin = villager.blockPosition();
+		for (int x = (origin.getX() - radius) >> 4; x <= (origin.getX() + radius) >> 4; x++) {
+			for (int z = (origin.getZ() - radius) >> 4; z <= (origin.getZ() + radius) >> 4; z++) {
+				if (!level.isLoaded(new BlockPos(x << 4, origin.getY(), z << 4))) return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean meetingPathTicking() {
+		var path = villager.getNavigation().getPath();
+		if (path == null) return true;
+		ServerLevel level = (ServerLevel) villager.level();
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) return false;
+		}
+		return true;
 	}
 
 	String debugState() {
@@ -174,6 +354,9 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	public WorkStatus status() {
+		if (action == Action.ATTEND_MEETING && !hasValidInvitation()) return new WorkStatus("idle", null, null);
+		if (action == Action.ATTEND_MEETING && meetingTicket != null)
+			return new WorkStatus(meetingTicket.waiting() ? "meeting_wait" : "attend_meeting", meetingStore, null);
 		if (action != null) {
 			if (foodTicket != null && foodTicket.waiting()) return new WorkStatus("eat", target, "food_request_waiting");
 			if (action == Action.EAT && !hasFoodAvailable() && !hasPendingFoodRefusal()) {
@@ -232,6 +415,9 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void tick() {
+		refreshMeetingInvitation();
+		if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
+		if (action == null) return;
 		if (foodTicket != null) {
 			villager.getNavigation().stop();
 			if (!foodTicket.waiting()) {
@@ -284,6 +470,7 @@ public class VillagerWorkGoal extends Goal {
 			);
 			case POLISH_PICKAXE -> craftPolishedPickaxe();
 			case GRIND_SMOOTH_STONE -> grindSmoothStone();
+			case ATTEND_MEETING -> { return; }
 			case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 		}
 		if (action == Action.EAT && isTargetValid()) {
@@ -640,6 +827,7 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
+		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
 		if (action == Action.FORAGE) {
 			return SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
 		}
@@ -1044,6 +1232,7 @@ public class VillagerWorkGoal extends Goal {
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),
+		ATTEND_MEETING("attend_meeting"),
 		EAT("eat");
 
 		private final String id;

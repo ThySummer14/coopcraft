@@ -35,6 +35,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, FoodReserveTarget> foodReserveTargets = new LinkedHashMap<>();
 	private final Map<BlockPos, Settlement> settlements = new LinkedHashMap<>();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
+	private final Map<UUID, Object> stockpileBindings = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> stockpiles = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> hearths = new LinkedHashMap<>();
 	private final Map<UUID, Set<BlockPos>> resourceSites = new LinkedHashMap<>();
@@ -266,7 +267,14 @@ public final class SettlementSavedData extends SavedData {
 		return Optional.ofNullable(stockpiles.get(settlement.id()));
 	}
 
+	Object memberIdentity(UUID resident) { return members.get(resident); }
+
+	Object stockpileBindingToken(Settlement settlement) {
+		return stockpileBindings.get(settlement.id());
+	}
+
 	public void setStockpile(Settlement settlement, BlockPos pos) {
+		stockpileBindings.put(settlement.id(), new Object());
 		foodRequests.cancel(settlement);
 		stockpiles.put(settlement.id(), pos.immutable());
 		setDirty();

@@ -54,6 +54,9 @@ public final class Civilization {
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
 		ServerTickEvents.END_SERVER_TICK.register(Civilization::tick);
+		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
+			if (entity instanceof Villager villager) VillagerWorkGoal.cancelMeetingInvitation(villager);
+		});
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
 			if (entity instanceof Villager villager) {
 				GoalSelector goals = ((MobAccessor) villager).getGoalSelector();
