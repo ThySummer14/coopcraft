@@ -605,3 +605,5 @@
 - 无NBT或dirty变动，未运行Minecraft客户端、服务器或GameTest。有界操作次数对照与最终自动验证结果以下方CI为准，详见construction-survey-cost.md。
 
 - 新增11项JUnit源码，覆盖同刻多调用/19与20tick、世界恢复/成功不缓存、诊断即时且不续期、中心/ID/指纹与同内容重载、实例隔离/中心快照、long边界、1024 FIFO、NBT/dirty/计划材料不变、旧job跳过，以及10聚落×20调用的未知/已加载受控地形计数对照。精确计数已做独立几何算术核对，正式Java执行结果以下方CI为准；测试没有执行真实居民调度或缺料世界流程。
+
+- 验证完成：提交 `3d189336` 的[失败选址重试构建](https://github.com/ThySummer14/coopcraft/actions/runs/42587720238)通过完整build和894项JUnit，0失败/0跳过，新增11项全部通过。实际JUnit计数日志中，10聚落×20次木屋失败查询state为652,800→32,640，inBounds/ticking各为2,798,400→139,920；石屋与未知地形对照也验证1/20非零调用量，详情见construction-survey-cost.md，不能解释为95%的TPS收益。206行配给与48行多人顺序CSV同未变核心的上轮结果逐字一致。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42587720238/artifacts/13659513337)内 `coopcraft-0.1.0.jar` 为900738字节，SHA-256 `0547ee545d0edad6a48fe225bf45d00113ea933e0ee34d2b5811f757917b4a67`；已解包确认新重试类及未变木屋/旧石屋蓝图。未启动Minecraft客户端、服务器或GameTest；多聚落同步峰值、实际AI/世界响应与真实性能仍待验收。没有新增NBT、物品事务或旧job迁移，升级前仍备份，并保留第三十九增量新事件写入后的不可降级限制。
