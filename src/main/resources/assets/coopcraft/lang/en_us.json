@@ -338,5 +338,14 @@
 	"coopcraft.command.settlement.construction_adopt_position": "%s | position %s",
 	"coopcraft.interaction.blocker.construction_plan_unverified": "Paused: legacy job has no verified blueprint signature",
 	"coopcraft.interaction.blocker.construction_plan_changed": "Paused: blueprint differs from the saved signature; restore the original blueprint",
-	"coopcraft.command.settlement.construction_compatible": "Blueprint signature matches; this does not check the next position or materials."
+	"coopcraft.command.settlement.construction_compatible": "Blueprint signature matches; this does not check the next position or materials.",
+	"coopcraft.command.settlement.reserves_changed": "Settlement reserve target changed by the player; this is not a resident-negotiated decision.",
+	"coopcraft.command.settlement.reserves_unchanged": "Reserve target unchanged.",
+	"coopcraft.command.settlement.reserves_normal": "NORMAL",
+	"coopcraft.command.settlement.reserves_high": "HIGH",
+	"coopcraft.command.settlement.reserves_nutrition": "survival mode: communal nutrition (1 food point = 5 nutrition)",
+	"coopcraft.command.settlement.reserves_points": "physical mode: communal food points",
+	"coopcraft.command.settlement.reserves_unavailable": "unavailable",
+	"coopcraft.command.settlement.reserves_status": "%s | Target %s; %s registered residents × %s food points each | %s | Current %s / target %s / shortfall %s",
+	"coopcraft.command.settlement.reserves_hint": "HIGH keeps assigned foragers gathering longer, leaving less time for other existing work. Applies only at the next work choice; no interruption, and the last harvest can exceed the target. Fewer than 3 loaded adults have no forager role. This target neither reserves nor guarantees food; emergency foraging and daily rations are unchanged."
 }

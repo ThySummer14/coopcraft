@@ -27,7 +27,7 @@ class SettlementBerryHarvestTest {
 	private static final class Attempt {
 		SettlementSavedData data = new SettlementSavedData();
 		final Settlement settlement = data.getOrCreate(BlockPos.ZERO, "Berries", 0);
-		final UUID actor = new UUID(24, 1);
+		UUID actor = new UUID(24, 1);
 		final SimpleContainer inventory;
 		boolean adult = true, loaded = true, ticking = true, writeSucceeds = true;
 		int loadedReads, tickingReads, blockReads, lootReads, writes;
@@ -190,6 +190,63 @@ class SettlementBerryHarvestTest {
 					assertEquals(simulation ? 1 : 0, state.world().ledger().events().stream().filter(e -> e.type() == EventType.SKILL_PRACTICED).count());
 					state.world().assertConservation();
 				}
+			}
+		}
+	}
+	@Test void sameStockStopsNormalButHighChoosesActualHarvestWithoutDuplicatingProduction() {
+		for (boolean simulation : List.of(false, true)) {
+			Attempt a = new Attempt(4);
+			for (UUID resident : List.of(new UUID(24, 2), new UUID(24, 3))) a.data.registerMember(a.settlement, resident, 0);
+			// Model three loaded adults through the same allocator used by the Goal, without spawning entities.
+			var workers = a.data.membersOf(a.settlement).stream()
+				.map(member -> new LaborAllocator.Worker(member.villagerId(), member.personality())).toList();
+			var roles = LaborAllocator.allocate(workers);
+			a.actor = roles.entrySet().stream().filter(e -> e.getValue() == WorkRole.FORAGER).findFirst().orElseThrow().getKey();
+			WorkRole role = roles.get(a.actor);
+			if (simulation) {
+				for (var worker : workers) a.simulation().mapResident(worker.id(), false, 80);
+				a.simulation().setSurvivalEnabled(true, 0);
+				a.simulation().setProductionEnabled(true);
+				a.simulation().setSkillsEnabled(true);
+				assertTrue(a.simulation().world().person(a.simulation().residentId(a.actor).orElseThrow()).hunger() < 65);
+			}
+			SimpleContainer chest = new SimpleContainer(2);
+			if (simulation) a.simulation().world().importExternalBatch(ResourceType.WILD_FRUIT, 10, a.simulation().campOwner());
+			else chest.setItem(0, berries(40));
+			var before = a.data.save(new CompoundTag(), null);
+			assertFalse(SettlementForaging.needsForage(true, role,
+				() -> SettlementForaging.reserveLow(a.data, a.settlement, chest), 200, 200));
+			assertEquals(0, a.lootReads); assertEquals(0, a.writes);
+			assertEquals(before, a.data.save(new CompoundTag(), null));
+			SettlementReserves.setTarget(a.data, a.settlement, FoodReserveTarget.HIGH);
+			int harvests = simulation ? 2 : 3;
+			for (int harvest = 0; harvest < harvests; harvest++) {
+				assertTrue(SettlementForaging.needsForage(true, role,
+					() -> SettlementForaging.reserveLow(a.data, a.settlement, chest), 200, 200));
+				assertTrue(SettlementForaging.canForage(a.data, a.settlement));
+				a.block = bush(3); // A separate ripe bush, ordinary three-berry loot.
+				assertEquals(3, a.run(berries(3)));
+				assertEquals(bush(1), a.block);
+				if (!simulation) SettlementStockpile.depositItem(chest, a.inventory, Items.SWEET_BERRIES);
+				assertTrue(a.inventory.isEmpty());
+			}
+			assertEquals(harvests, a.writes);
+			if (simulation) {
+				assertEquals(16L, a.simulation().world().inventoryTotals().get(ResourceType.WILD_FRUIT).longValue());
+				assertEquals(harvests, a.simulation().world().ledger().events().stream().filter(e -> e.type() == EventType.SKILL_PRACTICED).count());
+				a.simulation().world().assertConservation();
+			} else {
+				assertEquals(49, chest.countItem(Items.SWEET_BERRIES));
+				assertTrue(a.data.simulationOf(a.settlement).isEmpty());
+			}
+			assertFalse(SettlementForaging.needsForage(true, role,
+				() -> SettlementForaging.reserveLow(a.data, a.settlement, chest), 200, 200));
+			for (int reload = 0; reload < 2; reload++) {
+				var saved = a.data.save(new CompoundTag(), null);
+				a.data = SettlementSavedData.load(saved, null);
+				assertEquals(saved, a.data.save(new CompoundTag(), null));
+				assertEquals(FoodReserveTarget.HIGH, a.data.foodReserveTargetOf(a.settlement));
+				if (simulation) a.data.simulationOf(a.settlement).orElseThrow().world().assertConservation();
 			}
 		}
 	}

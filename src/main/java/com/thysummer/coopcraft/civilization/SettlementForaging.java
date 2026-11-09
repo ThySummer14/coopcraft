@@ -24,7 +24,6 @@ public final class SettlementForaging {
 	private static final int SEARCH_RADIUS = 12;
 	private static final int SEARCH_VERTICAL_RADIUS = 4;
 	private static final int RIPE_AGE = 2;
-	private static final int FOOD_RESERVE_POINTS_PER_MEMBER = 8;
 
 	private SettlementForaging() {
 	}
@@ -38,14 +37,15 @@ public final class SettlementForaging {
 		return (!hasFood || reserveLow) && gameTime >= cooldownUntil;
 	}
 
+	static boolean needsForage(boolean hasFood, WorkRole role, BooleanSupplier reserveLow, long gameTime, long cooldownUntil) {
+		return needsForage(hasFood, role == WorkRole.FORAGER && reserveLow.getAsBoolean(), gameTime, cooldownUntil);
+	}
+
 	static boolean reserveLow(SettlementSavedData data, Settlement settlement, Container stockpile) {
-		long target = (long) data.registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
-		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
-		if (state != null && state.survivalEnabled()) {
-			// Legacy points restore five satiety; abstract food already stores nutrition.
-			return state.world().availableNutrition(state.campOwner()) < target * 5;
-		}
-		return SettlementStockpile.communalFoodPoints(stockpile) < target;
+		SettlementReserves.Snapshot snapshot = SettlementReserves.inspect(data, settlement, stockpile);
+		// Preserve the existing preventive-work behavior when a physical store cannot be resolved.
+		// Reporting keeps it unknown; this is not an assertion that its actual stock is zero.
+		return snapshot.current().orElse(0) < snapshot.goal();
 	}
 
 	static boolean isRipe(BlockState state) {

@@ -63,6 +63,13 @@ public final class SettlementCommands {
 			.then(LiteralArgumentBuilder.<S>literal("adopt").requires(admin)
 				.then(RequiredArgumentBuilder.<S, String>argument("fingerprint", StringArgumentType.word())
 					.executes(ctx -> handler.run(ctx, "construction", "adopt")))));
+		var reserves = LiteralArgumentBuilder.<S>literal("reserves")
+			.executes(ctx -> handler.run(ctx, "reserves", ""));
+		for (FoodReserveTarget target : FoodReserveTarget.values()) {
+			reserves.then(LiteralArgumentBuilder.<S>literal(target.id()).requires(admin)
+				.executes(ctx -> handler.run(ctx, "reserves", target.id())));
+		}
+		settlement.then(reserves);
 		var simulation = LiteralArgumentBuilder.<S>literal("simulation").requires(admin);
 		for (String feature : FEATURES) {
 			simulation.then(LiteralArgumentBuilder.<S>literal(feature)
@@ -108,6 +115,10 @@ public final class SettlementCommands {
 			}
 			return 1;
 		}
+		if (action.equals("reserves") && option.isEmpty()) {
+			showReserves(source, level, data, settlement);
+			return 1;
+		}
 		if (action.equals("rations")) {
 			return showRations(source, data, settlement);
 		}
@@ -136,6 +147,12 @@ public final class SettlementCommands {
 			}
 			source.sendFailure(feedback);
 			return 0;
+		}
+		if (action.equals("reserves")) {
+			boolean changed = SettlementReserves.setTarget(data, settlement, FoodReserveTarget.byId(option));
+			send(source, changed ? "reserves_changed" : "reserves_unchanged");
+			showReserves(source, level, data, settlement);
+			return 1;
 		}
 		if (action.equals("simulation")) {
 			boolean enabled = BoolArgumentType.getBool(context, "enabled");
@@ -390,6 +407,20 @@ public final class SettlementCommands {
 			}
 		});
 		return missing;
+	}
+
+	private static void showReserves(CommandSourceStack source, net.minecraft.server.level.ServerLevel level, SettlementSavedData data, Settlement settlement) {
+		var snapshot = SettlementReserves.inspect(data, settlement,
+			SettlementStockpile.getStockpile(level, data, settlement));
+		source.sendSuccess(() -> reservesMessage(settlement.name(), snapshot), false);
+		send(source, "reserves_hint");
+	}
+
+	static Component reservesMessage(String name, SettlementReserves.Snapshot snapshot) {
+		return message("reserves_status", name, message("reserves_" + snapshot.target().id()), snapshot.residents(),
+			snapshot.target().pointsPerMember(), message(snapshot.survival() ? "reserves_nutrition" : "reserves_points"),
+			snapshot.current().isPresent() ? snapshot.current().getAsLong() : message("reserves_unavailable"),
+			snapshot.goal(), snapshot.shortfall().isPresent() ? snapshot.shortfall().getAsLong() : message("reserves_unavailable"));
 	}
 
 	private static Component message(String key, Object... arguments) {

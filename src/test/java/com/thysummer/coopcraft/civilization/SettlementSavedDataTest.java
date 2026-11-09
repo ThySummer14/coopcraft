@@ -39,7 +39,7 @@ class SettlementSavedDataTest {
 		assertEquals(settlement, restored.find(center).orElseThrow());
 		assertEquals(SocialOrganization.PRIMITIVE_COMMUNE, restored.socialOrganizationOf(settlement));
 		assertTrue(restored.simulationOf(settlement).isEmpty());
-		assertEquals(18, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(19, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test
@@ -53,7 +53,7 @@ class SettlementSavedDataTest {
 		SettlementSavedData restored = SettlementSavedData.load(tag, null);
 
 		assertTrue(restored.getHearth(restored.find(center).orElseThrow()).isEmpty());
-		assertEquals(18, restored.save(new CompoundTag(), null).getInt("DataVersion"));
+		assertEquals(19, restored.save(new CompoundTag(), null).getInt("DataVersion"));
 	}
 
 	@Test

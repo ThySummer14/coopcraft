@@ -23,7 +23,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 18;
+	private static final int DATA_VERSION = 19;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
@@ -32,6 +32,7 @@ public final class SettlementSavedData extends SavedData {
 		null
 	);
 
+	private final Map<UUID, FoodReserveTarget> foodReserveTargets = new LinkedHashMap<>();
 	private final Map<BlockPos, Settlement> settlements = new LinkedHashMap<>();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> stockpiles = new LinkedHashMap<>();
@@ -95,6 +96,18 @@ public final class SettlementSavedData extends SavedData {
 
 	public SocialOrganization socialOrganizationOf(Settlement settlement) {
 		return socialOrganizations.getOrDefault(settlement.id(), SocialOrganization.PRIMITIVE_COMMUNE);
+	}
+
+	public FoodReserveTarget foodReserveTargetOf(Settlement settlement) {
+		return foodReserveTargets.getOrDefault(settlement.id(), FoodReserveTarget.NORMAL);
+	}
+
+	boolean setFoodReserveTarget(Settlement settlement, FoodReserveTarget target) {
+		Objects.requireNonNull(target, "target");
+		if (foodReserveTargetOf(settlement) == target) return false;
+		foodReserveTargets.put(settlement.id(), target);
+		setDirty();
+		return true;
 	}
 
 	public SettlementStage stageOf(Settlement settlement) {
@@ -389,7 +402,9 @@ public final class SettlementSavedData extends SavedData {
 
 		ListTag settlementList = new ListTag();
 		for (Settlement settlement : settlements.values()) {
-			settlementList.add(settlement.save());
+			CompoundTag settlementTag = settlement.save();
+			settlementTag.putString("FoodReserveTarget", foodReserveTargetOf(settlement).id());
+			settlementList.add(settlementTag);
 		}
 		tag.put("Settlements", settlementList);
 
@@ -516,6 +531,8 @@ public final class SettlementSavedData extends SavedData {
 		for (int i = 0; i < settlementList.size(); i++) {
 			Settlement settlement = Settlement.load(settlementList.getCompound(i));
 			data.settlements.put(settlement.center(), settlement);
+			data.foodReserveTargets.put(settlement.id(), FoodReserveTarget.byId(
+				settlementList.getCompound(i).getString("FoodReserveTarget")));
 		}
 
 		ListTag socialList = tag.getList("SocialOrganizations", ListTag.TAG_COMPOUND);
