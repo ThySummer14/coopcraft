@@ -21,7 +21,10 @@ public final class SettlementMeetings {
 	private SettlementMeetings() {}
 
 	public record Result(String status, long coreDay, long lastMeetingDay, String location,
-		NormSystem.MeetingResult discussion) {
+		NormSystem.MeetingResult discussion, SettlementMeetingFeedback.Snapshot feedback) {
+		public Result(String status, long coreDay, long lastMeetingDay, String location, NormSystem.MeetingResult discussion) {
+			this(status, coreDay, lastMeetingDay, location, discussion, SettlementMeetingFeedback.inspect(null, discussion));
+		}
 		public boolean held() { return status.equals("held"); }
 	}
 
@@ -56,7 +59,7 @@ public final class SettlementMeetings {
 			inspection.present(), state.campOwner().id(), inspection.result().location());
 		if (discussion.held()) data.setDirty();
 		return new Result(discussion.status(), state.world().day(), state.norms().lastMeetingDay(state.campOwner().id()),
-			inspection.result().location(), discussion);
+			inspection.result().location(), discussion, SettlementMeetingFeedback.inspect(state, discussion));
 	}
 
 	static boolean dayReady(long gameDay, long lastSurvivalDay) { return gameDay <= lastSurvivalDay; }
@@ -96,7 +99,7 @@ public final class SettlementMeetings {
 		List<Person> population = List.copyOf(active.values());
 		NormSystem.MeetingResult discussion = state.norms().inspectCommonStoreMeeting(population, present, state.campOwner().id());
 		Result result = new Result(discussion.status(), state.world().day(), state.norms().lastMeetingDay(state.campOwner().id()),
-			location, discussion);
+			location, discussion, SettlementMeetingFeedback.inspect(state, discussion));
 		return new Inspection(result, state, population, present);
 	}
 
@@ -114,7 +117,8 @@ public final class SettlementMeetings {
 	private static Inspection blocked(String status, SettlementSimulationState state, String location) {
 		long day = state == null ? 0 : state.world().day();
 		long last = state == null ? Long.MIN_VALUE : state.norms().lastMeetingDay(state.campOwner().id());
-		return new Inspection(new Result(status, day, last, location,
-			new NormSystem.MeetingResult(status, "", 0, 0, 0, "")), state, List.of(), List.of());
+		var discussion = new NormSystem.MeetingResult(status, "", 0, 0, 0, "");
+		return new Inspection(new Result(status, day, last, location, discussion,
+			SettlementMeetingFeedback.inspect(state, discussion)), state, List.of(), List.of());
 	}
 }

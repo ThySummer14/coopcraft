@@ -117,12 +117,12 @@ public final class SettlementCommands {
 			else source.sendSuccess(() -> feedback, false);
 			send(source, "meeting_day", result.coreDay(), result.lastMeetingDay() == result.coreDay()
 				? message("meeting_used") : message("meeting_unused"));
-			if (!result.discussion().proposalId().isEmpty() && !result.status().equals("invalid_proposal")) {
+			if (!result.held() && !result.discussion().proposalId().isEmpty() && !result.status().equals("invalid_proposal")) {
 				send(source, "meeting_summary", result.discussion().participants(),
 					result.discussion().adultCount(), result.discussion().round());
 			}
-			if (!result.location().isEmpty()) send(source, "meeting_location", result.location());
-			if (!result.discussion().proposalId().isEmpty()) send(source, "meeting_agenda", result.discussion().proposalId());
+			if (!result.held() && !result.location().isEmpty()) send(source, "meeting_location", result.location());
+			for (Component line : SettlementMeetingFeedback.messages(result)) source.sendSuccess(() -> line, false);
 			if (result.held()) send(source, "meeting_outcome", Component.translatable("coopcraft.simulation.meeting." + result.discussion().outcome()));
 			return option.equals("hold") && !result.held() ? 0 : 1;
 		}

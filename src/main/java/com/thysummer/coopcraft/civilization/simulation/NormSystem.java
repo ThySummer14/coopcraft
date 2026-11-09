@@ -170,7 +170,10 @@ public final class NormSystem {
 	}
 
 	public record MeetingResult(String status, String proposalId, int adultCount, int participants,
-		int round, String outcome) {
+		int round, String outcome, long deliberationEventId) {
+		public MeetingResult(String status, String proposalId, int adultCount, int participants, int round, String outcome) {
+			this(status, proposalId, adultCount, participants, round, outcome, 0);
+		}
 		public boolean held() { return status.equals("held"); }
 	}
 
@@ -220,10 +223,10 @@ public final class NormSystem {
 		evidence.put("adultCount", Integer.toString(plan.result().adultCount()));
 		evidence.put("supportCount", Integer.toString(countPosition(proposal, plan.participants(), NormProposal.Position.SUPPORT)));
 		evidence.put("opposeCount", Integer.toString(countPosition(proposal, plan.participants(), NormProposal.Position.OPPOSE)));
-		String outcome = deliberateProposal(proposal, plan.participants(), plan.active(), evidence);
+		Deliberation deliberation = deliberateProposal(proposal, plan.participants(), plan.active(), evidence);
 		lastMeetingDays.put(campId, world.day());
 		return new MeetingResult("held", proposal.proposalId(), plan.result().adultCount(),
-			plan.participants().size(), proposal.rounds(), outcome);
+			plan.participants().size(), proposal.rounds(), deliberation.outcome(), deliberation.eventId());
 	}
 
 	private MeetingPlan planMeeting(java.util.Collection<Person> residents,
@@ -652,7 +655,9 @@ public final class NormSystem {
 	}
 
 	/** Shared decision formula for standalone experiments and verified physical meetings. */
-	private String deliberateProposal(NormProposal proposal, List<Person> participants, List<Person> active,
+	private record Deliberation(String outcome, long eventId) {}
+
+	private Deliberation deliberateProposal(NormProposal proposal, List<Person> participants, List<Person> active,
 		Map<String, String> meetingEvidence) {
 		for (Person participant : participants) {
 			if (participant.socialHours() < 6) participant.addSocialHours(1);
@@ -680,7 +685,7 @@ public final class NormSystem {
 		Map<String, String> frozen = meetingEvidence.isEmpty() ? Map.of() : context;
 		if (decision.adopt()) adopt(proposal, deliberationEvent, participants, frozen);
 		else if (proposal.rounds() >= MAX_DELIBERATION_ROUNDS) reject(proposal, deliberationEvent, decision.reason(), participants, frozen);
-		return outcome;
+		return new Deliberation(outcome, deliberationEvent);
 	}
 
 	private Decision evaluate(NormProposal proposal, List<Person> participants, List<Person> active) {

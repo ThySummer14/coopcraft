@@ -475,6 +475,230 @@ class SettlementCommonStoreMeetingTest {
 		assertEquals(before, save(f));
 	}
 
+	@Test
+	void holdReturnsItsExactDeliberationEventWhileQueriesAndFailuresNeverClaimOne() {
+		Fixture f = fixture(2);
+		NormProposal proposal = initialProposal(f);
+		CompoundTag before = save(f);
+		for (int i = 0; i < 10; i++) {
+			assertEquals(0, inspect(f, f.people()).deliberationEventId());
+			assertEquals(0, hold(f, f.people(1)).deliberationEventId());
+			assertEquals(before, save(f));
+		}
+		NormSystem.MeetingResult result = hold(f, f.people());
+		SimulationEvent event = events(f, EventType.NORM_DELIBERATED).getLast();
+		assertEquals(event.eventId(), result.deliberationEventId());
+		assertEquals(proposal.proposalId(), event.context().get("proposalId"));
+		assertEquals(Integer.toString(result.round()), event.context().get("round"));
+		assertEquals(f.state.world().day(), event.day());
+		assertEquals(0, inspect(f, f.people()).deliberationEventId());
+		assertEquals(0, hold(f, f.people()).deliberationEventId());
+		nextCoreDay(f);
+		NormSystem.MeetingResult second = hold(f, f.people());
+		assertTrue(second.deliberationEventId() > result.deliberationEventId());
+		assertEquals(events(f, EventType.NORM_DELIBERATED).getLast().eventId(), second.deliberationEventId());
+		assertEquals("adopted", second.outcome());
+		assertNotEquals(events(f, EventType.NORM_ADOPTED).getLast().eventId(), second.deliberationEventId());
+		f.state.world().assertConservation();
+	}
+
+	@Test
+	void feedbackQueriesNeverCreateStateOrMutateAnyPersistedMeetingOrAllocationData() {
+		SettlementSavedData empty = new SettlementSavedData();
+		Settlement settlement = empty.getOrCreate(BlockPos.ZERO, "No simulation", 0);
+		CompoundTag emptyBefore = empty.save(new CompoundTag(), null);
+		var noMeeting = new NormSystem.MeetingResult("disabled", "", 0, 0, 0, "");
+		for (int i = 0; i < 10; i++) {
+			assertTrue(SettlementMeetingFeedback.inspect(empty.simulationOf(settlement).orElse(null), noMeeting).agenda().isEmpty());
+			assertTrue(empty.simulationOf(settlement).isEmpty());
+			assertEquals(emptyBefore, empty.save(new CompoundTag(), null));
+		}
+		Fixture f = fixture(3);
+		initialProposal(f);
+		f.state.recordFoodAllocation(f.person(1).id(), 1);
+		CompoundTag before = save(f);
+		f.data.setDirty(false);
+		for (int i = 0; i < 20; i++) {
+			var preview = inspect(f, f.people(1, 2));
+			var feedback = SettlementMeetingFeedback.inspect(f.state, preview);
+			assertTrue(feedback.completedDetails().isEmpty(), "No predicted votes before an actual meeting");
+			assertEquals(3, feedback.agenda().orElseThrow().currentCap());
+			assertEquals(2, feedback.agenda().orElseThrow().proposedCap());
+			assertTrue(feedback.agenda().orElseThrow().defaultValue());
+			SettlementMeetingFeedback.messages(new SettlementMeetings.Result("ready", f.state.world().day(),
+				Long.MIN_VALUE, "0,64,0", preview, feedback));
+			assertEquals(before, save(f));
+			assertFalse(f.data.isDirty());
+		}
+		assertEquals(1, f.state.allocatedFoodUnits(f.person(1).id()));
+		assertEquals(0, f.person(1).socialHours());
+		f.state.world().assertConservation();
+	}
+
+	@Test
+	void feedbackSeparatesActiveQuotaFromSupervisionAndCareFromTheBaseAllowance() {
+		Fixture f = fixture(2);
+		f.person(2).initializeAge(Person.AgeBand.ELDER, 0);
+		for (Norm.Status needStatus : Norm.Status.values()) {
+			for (Norm.Status careStatus : Norm.Status.values()) {
+				f.state.world().registerNorm(new Norm(Norm.NEED_FIRST_COMMON_STORE, f.camp(), 4,
+					Set.of(f.person(1).id()), Set.of(), Set.of(f.person(1).id()), 50, needStatus, List.of()));
+				f.state.world().registerNorm(new Norm(Norm.CARE_FIRST_COMMON_STORE, f.camp(), 2,
+					Set.of(), Set.of(), Set.of(), 50, careStatus, List.of()));
+				for (boolean enabled : List.of(true, false)) {
+					f.state.setNormsEnabled(enabled);
+					CompoundTag before = save(f);
+					var effects = SettlementMeetingFeedback.effects(f.state);
+					int base = enabled && needStatus == Norm.Status.ACTIVE ? 4 : 3;
+					int care = enabled && careStatus == Norm.Status.ACTIVE ? 2 : 0;
+					assertEquals(base, effects.baseCap());
+					assertEquals(care, effects.careExtraCap());
+					assertFalse(effects.needFirstEnforced(), "One supervisor cannot authorize need-first ordering");
+					assertEquals(base, f.state.dailyFoodUnitCap(f.person(1).id()));
+					assertEquals(base + care, f.state.dailyFoodUnitCap(f.person(2).id()));
+					assertEquals(before, save(f));
+				}
+			}
+		}
+		f.state.setNormsEnabled(true);
+		f.state.world().registerNorm(new Norm(Norm.NEED_FIRST_COMMON_STORE, f.camp(), 4,
+			Set.of(f.person(1).id(), f.person(2).id()), Set.of(), Set.of(f.person(1).id(), f.person(2).id()), 50, Norm.Status.ACTIVE, List.of()));
+		assertTrue(SettlementMeetingFeedback.effects(f.state).needFirstEnforced());
+		f.person(2).restoreSocialState(0, 6, 0);
+		CompoundTag exhausted = save(f);
+		assertFalse(SettlementMeetingFeedback.effects(f.state).needFirstEnforced());
+		assertEquals(4, SettlementMeetingFeedback.effects(f.state).baseCap());
+		assertEquals(exhausted, save(f));
+		f.state.setSurvivalEnabled(false, 0);
+		assertFalse(SettlementMeetingFeedback.effects(f.state).survivalEnabled());
+	}
+
+	@Test
+	void frozenFeedbackUsesExactResultEvidenceAndSurvivesReloadWithoutReconstructingVotes() {
+		Fixture f = fixture(2);
+		initialProposal(f);
+		NormSystem.MeetingResult held = hold(f, f.people());
+		var expected = SettlementMeetingFeedback.inspect(f.state, held);
+		assertEquals(6, expected.completedDetails().size());
+		assertEquals("2/2; 2/0", expected.completedDetails().get(3).value());
+		CompoundTag before = save(f);
+		for (int i = 0; i < 2; i++) {
+			f = reload(f, save(f));
+			assertEquals(expected, SettlementMeetingFeedback.inspect(f.state, held));
+			assertEquals(before, save(f));
+			f.state.world().assertConservation();
+		}
+		var old = new NormSystem.MeetingResult("held", held.proposalId(), held.adultCount(), held.participants(), held.round(), held.outcome());
+		assertTrue(SettlementMeetingFeedback.completed(f.state, old).isEmpty(), "Legacy or ambiguous results have no exact event identity");
+		for (var mismatch : List.of(
+			new NormSystem.MeetingResult("ready", held.proposalId(), 2, 2, 1, held.outcome(), held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", "another-proposal", 2, 2, 1, held.outcome(), held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", held.proposalId(), 3, 2, 1, held.outcome(), held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", held.proposalId(), 2, 3, 1, held.outcome(), held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", held.proposalId(), 2, 2, 2, held.outcome(), held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", held.proposalId(), 2, 2, 1, "adopted", held.deliberationEventId()),
+			new NormSystem.MeetingResult("held", held.proposalId(), 2, 2, 1, held.outcome(), 999999))) {
+			assertTrue(SettlementMeetingFeedback.completed(f.state, mismatch).isEmpty(), mismatch.toString());
+		}
+		f.person(2).setHunger(0);
+		f.state.world().importExternalBatch(ResourceType.FISH, 100, StorageOwner.household(f.person(2).householdId()));
+		nextCoreDay(f);
+		assertTrue(SettlementMeetingFeedback.completed(f.state, held).isEmpty(), "An old day is not the current hold");
+		var second = hold(f, f.people());
+		assertEquals("2/2; 1/1", SettlementMeetingFeedback.completed(f.state, second).get(3).value());
+		assertTrue(SettlementMeetingFeedback.completed(f.state, held).isEmpty());
+		assertEquals("2/2; 2/0", expected.completedDetails().get(3).value());
+		f.state.world().assertConservation();
+	}
+
+	@Test
+	void completedFeedbackRejectsUnknownMarkersAndMalformedFrozenEvidenceEvenWithLivePositions() {
+		Fixture f = fixture(2);
+		NormProposal proposal = initialProposal(f);
+		var held = hold(f, f.people());
+		SimulationEvent valid = events(f, EventType.NORM_DELIBERATED).getLast();
+		for (String mutation : List.of("meeting", "supportCount", "reason", "normId")) {
+			var context = new LinkedHashMap<>(valid.context());
+			context.put(mutation, "unknown-or-invalid");
+			long id = MeetingTestEvents.record(f.state.world(), EventType.NORM_DELIBERATED, valid.actors(), context, valid.causalLinks());
+			var forged = new NormSystem.MeetingResult("held", proposal.proposalId(), 2, 2, 1, held.outcome(), id);
+			CompoundTag before = save(f);
+			assertTrue(SettlementMeetingFeedback.completed(f.state, forged).isEmpty(), mutation);
+			assertEquals(before, save(f));
+		}
+		MeetingTestEvents.record(f.state.world(), EventType.NORM_DELIBERATED, valid.actors(), valid.context(), valid.causalLinks());
+		var ambiguous = new NormSystem.MeetingResult("held", proposal.proposalId(), 2, 2, 1, held.outcome());
+		assertTrue(SettlementMeetingFeedback.completed(f.state, ambiguous).isEmpty(), "Multiple matching records cannot supply a missing exact receipt");
+		assertEquals(6, SettlementMeetingFeedback.completed(f.state, held).size(), "Exact identity remains valid despite unrelated malformed records");
+	}
+
+	@Test
+	void careAgendaIsAnExtraAllowanceAndFirstNeedAdoptionActuallyLowersDefaultBase() {
+		Fixture care = fixture(2);
+		care.person(1).initializeAge(Person.AgeBand.ELDER, 0);
+		assertEquals(Norm.CARE_FIRST_COMMON_STORE, initialProposal(care).normId());
+		var agenda = SettlementMeetingFeedback.agenda(care.state, inspect(care, care.people()));
+		assertNotNull(agenda);
+		assertEquals(0, agenda.currentCap());
+		assertEquals(1, agenda.proposedCap());
+		assertTrue(agenda.defaultValue());
+		assertEquals(3, SettlementMeetingFeedback.effects(care.state).baseCap());
+
+		Fixture need = fixture(2);
+		initialProposal(need);
+		assertEquals(3, SettlementMeetingFeedback.effects(need.state).baseCap());
+		hold(need, need.people());
+		nextCoreDay(need);
+		var adopted = hold(need, need.people());
+		assertEquals("adopted", adopted.outcome());
+		var feedback = SettlementMeetingFeedback.inspect(need.state, adopted);
+		assertEquals(2, feedback.effects().baseCap());
+		assertEquals(0, feedback.effects().careExtraCap());
+		assertEquals("0 → 2", feedback.completedDetails().getLast().value(), "Historical norm establishment is separate from the actual 3-to-2 quota change");
+		assertEquals(2, need.state.dailyFoodUnitCap(need.person(1).id()));
+		assertEquals(30L, need.state.world().inventoryTotals().get(ResourceType.FISH).longValue());
+		need.state.world().assertConservation();
+	}
+
+	@Test
+	void feedbackAgendaUsesTheSameSelectedReadyProposalAsTheMeetingPlanner() {
+		Fixture f = fixture(2);
+		NormProposal blocked = seededProposal(f, "proposal-a", 0, Map.of(1, NormProposal.Position.SUPPORT), false);
+		NormProposal ready = seededProposal(f, "proposal-b", 0,
+			Map.of(1, NormProposal.Position.SUPPORT, 2, NormProposal.Position.SUPPORT), false);
+		CompoundTag before = save(f);
+		var preview = inspect(f, f.people());
+		assertEquals(ready.proposalId(), preview.proposalId());
+		var agenda = SettlementMeetingFeedback.agenda(f.state, preview);
+		assertNotNull(agenda);
+		assertEquals(ready.normId(), agenda.normId());
+		assertEquals(ready.allocationUnitCap(), agenda.proposedCap());
+		assertEquals(before, save(f));
+		assertEquals(ready.proposalId(), hold(f, f.people()).proposalId());
+		assertEquals(0, blocked.rounds());
+	}
+
+	@Test
+	void unknownForeignMissingAndInvalidProposalsNeverInventAnAgenda() {
+		Fixture f = fixture(2);
+		long origin = refusal(f);
+		for (String kind : List.of("unknown", "foreign", "future", "invalid-origin")) {
+			NormProposal proposal = NormProposal.restore(kind, kind.equals("foreign") ? "foreign-camp" : f.camp(),
+				kind.equals("unknown") ? "future-rule" : Norm.NEED_FIRST_COMMON_STORE, f.person(1).id(),
+				kind.equals("future") ? f.state.world().day() + 1 : f.state.world().day(),
+				kind.equals("invalid-origin") ? 999999 : origin, 2, 0, 0, NormProposal.Status.OPEN,
+				Map.of(f.person(1).id(), NormProposal.Position.SUPPORT));
+			f.state.world().registerProposal(proposal);
+			CompoundTag before = save(f);
+			assertNull(SettlementMeetingFeedback.agenda(f.state, new NormSystem.MeetingResult("ready", kind, 2, 2, 0, "")), kind);
+			assertEquals(before, save(f));
+		}
+		assertNull(SettlementMeetingFeedback.agenda(f.state, new NormSystem.MeetingResult("ready", "missing", 2, 2, 0, "")));
+		Fixture normal = fixture(2);
+		var valid = initialProposal(normal);
+		assertNull(SettlementMeetingFeedback.agenda(normal.state, new NormSystem.MeetingResult("invalid_proposal", valid.proposalId(), 2, 2, 0, "")));
+	}
+
 	private static Fixture fixture(int residents) {
 		SettlementSavedData data = new SettlementSavedData();
 		Settlement settlement = data.getOrCreate(BlockPos.ZERO, "Local meetings", 0);

@@ -34,7 +34,7 @@ public final class SettlementSimulationState {
 	private final Settlement settlement;
 	private final SimulationWorld world;
 	private final NormSystem norms;
-	private static final int DAILY_FOOD_UNIT_CAP = 3;
+	static final int DAILY_FOOD_UNIT_CAP = 3;
 
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
 	private final Map<String, Integer> foodAllocations = new LinkedHashMap<>();
