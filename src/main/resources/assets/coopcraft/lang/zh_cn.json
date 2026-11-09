@@ -343,7 +343,7 @@
 	"coopcraft.command.settlement.reserves_unchanged": "备粮目标未变。",
 	"coopcraft.command.settlement.reserves_normal": "常规",
 	"coopcraft.command.settlement.reserves_high": "高储备",
-	"coopcraft.command.settlement.reserves_nutrition": "生存模式：公共营养值（1食物点=5营养值）",
+	"coopcraft.command.settlement.reserves_nutrition": "生存模式：公仓模拟营养；备粮目标按食物点×5折算",
 	"coopcraft.command.settlement.reserves_points": "实体模式：公共食物点",
 	"coopcraft.command.settlement.reserves_unavailable": "不可用",
 	"coopcraft.command.settlement.reserves_status": "%s | 目标%s；%s名登记居民×每人%s食物点 | %s | 当前%s / 目标%s / 缺口%s",

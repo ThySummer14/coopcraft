@@ -343,7 +343,7 @@
 	"coopcraft.command.settlement.reserves_unchanged": "Reserve target unchanged.",
 	"coopcraft.command.settlement.reserves_normal": "NORMAL",
 	"coopcraft.command.settlement.reserves_high": "HIGH",
-	"coopcraft.command.settlement.reserves_nutrition": "survival mode: communal nutrition (1 food point = 5 nutrition)",
+	"coopcraft.command.settlement.reserves_nutrition": "survival mode: communal simulated nutrition; reserve target food points × 5",
 	"coopcraft.command.settlement.reserves_points": "physical mode: communal food points",
 	"coopcraft.command.settlement.reserves_unavailable": "unavailable",
 	"coopcraft.command.settlement.reserves_status": "%s | Target %s; %s registered residents × %s food points each | %s | Current %s / target %s / shortfall %s",
