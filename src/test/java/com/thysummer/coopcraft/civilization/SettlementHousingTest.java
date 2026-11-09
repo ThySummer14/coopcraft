@@ -99,7 +99,7 @@ class SettlementHousingTest {
 			SettlementHousing.reconcile(world, data, s);
 			assertEquals(0, data.housingCapacity(s));
 			assertEquals(1, ConstructionPlanner.housingPlan(data, s).missingBeds());
-			assertEquals(ConstructionPlanner.STONE_COTTAGE, ConstructionPlanner.projects(data, s).getFirst().blueprintId());
+			assertEquals(ConstructionPlanner.TIMBER_PORCH_CABIN, ConstructionPlanner.projects(data, s).getFirst().blueprintId());
 			assertTrue(data.simulationOf(s).isEmpty());
 			assertTrue(data.getConstructionJob(s).isEmpty());
 		}
