@@ -500,3 +500,5 @@
 - 未启动Minecraft客户端、服务器或GameTest。完整构建、正式JUnit及最终运行包以下方CI验证记录为准。
 
 - 独立静态审查未发现阻断；本地最终纯核心源码的206行配给与48行多人顺序实验全部断言通过，CSV与40轮逐字一致。两份语言文件514个键一致；正式JUnit及完整build仍以下方CI为准。
+
+- 验证完成：代码提交 `19873ac8` 的[施工社会工时构建](https://github.com/ThySummer14/coopcraft/actions/runs/42571741158)通过完整build和777项JUnit，0失败/0跳过，新增10项全部通过。206行配给与48行多人顺序CSV同最终核心源码本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42571741158/artifacts/13652873870)内 `coopcraft-0.1.0.jar` 为869097字节，SHA-256 `db5961e7d53986cb96c1f7e6bb0cdd160b7eda414d4ba1d630081aeb9bdc28ad`。未启动Minecraft客户端、服务器或GameTest；真实现场邀请、日界Goal计时、落块与联机画面仍待用户统一验收。没有新增存档字段或材料路径，旧社会工时记录继续适用；升级前备份，并遵守39轮新增事件写入后不可降级加载的限制。
