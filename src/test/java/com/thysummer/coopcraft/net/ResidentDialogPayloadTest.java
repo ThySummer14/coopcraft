@@ -26,7 +26,7 @@ class ResidentDialogPayloadTest {
         return new ResidentDialogPayload.Snapshot(Component.translatable("entity.minecraft.villager"), "minecraft:overworld",
             List.of(Component.translatable("coopcraft.resident_dialog.result", Component.literal("Ada"))), true, false, true, true,
             Component.literal("Food"), Component.literal("Invitation is not arrival"),
-            Component.literal("Proposal: Cottage\nArrived: 3; Cost: 4 food"));
+            Component.literal("Proposal: daily food cap\nArrived: 3; Cost: 1 social hour per participant"));
     }
     @Test void allKindsAndActionsRoundTripWithLocalizedComponents() {
         for (var kind : ResidentDialogPayload.Kind.values()) {
@@ -132,19 +132,32 @@ class ResidentDialogPayloadTest {
         }, ResidentDialogActionPayload.Action.values());
     }
     @Test void gatheringHintIsDeeplyDetachedIncludingTranslationArguments() {
-        var argument = Component.literal("Cottage");
-        var hint = Component.translatable("proposal", argument).append("\n3 residents; 4 food");
+        // Plain literal translation arguments normalize to Strings in the component codec.
+        // Keep a styled, composite argument to exercise the nested Component copy itself.
+        var argument = Component.literal("Daily ").withStyle(style -> style.withItalic(true))
+            .append(Component.literal("food cap").withStyle(style -> style.withBold(true)));
+        var hint = Component.translatable("proposal", argument).append("\n3 residents; 1 social hour per participant");
         var snapshot = new ResidentDialogPayload.Snapshot(Component.empty(), "x", List.of(),
             false, false, false, true, Component.empty(), Component.empty(), hint);
-        String expected = snapshot.gatheringHint().getString();
+        Component expected = snapshot.gatheringHint();
         argument.append(" changed");
         hint.append(" changed");
-        assertEquals(expected, snapshot.gatheringHint().getString());
-        var returned = (net.minecraft.network.chat.MutableComponent) snapshot.gatheringHint();
-        ((net.minecraft.network.chat.MutableComponent) ((TranslatableContents) returned.getContents()).getArgs()[0]).append(" changed");
+        assertEquals(expected, snapshot.gatheringHint());
+        var returned = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, snapshot.gatheringHint());
+        var contents = assertInstanceOf(TranslatableContents.class, returned.getContents());
+        var returnedArgument = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, contents.getArgs()[0]);
+        returnedArgument.append(" changed");
+        returnedArgument.setStyle(returnedArgument.getStyle().withItalic(false));
+        var returnedChild = assertInstanceOf(net.minecraft.network.chat.MutableComponent.class, returnedArgument.getSiblings().getFirst());
+        returnedChild.append(" changed child");
         returned.append(" changed again");
-        assertEquals(expected, snapshot.gatheringHint().getString());
-        assertEquals("Cottage", ((Component) ((TranslatableContents) snapshot.gatheringHint().getContents()).getArgs()[0]).getString());
+        assertNotEquals(expected, returned);
+        assertEquals(expected, snapshot.gatheringHint());
+        var preservedArgument = assertInstanceOf(Component.class,
+            ((TranslatableContents) snapshot.gatheringHint().getContents()).getArgs()[0]);
+        assertEquals("Daily food cap", preservedArgument.getString());
+        assertTrue(preservedArgument.getStyle().isItalic());
+        assertTrue(preservedArgument.getSiblings().getFirst().getStyle().isBold());
         assertTrue(snapshot.canHoldMeeting());
     }
     @Test void legacySourceConstructorDisablesMeeting() {
