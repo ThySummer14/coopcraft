@@ -69,7 +69,7 @@ public final class SurvivalSystem {
 			if (units >= maximumUnits) {
 				break;
 			}
-			if (person.hunger() <= TARGET_HUNGER || !batch.resourceType().isFood()) {
+			if (person.hunger() <= TARGET_HUNGER || !batch.resourceType().isFood() || world.day() > batch.expiryDay()) {
 				continue;
 			}
 			long shortfall = person.hunger() - TARGET_HUNGER;

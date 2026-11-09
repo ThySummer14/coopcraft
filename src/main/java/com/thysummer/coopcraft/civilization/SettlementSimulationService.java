@@ -605,6 +605,9 @@ public final class SettlementSimulationService {
 				state.norms().startDay(eligible);
 			}
 			survival.advanceDay(eligible);
+			// The live settlement path must settle expiry just like the standalone simulation.
+			// Only an observed active day advances this clock; no unloaded-day catch-up is added.
+			state.world().spoilExpired();
 		}
 		state.markSurvivalDay(currentDay);
 		data.setDirty();

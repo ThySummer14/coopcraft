@@ -269,7 +269,7 @@ public final class PrimitiveSocietySimulation {
 	private void requestCommonFood(Person requester, long shortfall) {
 		StorageOwner campStore = StorageOwner.camp(requester.campId());
 		for (ResourceBatch batch : world.batchesAt(campStore)) {
-			if (!batch.resourceType().isFood() || shortfall <= 0) {
+			if (!batch.resourceType().isFood() || world.day() > batch.expiryDay() || shortfall <= 0) {
 				continue;
 			}
 			int requestedUnits = (int) Math.min(batch.quantity(), unitsFor(shortfall, batch.nutritionPerUnit()));
@@ -299,7 +299,7 @@ public final class PrimitiveSocietySimulation {
 
 	private void consumeFrom(Person person, StorageOwner owner) {
 		for (ResourceBatch batch : world.batchesAt(owner)) {
-			if (person.hunger() <= 0 || !batch.resourceType().isFood()) {
+			if (person.hunger() <= 0 || !batch.resourceType().isFood() || world.day() > batch.expiryDay()) {
 				continue;
 			}
 			long quantity = Math.min(batch.quantity(), unitsFor(person.hunger(), batch.nutritionPerUnit()));
@@ -353,7 +353,7 @@ public final class PrimitiveSocietySimulation {
 		static DonorCandidate create(SimulationWorld world, Person requester, Person donor, SimulationConfig config) {
 			StorageOwner owner = StorageOwner.household(donor.householdId());
 			ResourceBatch batch = world.batchesAt(owner).stream()
-				.filter(candidate -> candidate.resourceType().isFood())
+				.filter(candidate -> candidate.resourceType().isFood() && world.day() <= candidate.expiryDay())
 				.findFirst().orElse(null);
 			if (batch == null) {
 				return new DonorCandidate(donor, null, 0);

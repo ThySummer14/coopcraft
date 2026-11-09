@@ -327,7 +327,9 @@ public final class SimulationWorld {
 	}
 
 	public long availableNutrition(StorageOwner owner) {
-		return batchesAt(owner).stream().filter(batch -> batch.resourceType().isFood()).mapToLong(ResourceBatch::nutrition).sum();
+		return batchesAt(owner).stream()
+			.filter(batch -> batch.resourceType().isFood() && day <= batch.expiryDay())
+			.mapToLong(ResourceBatch::nutrition).sum();
 	}
 
 	public ResourceBatch createInitialBatch(ResourceType resourceType, long quantity, StorageOwner holder) {
@@ -399,6 +401,82 @@ public final class SimulationWorld {
 			eventId, day, EventType.EXTERNAL_IMPORT, actors, List.of(), List.of(output), eventContext, causalLinks
 		));
 		return batch;
+	}
+
+	/**
+	 * Imports food using harvest days observed by this simulation world, not calendar days.
+	 * The import event occurs today; the batch retains its original harvest and expiry days.
+	 * As with ordinary imports, the reserved context key "holder" records the actual holder.
+	 */
+	public ResourceBatch importExternalFoodBatch(
+		ResourceType resourceType,
+		long quantity,
+		StorageOwner holder,
+		long harvestDay,
+		List<String> actors,
+		Map<String, String> context,
+		List<Long> causalLinks
+	) {
+		validateExternalFoodImport(resourceType, quantity, holder, harvestDay, actors, context, causalLinks);
+		long eventId = ledger.nextEventId();
+		ResourceBatch batch = new ResourceBatch(
+			"batch-" + nextBatchId, resourceType, quantity, resourceType.nutritionPerUnit(), 50,
+			holder, holder.location(), null, eventId, Set.of(), harvestDay,
+			expiryDay(resourceType, harvestDay), eventId
+		);
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("holder", holder.toString());
+		SimulationEvent event = new SimulationEvent(
+			eventId, day, EventType.EXTERNAL_IMPORT, actors, List.of(),
+			List.of(batchFlow(batch, quantity, null, batch.location())), eventContext, causalLinks
+		);
+		ledger.append(event);
+		batches.put(batch.batchId(), batch);
+		nextBatchId++;
+		return batch;
+	}
+
+	/**
+	 * Read-only preflight for age-preserving food intake, suitable before inspecting a container.
+	 * Actors may name external producers; they must be nonblank but need not be registered people.
+	 * Context keys must be nonblank, values nonnull, and causal links must name existing events.
+	 * Import validates again, so callers must still perform intake on the world's owning thread.
+	 */
+	public void validateExternalFoodImport(
+		ResourceType resourceType,
+		long quantity,
+		StorageOwner holder,
+		long harvestDay,
+		List<String> actors,
+		Map<String, String> context,
+		List<Long> causalLinks
+	) {
+		if (resourceType == null || !resourceType.isFood() || quantity <= 0
+			|| harvestDay < 0 || harvestDay > day || day > expiryDay(resourceType, harvestDay)) {
+			throw new IllegalArgumentException("External food import requires positive, unexpired food with an observed harvest day");
+		}
+		try {
+			Math.multiplyExact(quantity, resourceType.nutritionPerUnit());
+			Math.addExact(nextBatchId, 1);
+			Math.addExact(ledger.nextEventId(), 1);
+		} catch (ArithmeticException exception) {
+			throw new IllegalArgumentException("External food import exceeds representable nutrition or IDs", exception);
+		}
+		if (holder == null) {
+			throw new IllegalArgumentException("External food import requires a storage owner");
+		}
+		validateStorageOwner(holder);
+		if (actors == null || actors.stream().anyMatch(actor -> actor == null || actor.isBlank())) {
+			throw new IllegalArgumentException("External food import actors must be nonblank");
+		}
+		if (context == null || context.entrySet().stream().anyMatch(entry ->
+			entry.getKey() == null || entry.getKey().isBlank() || entry.getValue() == null)) {
+			throw new IllegalArgumentException("External food import context requires nonblank keys and nonnull values");
+		}
+		if (causalLinks == null || causalLinks.stream().anyMatch(link ->
+			link == null || link <= 0 || link >= ledger.nextEventId() || ledger.event(link).isEmpty())) {
+			throw new IllegalArgumentException("External food import causal links must reference existing earlier events");
+		}
 	}
 
 	public long exportExternalBatch(StorageOwner expectedHolder, String batchId, long quantity) {
@@ -574,7 +652,7 @@ public final class SimulationWorld {
 		}
 		Person person = person(personId);
 		ResourceBatch batch = batch(batchId);
-		if (!batch.resourceType().isFood() || !canWithdraw(person, batch.holder())) {
+		if (!batch.resourceType().isFood() || day > batch.expiryDay() || !canWithdraw(person, batch.holder())) {
 			throw new IllegalArgumentException("Person cannot consume this batch");
 		}
 		if (quantity <= 0 || quantity > batch.quantity()) {
