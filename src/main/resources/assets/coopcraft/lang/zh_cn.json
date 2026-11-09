@@ -312,6 +312,8 @@
 	"coopcraft.interaction.blocker.construction_pair_not_ticking": "暂停：门床配对另一格未加载或不在实体运算范围",
 	"coopcraft.interaction.blocker.construction_pair_occupied": "暂停：门床待建的另一半位置已被占据",
 	"coopcraft.interaction.blocker.construction_pair_changed": "暂停：已建门床首半已缺失或完整状态与蓝图不符",
+	"coopcraft.interaction.blocker.construction_completion_beds_unloaded": "暂停：完工登记所需的床位区块尚未全部加载",
+	"coopcraft.interaction.blocker.construction_completion_beds_out_of_bounds": "暂停：完工登记所需的计划床脚位置越界",
 	"coopcraft.interaction.blocker.construction_entity_obstructed": "暂停：下一位置有活体实体挡住",
 	"coopcraft.interaction.blocker.construction_stockpile_unavailable": "暂停：公仓不可用",
 	"coopcraft.interaction.blocker.construction_stockpile_full": "暂停：公仓无法接收下一步材料",

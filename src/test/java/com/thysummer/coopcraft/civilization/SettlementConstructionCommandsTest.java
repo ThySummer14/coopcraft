@@ -142,7 +142,8 @@ class SettlementConstructionCommandsTest {
 	@Test
 	void pairBlockersAreRenderedReadOnlyAndHaveBothTranslations() throws Exception {
 		var statuses = List.of("pair_invalid", "target_out_of_bounds", "pair_out_of_bounds",
-			"pair_not_ticking", "pair_occupied", "pair_changed");
+			"pair_not_ticking", "pair_occupied", "pair_changed",
+			"completion_beds_unloaded", "completion_beds_out_of_bounds");
 		for (String status : statuses) {
 			var snapshot = new ConstructionReadiness(ConstructionPlanner.TIMBER_SIDE_PORCH_CABIN,
 				99, 154, new BlockPos(10, 65, 3), status);

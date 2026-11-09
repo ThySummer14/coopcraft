@@ -14,7 +14,7 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 			return result(job, total, null, compatibility);
 		}
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
-		var target = ConstructionPairReadiness.inspect(job, plan, probe, true);
+		var target = ConstructionStepReadiness.inspect(job, plan, probe, true);
 		BlockPos position = target.position();
 		if (!target.ready()) return result(job, total, position, target.blocker());
 		Container stockpile = probe.stockpile();
@@ -56,7 +56,7 @@ public record ConstructionReadiness(ResourceLocation blueprintId, int nextIndex,
 	}
 
 	/** Read operations only, allowing the ordering and short-circuit behavior to be tested without a level. */
-	interface Probe extends ConstructionPairReadiness.Probe {
+	interface Probe extends ConstructionStepReadiness.Probe {
 		Container stockpile();
 		SettlementSimulationState simulation();
 	}

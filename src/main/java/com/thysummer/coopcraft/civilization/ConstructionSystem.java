@@ -52,7 +52,7 @@ public final class ConstructionSystem {
 		}
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
-		var readiness = ConstructionPairReadiness.inspect(job, plan, pairProbe(level), false);
+		var readiness = ConstructionStepReadiness.inspect(job, plan, stepProbe(level), false);
 		if (!readiness.ready()) return Optional.empty();
 		BlockPos position = readiness.position();
 		Container stockpile = loadedStockpile(level, data, settlement);
@@ -70,6 +70,11 @@ public final class ConstructionSystem {
 	public static Optional<ConstructionReadiness> inspect(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		return data.getConstructionJob(settlement).map(job -> ConstructionReadiness.inspect(
 			job, BlueprintManager.get(job.blueprintId()), new ConstructionReadiness.Probe() {
+				@Override
+				public SettlementHousing.BedCheck inspectBed(BlockPos position) {
+					return SettlementHousing.inspectBed(level, position);
+				}
+
 				@Override
 				public boolean inBounds(BlockPos position) {
 					return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
@@ -121,8 +126,8 @@ public final class ConstructionSystem {
 			return false;
 		}
 		ConstructionInstruction instruction = target.instruction();
-		// Re-read pair state on execution, even when the work claim was valid earlier.
-		if (!placeIfReady(current, plan, pairProbe(level), () -> {
+		// Re-read pair and completion-bed state even when the work claim was valid earlier.
+		if (!placeIfReady(current, plan, stepProbe(level), () -> {
 			Container stockpile = loadedStockpile(level, data, settlement);
 			boolean firstPart = instruction.consume()
 				&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
@@ -176,13 +181,17 @@ public final class ConstructionSystem {
 	}
 
 	/** Shared test seam around the actual material transaction, not a cached claim. */
-	static boolean placeIfReady(ConstructionJob job, ConstructionPlan plan, ConstructionPairReadiness.Probe probe,
+	static boolean placeIfReady(ConstructionJob job, ConstructionPlan plan, ConstructionStepReadiness.Probe probe,
 		java.util.function.BooleanSupplier placement) {
-		return ConstructionPairReadiness.inspect(job, plan, probe, true).ready() && placement.getAsBoolean();
+		return ConstructionStepReadiness.inspect(job, plan, probe, true).ready() && placement.getAsBoolean();
 	}
 
-	private static ConstructionPairReadiness.Probe pairProbe(ServerLevel level) {
-		return new ConstructionPairReadiness.Probe() {
+	private static ConstructionStepReadiness.Probe stepProbe(ServerLevel level) {
+		return new ConstructionStepReadiness.Probe() {
+			public SettlementHousing.BedCheck inspectBed(BlockPos position) {
+				return SettlementHousing.inspectBed(level, position);
+			}
+
 			public boolean inBounds(BlockPos position) {
 				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
 			}

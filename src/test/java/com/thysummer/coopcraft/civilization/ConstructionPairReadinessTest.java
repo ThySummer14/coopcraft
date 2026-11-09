@@ -36,6 +36,12 @@ class ConstructionPairReadinessTest {
 		int checks, entities, stockpileReads;
 		boolean entity;
 		final SimpleContainer inventory = new SimpleContainer(4);
+		public SettlementHousing.BedCheck inspectBed(BlockPos pos) {
+			return SettlementHousing.inspectBed(new SettlementHousing.BedAccess() {
+				public boolean isLoaded(BlockPos position) { return !unknown.contains(position); }
+				public BlockState stateAt(BlockPos position) { return state(position); }
+			}, pos);
+		}
 		public boolean inBounds(BlockPos pos) { checks++; return !outside.contains(pos); }
 		public boolean ticking(BlockPos pos) { checks++; return !unknown.contains(pos); }
 		public BlockState state(BlockPos pos) {

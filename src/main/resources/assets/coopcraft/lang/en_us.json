@@ -312,6 +312,8 @@
 	"coopcraft.interaction.blocker.construction_pair_not_ticking": "Paused: the other door/bed position is unloaded or not entity-ticking",
 	"coopcraft.interaction.blocker.construction_pair_occupied": "Paused: the future second door/bed position is occupied",
 	"coopcraft.interaction.blocker.construction_pair_changed": "Paused: the built first door/bed half is missing or its complete state differs from the blueprint",
+	"coopcraft.interaction.blocker.construction_completion_beds_unloaded": "Paused: chunks needed to register the completed beds are not all loaded",
+	"coopcraft.interaction.blocker.construction_completion_beds_out_of_bounds": "Paused: a planned bed foot needed for completion is out of bounds",
 	"coopcraft.interaction.blocker.construction_entity_obstructed": "Paused: a living entity occupies the next position",
 	"coopcraft.interaction.blocker.construction_stockpile_unavailable": "Paused: communal stockpile is unavailable",
 	"coopcraft.interaction.blocker.construction_stockpile_full": "Paused: communal stockpile cannot accept material for the next step",

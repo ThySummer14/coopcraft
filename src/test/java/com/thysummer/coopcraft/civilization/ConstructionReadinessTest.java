@@ -38,6 +38,9 @@ class ConstructionReadinessTest {
 		Container stockpile = new SimpleContainer(2);
 		SettlementSimulationState state;
 		int worldReads;
+		public SettlementHousing.BedCheck inspectBed(BlockPos position) {
+			throw new AssertionError("Non-housing plan must not inspect beds");
+		}
 		public boolean ticking(BlockPos position) { return ticking; }
 		public boolean inBounds(BlockPos position) { return true; }
 		public net.minecraft.world.level.block.state.BlockState state(BlockPos position) {
