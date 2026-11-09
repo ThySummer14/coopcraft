@@ -520,7 +520,7 @@
 	"coopcraft.command.settlement.construction_sites_reason": "%s 处候选：%s。首个原点 %s；首个相关位置 %s。",
 	"coopcraft.command.settlement.construction_sites_scope": "仅查看固定同高候选的当前状态，不清场、不改地形、不扣材料、不改工程。材料、施工寻路、室内布局及后续变化仍须另行检查。",
 	"coopcraft.command.settlement.construction_site_plan_unavailable": "蓝图不可用",
-	"coopcraft.command.settlement.construction_site_unsupported_layout": "布局不符合本轮矩形底板与外围门检查范围",
+	"coopcraft.command.settlement.construction_site_unsupported_layout": "布局不符合本轮矩形底板与直线入口检查范围",
 	"coopcraft.command.settlement.construction_site_out_of_bounds": "所需位置超出建造高度或世界边界",
 	"coopcraft.command.settlement.construction_site_not_ticking": "所需位置未加载或不在实体活动区块",
 	"coopcraft.command.settlement.construction_site_foundation_unsupported": "完整底板的下一层需要稳定、无液体的完整方块支撑",

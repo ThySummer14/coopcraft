@@ -121,17 +121,33 @@ public final class ConstructionSite {
 			}
 			boolean xEdge = p.getX() == minX || p.getX() == maxX;
 			boolean zEdge = p.getZ() == minZ || p.getZ() == maxZ;
-			if (xEdge == zEdge || (long) p.getY() != (long) minY + 1
+			if ((xEdge && zEdge) || (long) p.getY() != (long) minY + 1
 				|| !part.state().setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER)
 					.equals(layout.get(offset(p, new BlockPos(0, 1, 0))))) {
 				return fail(origin, "unsupported_layout", offset(origin, p));
 			}
-			Direction outward = xEdge ? (p.getX() == minX ? Direction.WEST : Direction.EAST)
-				: (p.getZ() == minZ ? Direction.NORTH : Direction.SOUTH);
-			if (part.state().getValue(DoorBlock.FACING).getAxis() != outward.getAxis()) {
-				return fail(origin, "unsupported_layout", offset(origin, p));
+			Direction facing = part.state().getValue(DoorBlock.FACING);
+			Direction outward;
+			int distance = 1;
+			if (xEdge || zEdge) {
+				// Perimeter doors retain the original noncorner, outward-axis rule, for either facing sign.
+				outward = xEdge ? (p.getX() == minX ? Direction.WEST : Direction.EAST)
+					: (p.getZ() == minZ ? Direction.NORTH : Direction.SOUTH);
+				if (facing.getAxis() != outward.getAxis()) {
+					return fail(origin, "unsupported_layout", offset(origin, p));
+				}
+			} else {
+				// A recessed door needs a planned straight, supported two-high corridor to an edge.
+				// Resolve both candidates using only the blueprint; world obstacles never select a detour.
+				int forward = corridorDistance(layout, p, facing, minX, maxX, minZ, maxZ);
+				int backward = corridorDistance(layout, p, facing.getOpposite(), minX, maxX, minZ, maxZ);
+				if (forward == 0 && backward == 0) return fail(origin, "unsupported_layout", offset(origin, p));
+				boolean useForward = forward != 0 && (backward == 0 || forward <= backward);
+				outward = useForward ? facing : facing.getOpposite();
+				distance = useForward ? forward : backward;
 			}
-			entrances.add(offset(offset(origin, p), outward.getNormal()));
+			entrances.add(offset(offset(origin, p), new BlockPos(outward.getStepX() * distance, 0,
+				outward.getStepZ() * distance)));
 		}
 		if (entrances.isEmpty()) return fail(origin, "unsupported_layout", origin);
 		for (int x = 0; x < width; x++) for (int z = 0; z < depth; z++) {
@@ -174,6 +190,29 @@ public final class ConstructionSite {
 			if (result != null) return result;
 		}
 		return fail(origin, "ready", null);
+	}
+
+	/** Returns distance to the exterior feet cell, or zero for a blocked planned corridor.
+	 * The footprint has already been bounded to 64 cells per axis before this method is called. */
+	private static int corridorDistance(Map<BlockPos, BlockState> layout, BlockPos door, Direction direction,
+		int minX, int maxX, int minZ, int maxZ) {
+		int distance = switch (direction) {
+			case WEST -> door.getX() - minX + 1;
+			case EAST -> maxX - door.getX() + 1;
+			case NORTH -> door.getZ() - minZ + 1;
+			case SOUTH -> maxZ - door.getZ() + 1;
+			default -> 0;
+		};
+		for (int step = 1; step < distance; step++) {
+			BlockPos feet = offset(door, new BlockPos(direction.getStepX() * step, 0, direction.getStepZ() * step));
+			BlockState floor = layout.get(offset(feet, new BlockPos(0, -1, 0)));
+			if (floor == null || !safeSupport(floor)) return 0;
+			for (int y = 0; y <= 1; y++) {
+				BlockState obstruction = layout.get(offset(feet, new BlockPos(0, y, 0)));
+				if (obstruction != null && !obstruction.isAir()) return 0;
+			}
+		}
+		return distance;
 	}
 
 	/** Intentionally conservative full-cube support, queried against an empty read-only block view. */

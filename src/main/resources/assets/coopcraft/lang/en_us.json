@@ -520,7 +520,7 @@
 	"coopcraft.command.settlement.construction_sites_reason": "%s candidate(s): %s. First origin %s; first affected position %s.",
 	"coopcraft.command.settlement.construction_sites_scope": "Read-only snapshot of the fixed, same-height candidates. No clearing, terrain changes, materials or job changes. Materials, builder access, internal layout and later changes still require separate checks.",
 	"coopcraft.command.settlement.construction_site_plan_unavailable": "the blueprint is unavailable",
-	"coopcraft.command.settlement.construction_site_unsupported_layout": "the layout is outside this rectangular-floor/perimeter-door check",
+	"coopcraft.command.settlement.construction_site_unsupported_layout": "the layout is outside this rectangular-floor and straight-entry check",
 	"coopcraft.command.settlement.construction_site_out_of_bounds": "a required position is outside build height or the world border",
 	"coopcraft.command.settlement.construction_site_not_ticking": "a required position is unloaded or outside entity-ticking chunks",
 	"coopcraft.command.settlement.construction_site_foundation_unsupported": "the entire floor needs stable, dry full-block support immediately below it",
