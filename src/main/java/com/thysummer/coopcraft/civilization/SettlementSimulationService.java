@@ -1,6 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -648,7 +649,13 @@ public final class SettlementSimulationService {
 				&& event.actors().equals(List.of(person.id(), state.campOwner().id())));
 	}
 
+	/** Pure/core callers retain simulated attendance; Minecraft meals must supply fresh loaded candidates. */
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId) {
+		return eat(data, settlement, villagerId, data.simulationOf(settlement)
+			.map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, Collection<Person> candidates) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled()) {
 			return 0;
@@ -672,7 +679,7 @@ public final class SettlementSimulationService {
 			com.thysummer.coopcraft.civilization.simulation.CommonMealInterruption.recordIfNeeded(
 				state.world(), person, evidence, state.allocatedFoodUnits(personId), state.dailyFoodUnitCap(personId));
 			if (state.normsEnabled()) {
-				state.norms().recordCommonAllocation(person, evidence, state.allocatedFoodUnits(personId));
+				state.norms().recordCommonAllocation(person, evidence, state.allocatedFoodUnits(personId), candidates);
 			}
 			syncSatiety(data, settlement, state, villagerId);
 		}

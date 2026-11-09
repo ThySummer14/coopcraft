@@ -1,11 +1,15 @@
 package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
+
+import com.thysummer.coopcraft.civilization.simulation.Person;
 
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BarrelBlock;
@@ -33,7 +37,7 @@ final class SettlementFoodRequests {
 	}
 
 	private record Batch(long deadline, long gameDay, long coreDay, long modeVersion,
-		SettlementSimulationState state, List<Ticket> tickets) { }
+		SettlementSimulationState state, List<Ticket> tickets, Supplier<? extends Collection<Person>> candidates) { }
 
 	/** Opening a barrel changes only its lid state, not the registered container. */
 	static boolean sameStoreState(BlockState expected, BlockState current) {
@@ -42,16 +46,29 @@ final class SettlementFoodRequests {
 			: expected.equals(current);
 	}
 
+	/** Core-only compatibility path; actual Minecraft callers supply observed candidates. */
 	static boolean enabled(SettlementSavedData data, Settlement settlement) {
+		return enabled(data, settlement, () -> data.simulationOf(settlement)
+			.map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	static boolean enabled(SettlementSavedData data, Settlement settlement, Supplier<? extends Collection<Person>> candidates) {
 		return data.simulationOf(settlement).filter(state -> state.survivalEnabled() && state.normsEnabled())
-			.map(state -> state.norms().isNeedFirstEnforced(state.campOwner().id())).orElse(false);
+			.map(state -> state.norms().isNeedFirstEnforced(state.campOwner().id(), List.copyOf(candidates.get()))).orElse(false);
 	}
 
 	/** Null means the caller must use its original immediate meal path. Reusing a ticket never revives it. */
+	// Core-only compatibility path for pure callers/tests.
 	Ticket submit(SettlementSavedData data, Settlement settlement, UUID resident, long gameTick, long gameDay,
 		Ticket previous, BooleanSupplier present, Runnable eat) {
+		return submit(data, settlement, resident, gameTick, gameDay, previous, present, eat,
+			() -> data.simulationOf(settlement).map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	Ticket submit(SettlementSavedData data, Settlement settlement, UUID resident, long gameTick, long gameDay,
+		Ticket previous, BooleanSupplier present, Runnable eat, Supplier<? extends Collection<Person>> candidates) {
 		if (previous != null) return previous;
-		if (!enabled(data, settlement)) return null;
+		if (!enabled(data, settlement, candidates)) return null;
 		SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
 		String person = state.residentId(resident).orElse(null);
 		if (person == null || !member(data, settlement, resident) || !present.getAsBoolean()) {
@@ -66,7 +83,7 @@ final class SettlementFoodRequests {
 		}
 		if (batch == null) {
 			batch = new Batch(gameTick + WINDOW_TICKS, gameDay, state.world().day(), state.foodRequestModeVersion(),
-				state, new ArrayList<>());
+				state, new ArrayList<>(), candidates);
 			batches.put(settlement.id(), batch);
 		}
 		for (Ticket ticket : batch.tickets()) {
@@ -98,7 +115,8 @@ final class SettlementFoodRequests {
 		for (Ticket ticket : batch.tickets()) {
 			if (!validTicket(data, settlement, batch, ticket)) ticket.cancel();
 		}
-		boolean priority = enabled(data, settlement);
+		List<Person> candidates = List.copyOf(batch.candidates().get());
+		boolean priority = enabled(data, settlement, () -> candidates);
 		if (priority && gameTick < batch.deadline()) return;
 		// Detach before callbacks; neither failures nor reentrant calls can replay this batch.
 		batches.remove(settlement.id());
@@ -107,7 +125,7 @@ final class SettlementFoodRequests {
 			Map<String, Ticket> byPerson = new LinkedHashMap<>();
 			ordered.forEach(ticket -> byPerson.put(ticket.person, ticket));
 			ordered = batch.state().norms().prioritizeFoodRequests(ordered.stream()
-				.map(ticket -> batch.state().world().person(ticket.person)).toList()).stream()
+				.map(ticket -> batch.state().world().person(ticket.person)).toList(), candidates).stream()
 				.map(person -> byPerson.get(person.id())).toList();
 		}
 		try {

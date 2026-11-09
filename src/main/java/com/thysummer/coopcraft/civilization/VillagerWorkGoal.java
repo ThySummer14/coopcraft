@@ -513,8 +513,10 @@ public class VillagerWorkGoal extends Goal {
 	private boolean queuePreparedMeal() {
 		SettlementSavedData data = settlementData();
 		Settlement requestSettlement = settlement;
-		if (!SettlementFoodRequests.enabled(data, requestSettlement)) return false;
 		ServerLevel level = (ServerLevel) villager.level();
+		java.util.function.Supplier<java.util.List<com.thysummer.coopcraft.civilization.simulation.Person>> candidates =
+			() -> SettlementSupervision.candidates(level, data, requestSettlement);
+		if (!SettlementFoodRequests.enabled(data, requestSettlement, candidates)) return false;
 		BlockPos store = target;
 		Map<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> identities = new java.util.LinkedHashMap<>();
 		if (!level.isLoaded(store) || SettlementStockpile.getStockpile(level, data, requestSettlement) == null) {
@@ -544,7 +546,7 @@ public class VillagerWorkGoal extends Goal {
 				&& states.entrySet().stream().allMatch(entry -> SettlementFoodRequests.sameStoreState(
 					entry.getValue(), level.getBlockState(entry.getKey())))
 				&& SettlementStockpile.getStockpile(level, data, requestSettlement) != null,
-			() -> SettlementNeeds.eat(level, data, requestSettlement, villager));
+			() -> SettlementNeeds.eat(level, data, requestSettlement, villager), candidates);
 		if (foodTicket == null) return false;
 		villager.getNavigation().stop();
 		return true;

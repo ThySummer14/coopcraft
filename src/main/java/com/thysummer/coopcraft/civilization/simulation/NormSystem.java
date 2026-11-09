@@ -1,8 +1,11 @@
 package com.thysummer.coopcraft.civilization.simulation;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -420,12 +423,22 @@ public final class NormSystem {
 	}
 
 	public List<Person> prioritizeFoodRequests(List<Person> people) {
+		return prioritizeFoodRequests(people, world.people());
+	}
+
+	/** Use one candidate/qualification snapshot for the entire request window. */
+	public List<Person> prioritizeFoodRequests(List<Person> people, Collection<Person> supervisorCandidates) {
+		List<Person> candidates = supervisionCandidates(supervisorCandidates);
+		Map<String, Boolean> enforced = new HashMap<>();
+		for (Person person : people) {
+			enforced.computeIfAbsent(person.campId(), camp -> enforcedNorm(camp, candidates).isPresent());
+		}
 		return people.stream().sorted((first, second) -> {
 			int campOrder = first.campId().compareTo(second.campId());
 			if (campOrder != 0) {
 				return campOrder;
 			}
-			if (isNeedFirstEnforced(first.campId())) {
+			if (enforced.get(first.campId())) {
 				int hunger = Integer.compare(second.hunger(), first.hunger());
 				if (hunger != 0) {
 					return hunger;
@@ -453,7 +466,7 @@ public final class NormSystem {
 	}
 
 	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence) {
-		recordMealAllocation(requester, evidence, null);
+		recordMealAllocation(requester, evidence, null, world.people());
 	}
 
 	/**
@@ -461,10 +474,17 @@ public final class NormSystem {
 	 * including this meal. Persistent adapters must not infer that total from this cache.
 	 */
 	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence, int dailyTotal) {
-		recordMealAllocation(requester, evidence, dailyTotal);
+		recordCommonAllocation(requester, evidence, dailyTotal, world.people());
 	}
 
-	private void recordMealAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence, Integer dailyTotal) {
+	/** Candidate presence is supplied by the caller and current eligibility is rechecked here. */
+	public void recordCommonAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence,
+		int dailyTotal, Collection<Person> supervisorCandidates) {
+		recordMealAllocation(requester, evidence, dailyTotal, supervisorCandidates);
+	}
+
+	private void recordMealAllocation(Person requester, SurvivalSystem.MealWithEvidence evidence, Integer dailyTotal,
+		Collection<Person> supervisorCandidates) {
 		if (!requester.isAlive() || !world.allPeople().contains(requester)) {
 			throw new IllegalArgumentException("Meal requester must be living and registered");
 		}
@@ -474,15 +494,17 @@ public final class NormSystem {
 			+ commonAllocations.getOrDefault(world.day() + ":" + requester.id(), 0)) {
 			throw new IllegalArgumentException("Daily allocation total cannot omit this meal or previous recorded meals");
 		}
-		recordCommonAllocation(requester, meal.units(), meal.requestEventId(), meal.allocationEventId(), evidence, dailyTotal);
+		recordCommonAllocation(requester, meal.units(), meal.requestEventId(), meal.allocationEventId(), evidence,
+			dailyTotal, supervisionCandidates(supervisorCandidates));
 	}
 
 	public void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId, long allocationEventId) {
-		recordCommonAllocation(requester, allocatedUnits, requestEventId, allocationEventId, null, null);
+		recordCommonAllocation(requester, allocatedUnits, requestEventId, allocationEventId, null, null, world.people());
 	}
 
 	private void recordCommonAllocation(Person requester, int allocatedUnits, long requestEventId,
-		long allocationEventId, SurvivalSystem.MealWithEvidence evidence, Integer authoritativeDailyTotal) {
+		long allocationEventId, SurvivalSystem.MealWithEvidence evidence, Integer authoritativeDailyTotal,
+		List<Person> supervisorCandidates) {
 		if (allocatedUnits <= 0) {
 			throw new IllegalArgumentException("Allocated quantity must be positive");
 		}
@@ -494,7 +516,7 @@ public final class NormSystem {
 		int careBonus = careBonus(requester);
 		if (active.isPresent()) {
 			Norm norm = active.get();
-			List<Person> supervisors = supervisors(norm);
+			List<Person> supervisors = supervisors(norm, supervisorCandidates);
 			if (supervisors.size() >= 2) {
 				int effectiveCap = norm.allocationUnitCap() + careBonus;
 				boolean compliant = dailyTotal <= effectiveCap;
@@ -540,7 +562,7 @@ public final class NormSystem {
 			}
 		}
 		if (careBonus > 0 && (active.isEmpty() || dailyTotal > active.get().allocationUnitCap())) {
-			recordCareAllocation(requester, allocatedUnits, dailyTotal, requestEventId, allocationEventId, evidence);
+			recordCareAllocation(requester, allocatedUnits, dailyTotal, requestEventId, allocationEventId, evidence, supervisorCandidates);
 		}
 	}
 
@@ -568,7 +590,8 @@ public final class NormSystem {
 		int dailyTotal,
 		long requestEventId,
 		long allocationEventId,
-		SurvivalSystem.MealWithEvidence evidence
+		SurvivalSystem.MealWithEvidence evidence,
+		List<Person> supervisorCandidates
 	) {
 		Norm care = world.norm(requester.campId(), Norm.CARE_FIRST_COMMON_STORE).filter(Norm::isActive).orElseThrow();
 		int baseCap = world.norm(requester.campId(), Norm.NEED_FIRST_COMMON_STORE)
@@ -579,7 +602,7 @@ public final class NormSystem {
 		boolean compliant = dailyTotal <= effectiveCap;
 		List<String> actors = new ArrayList<>();
 		actors.add(requester.id());
-		for (Person supervisor : supervisors(care)) {
+		for (Person supervisor : supervisors(care, supervisorCandidates)) {
 			actors.add(supervisor.id());
 		}
 		List<Long> causes = new ArrayList<>();
@@ -948,19 +971,36 @@ public final class NormSystem {
 	}
 
 	private Optional<Norm> enforcedNorm(String campId) {
+		return enforcedNorm(campId, world.people());
+	}
+
+	private Optional<Norm> enforcedNorm(String campId, List<Person> candidates) {
 		return world.norm(campId, Norm.NEED_FIRST_COMMON_STORE)
 			.filter(Norm::isActive)
-			.filter(norm -> supervisors(norm).size() >= 2);
+			.filter(norm -> supervisors(norm, candidates).size() >= 2);
 	}
 
 	/** Read-only: the existing active norm and same-camp decision-capable supervisors with time left. */
 	public boolean isNeedFirstEnforced(String campId) {
-		return enforcedNorm(campId).isPresent();
+		return isNeedFirstEnforced(campId, world.people());
 	}
 
-	private List<Person> supervisors(Norm norm) {
-		return norm.supporters().stream()
-			.map(world::person)
+	public boolean isNeedFirstEnforced(String campId, Collection<Person> supervisorCandidates) {
+		return enforcedNorm(campId, supervisionCandidates(supervisorCandidates)).isPresent();
+	}
+
+	/** Stale, foreign and impersonating objects never count, including after food was consumed. */
+	private List<Person> supervisionCandidates(Collection<Person> candidates) {
+		if (candidates == null) return List.of();
+		Set<Person> registered = Collections.newSetFromMap(new IdentityHashMap<>());
+		registered.addAll(world.people());
+		return candidates.stream().filter(registered::contains).distinct().toList();
+	}
+
+	private List<Person> supervisors(Norm norm, List<Person> candidates) {
+		return candidates.stream()
+			.filter(Person::isAlive)
+			.filter(person -> norm.supporters().contains(person.id()))
 			.filter(person -> person.campId().equals(norm.campId()))
 			.filter(this::canSupervise)
 			.sorted(Comparator.comparing(Person::id))

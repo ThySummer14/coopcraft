@@ -52,7 +52,8 @@ public final class SettlementNeeds {
 			return 0;
 		}
 		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-			return SettlementSimulationService.eat(data, settlement, villager.getUUID());
+			return SettlementSimulationService.eat(data, settlement, villager.getUUID(),
+				SettlementSupervision.candidates(level, data, settlement));
 		}
 		int foodPoints = consumeOneFood(villager.getInventory());
 		if (foodPoints == 0) {
