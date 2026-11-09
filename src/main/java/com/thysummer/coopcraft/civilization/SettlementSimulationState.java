@@ -389,6 +389,16 @@ public final class SettlementSimulationState {
 			trust.add(relationship);
 		}
 		tag.put("Trust", trust);
+		// Optional additive field: older readers ignore it and may discard it when saving.
+		ListTag reciprocity = new ListTag();
+		for (Map.Entry<String, Integer> entry : person.reciprocityMemories().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag relationship = new CompoundTag();
+			relationship.putString("PersonId", entry.getKey());
+			relationship.putInt("Value", entry.getValue());
+			reciprocity.add(relationship);
+		}
+		tag.put("Reciprocity", reciprocity);
 		tag.put("ObservedNorms", saveStrings(person.observedNorms().stream().sorted().toList()));
 		ListTag information = new ListTag();
 		for (SocialInformation known : person.information()) {
@@ -404,6 +414,16 @@ public final class SettlementSimulationState {
 		for (int i = 0; i < trust.size(); i++) {
 			CompoundTag relationship = trust.getCompound(i);
 			person.setTrust(relationship.getString("PersonId"), relationship.getInt("Value"));
+		}
+		ListTag reciprocity = tag.getList("Reciprocity", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < reciprocity.size(); i++) {
+			CompoundTag relationship = reciprocity.getCompound(i);
+			// Skip just the malformed optional memory, preserving valid residents and resources.
+			if (!relationship.contains("PersonId", ListTag.TAG_STRING)
+				|| !relationship.contains("Value", ListTag.TAG_INT)) continue;
+			String donorId = relationship.getString("PersonId");
+			int count = relationship.getInt("Value");
+			if (!donorId.isBlank() && count >= 0) person.restoreReciprocity(donorId, count);
 		}
 		for (String normId : loadStrings(tag.getList("ObservedNorms", ListTag.TAG_STRING))) {
 			person.observeNorm(normId);

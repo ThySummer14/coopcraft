@@ -228,8 +228,22 @@ public final class Person {
 		return reciprocity.getOrDefault(otherPersonId, 0);
 	}
 
+	public Map<String, Integer> reciprocityMemories() {
+		return Map.copyOf(reciprocity);
+	}
+
+	/** Restore evidence directly, without replaying aid, trust gains or grievance relief. */
+	public void restoreReciprocity(String donorId, int count) {
+		if (donorId == null || donorId.isBlank() || count < 0) {
+			throw new IllegalArgumentException("Invalid reciprocity memory");
+		}
+		if (count == 0) reciprocity.remove(donorId);
+		else reciprocity.put(donorId, count);
+	}
+
 	public void recordAidFrom(String donorId) {
-		reciprocity.merge(donorId, 1, Integer::sum);
+		int previous = reciprocityWith(donorId);
+		restoreReciprocity(donorId, previous == Integer.MAX_VALUE ? previous : previous + 1);
 		adjustTrust(donorId, 2);
 		grievance = Math.max(0, grievance - 1);
 	}
