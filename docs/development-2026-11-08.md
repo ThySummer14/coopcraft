@@ -737,3 +737,13 @@
 - 四个原有照顾配额持久化用例改为从同一初始存档分叉，保留完整NBT比较含随机时钟，不删比较字段。新测试覆盖严格组件/时钟、显式部分满仓交接、保龄重载、模式切换、死亡遗物和旧材料路径；正式执行以下方CI记录为准。
 
 - 验证完成：`45ca09ab` 的[显式保龄交接构建](https://github.com/ThySummer14/coopcraft/actions/runs/42617552640)首次通过完整build与1135项JUnit，0失败/0跳过；新增41项（组件9、时钟6、适配器16、服务/模式/死亡及旧入口10）全部通过，原照顾配额5项也通过。206行配给和48行请求顺序CSV与前版逐字一致。[构建包](https://github.com/ThySummer14/coopcraft/actions/runs/42617552640/artifacts/13673647172)内运行jar为987050字节，SHA-256 `4b002f43a3a799f6d0bb262ae0a8a59e5151c328450ff11495f2a4b01cec6abf`；源码jar为410537字节，SHA-256 `94e52092955a0aa6364e07a2f3d8de216e0014c41e266ebc63beaa51aae277b4`。已解包核对两个新类、563条双语资源与原蓝图。没有启动Minecraft、客户端、服务器或GameTest；当前只验证标准容器/服务与NBT边界，不代表原版行为、自动返程或真实重启已经验收。升级前备份整个世界，旧版本回写可能丢掉新时钟字段；带标记食物不会参与模组普通模式的自动配给。
+
+
+## 第六十增量：带年龄食品的原版消费隔离
+
+- 官方Minecraft1.21.1 server.jar及映射SHA-1分别为59353fb40c36d304f2035d51e7d6e6baa98dc05c、03f8985492bda0afc0898465341eb0acef35f570，与版本清单一致。仅静态读取字节码：村民分享先扣原堆，再new ItemStack(item,count)，确实会丢CustomData；原版繁殖计分只按物品种类；Player.eat在调用LivingEntity之前加营养；村民种植直接落块绕过玩家useOn。没有运行游戏来推断这些路径。
+- 新增三个局部村民守卫：eatUntilFull、throwHalfStack、HarvestFarmland.tick的唯一库存getItem读取对本协议标记返回EMPTY视图，原槽位不变；另排除繁殖计分并拒绝拾取新标记掉落。同背包普通食物保留原引用及原FOOD_POINTS，未知/坏标记也隔离。三个Redirect各限定require=1、allow=1，映射/调用点变化应显式失败。
+- 玩家侧在ItemStack使用、完成食用与种植，LivingEntity两种eat、Player自身eat及Mob最终交互入口加HEAD守卫，不先加营养、不删除或刷新货物。所有已标记食品即使新鲜也暂不能原版食用；手持货物无法开启村民交互，空手恢复。客户端显示两行货物提示，不解析服务端时钟、不加载区块。
+- RecipeManager三个getRecipeFor重载与getRecipesFor对标记原料拒绝查询，含缓存holder；普通输入放行。官方RecipeCache使用全组件键；营火无配方回退原物并split掉落保留组件，已核对。配方书搬料的库存匹配使用isSameItemSameComponents，不能从普通原料请求选择标记堆。
+- 没有开启survival自动采集返仓，没有时钟/NBT/死亡遗物格式迁移，无批次或营养补偿。未接管堆肥销毁、第三方直接库存/营养改写或人为给非协议小麦贴标签的专用加工；hasFarmSeeds调度提示未改，可能尝试空转但不会种植标记食物。不能宣称全转换保护、实时腐坏或可玩物流已完成。
+- 测试覆盖只读真实库存视图、普通自定义食品、未知/坏标记、NBT往返、混合配方与各查询handler取消；静态源码接线测试与编译不等于运行时Mixin成功应用。完整build/JUnit与产物结果待下方CI记录，未启动Minecraft客户端、服务端或GameTest。

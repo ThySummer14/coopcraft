@@ -561,5 +561,7 @@
 	"coopcraft.command.settlement.cargo_rescue_hint": "管理员可用 /coop settlement cargo rescue <记录ID> 领取越界遗物到自己的主背包；不会加载或改动死亡地点。",
 	"coopcraft.command.settlement.cargo_rescue_blocked": "救援只适用于死亡位置当前越出建筑高度或世界边界的遗物；普通记录请到现场领取。",
 	"coopcraft.command.settlement.cargo_rescued": "已由管理员救援%s位于%s的遗物：领取%s件，还剩%s件。",
-	"coopcraft.command.settlement.cargo_rescue_requirements": "救援需管理员本人存活、非旁观者，站在合法且已加载、正在活动的区块；遗物位置须仍在边界外。"
+	"coopcraft.command.settlement.cargo_rescue_requirements": "救援需管理员本人存活、非旁观者，站在合法且已加载、正在活动的区块；遗物位置须仍在边界外。",
+	"coopcraft.food_age.cargo_only": "文明食品货物：暂停原版食用、分享和种植",
+	"coopcraft.food_age.return_to_source": "请送回来源聚落公仓；不能用于原版配方"
 }

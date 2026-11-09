@@ -8,6 +8,14 @@
 		"VillagerMakeLoveMixin",
 		"VillagerInteractionMixin",
 		"MerchantMenuMixin",
+		"VillagerFoodAgeMixin",
+		"TradeWithVillagerFoodAgeMixin",
+		"HarvestFarmlandFoodAgeMixin",
+		"ItemStackFoodAgeMixin",
+		"LivingEntityFoodAgeMixin",
+		"PlayerFoodAgeMixin",
+		"MobFoodAgeMixin",
+		"RecipeManagerFoodAgeMixin",
 		"MobAccessor"
 	],
 	"injectors": {
