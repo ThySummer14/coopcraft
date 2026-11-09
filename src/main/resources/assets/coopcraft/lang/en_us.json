@@ -518,7 +518,7 @@
 	"coopcraft.command.settlement.construction_sites_ready": "Housing %s: the first currently acceptable site is %s.",
 	"coopcraft.command.settlement.construction_sites_blocked": "Housing %s: none of %s checked candidate sites is currently acceptable.",
 	"coopcraft.command.settlement.construction_sites_reason": "%s candidate(s): %s. First origin %s; first affected position %s.",
-	"coopcraft.command.settlement.construction_sites_scope": "Read-only snapshot of the fixed, same-height candidates. No clearing, terrain changes, materials or job changes. Materials, builder access, internal layout and later changes still require separate checks.",
+	"coopcraft.command.settlement.construction_sites_scope": "Read-only survey: same height, then one block up, then one block down, with up to 12 sites per level. No clearing, terrain, material or job changes. Materials, access, internal layout and later changes need separate checks.",
 	"coopcraft.command.settlement.construction_site_plan_unavailable": "the blueprint is unavailable",
 	"coopcraft.command.settlement.construction_site_unsupported_layout": "the layout is outside this rectangular-floor and straight-entry check",
 	"coopcraft.command.settlement.construction_site_out_of_bounds": "a required position is outside build height or the world border",

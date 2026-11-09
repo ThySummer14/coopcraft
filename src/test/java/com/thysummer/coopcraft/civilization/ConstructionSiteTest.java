@@ -282,7 +282,7 @@ class ConstructionSiteTest {
 		var probe = new Probe();
 		var before = Map.copyOf(probe.blocks);
 		var candidates = ConstructionSite.inspectCandidates(cottage, new BlockPos(0, 64, 0), probe);
-		assertEquals(12, candidates.size());
+		assertEquals(36, candidates.size());
 		assertEquals(List.of(new BlockPos(0, 64, -6), new BlockPos(6, 64, 0), new BlockPos(0, 64, 6),
 			new BlockPos(-6, 64, 0)), candidates.subList(0, 4).stream().map(ConstructionSite.Result::origin).toList());
 		assertEquals(candidates, ConstructionSite.inspectCandidates(cottage, new BlockPos(0, 64, 0), probe));

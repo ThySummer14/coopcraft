@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -43,19 +44,43 @@ public final class ConstructionSite {
 		public boolean ready() { return reason.equals("ready"); }
 	}
 
+	/** Original horizontal order, also retained by nonresidential production selection. */
 	public static List<BlockPos> candidates(BlockPos center) {
+		return candidates(center, new int[] {0});
+	}
+
+	/** Exhaust the original twelve first, then all +1, then all -1; never interleave heights. */
+	public static List<BlockPos> candidates(ConstructionPlan plan, BlockPos center) {
+		return candidates(center, isHousing(plan) ? new int[] {0, 1, -1} : new int[] {0});
+	}
+
+	private static List<BlockPos> candidates(BlockPos center, int[] heights) {
 		List<BlockPos> result = new ArrayList<>();
-		for (int distance : DISTANCES) {
+		for (int height : heights) for (int distance : DISTANCES) {
 			for (Direction direction : Direction.Plane.HORIZONTAL) {
-				result.add(center.relative(direction, distance).immutable());
+				try {
+					result.add(offset(center, new BlockPos(direction.getStepX() * distance, height,
+						direction.getStepZ() * distance)));
+				} catch (ArithmeticException exception) {
+					// Unrepresentable origins are skipped, never wrapped to a different site.
+				}
 			}
 		}
 		return List.copyOf(result);
 	}
 
-	/** All twelve candidates, in the same order used for selection. No job or inventory access. */
+	/** Bounded read-only selection, stopping as soon as the shared diagnostic order is ready. */
+	public static Optional<Result> firstReady(ConstructionPlan plan, BlockPos center, Probe probe) {
+		for (BlockPos origin : candidates(plan, center)) {
+			Result result = inspect(plan, origin, probe);
+			if (result.ready()) return Optional.of(result);
+		}
+		return Optional.empty();
+	}
+
+	/** Same bounded order as selection; no job or inventory access, and no world-result cache. */
 	public static List<Result> inspectCandidates(ConstructionPlan plan, BlockPos center, Probe probe) {
-		return candidates(center).stream().map(origin -> inspect(plan, origin, probe)).toList();
+		return candidates(plan, center).stream().map(origin -> inspect(plan, origin, probe)).toList();
 	}
 
 	/** Known residential IDs remain residential even when a malformed reload removes their beds. */

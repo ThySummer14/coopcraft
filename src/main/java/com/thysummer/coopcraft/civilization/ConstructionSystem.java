@@ -203,10 +203,12 @@ public final class ConstructionSystem {
 	}
 
 	private static BlockPos chooseOrigin(ServerLevel level, Settlement settlement, ConstructionPlan plan) {
-		ConstructionSite.Probe probe = siteProbe(level);
-		boolean housing = ConstructionSite.isHousing(plan);
+		if (ConstructionSite.isHousing(plan)) {
+			return ConstructionSite.firstReady(plan, settlement.center(), siteProbe(level))
+				.map(ConstructionSite.Result::origin).orElse(null);
+		}
 		for (BlockPos origin : ConstructionSite.candidates(settlement.center())) {
-			if (housing ? ConstructionSite.inspect(plan, origin, probe).ready() : canPlace(level, plan, origin)) return origin;
+			if (canPlace(level, plan, origin)) return origin;
 		}
 		return null;
 	}
