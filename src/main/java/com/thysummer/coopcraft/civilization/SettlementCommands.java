@@ -425,6 +425,7 @@ public final class SettlementCommands {
 		if (job == null && !pending) {
 			send(source, "no_projects");
 		}
+		if (job != null || pending) send(source, "material_sources");
 	}
 
 	private static void showProject(CommandSourceStack source, ResourceLocation id, int nextIndex, boolean active,
@@ -447,6 +448,13 @@ public final class SettlementCommands {
 		Map<String, Long> missing = new LinkedHashMap<>();
 		materialGaps(remaining, available).forEach((item, count) -> missing.put(BuiltInRegistries.ITEM.getKey(item).toString(), count));
 		send(source, "gaps", missing.toString());
+		SettlementWoolSupply.inspect(remaining, stockpile).ifPresent(snapshot ->
+			source.sendSuccess(() -> woolSupplyMessage(snapshot), false));
+	}
+
+	static Component woolSupplyMessage(SettlementWoolSupply.Snapshot snapshot) {
+		return message("wool_supply", snapshot.missingBeds(), snapshot.missingWool(),
+			snapshot.replacementString(), snapshot.availableString());
 	}
 
 	/** Formatting a snapshot never resolves a target, loads chunks, or changes a saved project. */

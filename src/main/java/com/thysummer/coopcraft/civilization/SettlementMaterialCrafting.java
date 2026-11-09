@@ -22,6 +22,7 @@ public final class SettlementMaterialCrafting {
 		CRAFTING_TABLE(Items.CRAFTING_TABLE, 1, Items.OAK_PLANKS, 4),
 		STICKS(Items.STICK, 8, Items.OAK_LOG, 1),
 		DOOR(Items.OAK_DOOR, 3, Items.OAK_PLANKS, 6),
+		WOOL(Items.WHITE_WOOL, 1, Items.STRING, 4),
 		BED(Items.WHITE_BED, 1, Items.WHITE_WOOL, 3, Items.OAK_PLANKS, 3),
 		TORCH_COAL(Items.TORCH, 4, Items.COAL, 1, Items.STICK, 1),
 		TORCH_CHARCOAL(Items.TORCH, 4, Items.CHARCOAL, 1, Items.STICK, 1),
@@ -55,15 +56,16 @@ public final class SettlementMaterialCrafting {
 		Map<Item, Integer> demand) {
 		if (stockpile == null) { return Optional.empty(); }
 		for (Map.Entry<Item, Integer> need : demand.entrySet()) {
-			if (need.getValue() <= countPlain(stockpile, need.getKey())) {
+			if (need.getValue() <= availableProduct(stockpile, state, need.getKey())) {
 				continue;
 			}
 			for (Recipe recipe : Recipe.values()) {
-				if (recipe.output() == need.getKey() && preview(stockpile, state, recipe) != null) {
+				if (recipe != Recipe.WOOL && recipe.output() == need.getKey()
+					&& preview(stockpile, state, recipe) != null) {
 					return Optional.of(recipe);
 				}
 			}
-			// Both intermediates consume only logs, so dependency depth is bounded at one.
+			// Explicit raw-input intermediates keep dependency depth bounded at one.
 			for (Recipe recipe : Recipe.values()) {
 				if (recipe.output() != need.getKey()) { continue; }
 				for (Recipe prerequisite : List.of(Recipe.PLANKS, Recipe.STICKS)) {
@@ -73,9 +75,21 @@ public final class SettlementMaterialCrafting {
 						return Optional.of(prerequisite);
 					}
 				}
+				// Wool is only a bed prerequisite, capped at the next bed's three plain wool.
+				if (recipe == Recipe.BED
+					&& countPlain(stockpile, Items.WHITE_WOOL) < recipe.ingredients().get(Items.WHITE_WOOL)
+					&& preview(stockpile, state, Recipe.WOOL) != null) {
+					return Optional.of(Recipe.WOOL);
+				}
 			}
 		}
 		return Optional.empty();
+	}
+
+	private static long availableProduct(Container stockpile, SettlementSimulationState state, Item item) {
+		// Construction consumes named beds as well; other crafting stock keeps its plain-item policy.
+		return item == Items.WHITE_BED ? ConstructionMaterials.available(stockpile, state, item)
+			: countPlain(stockpile, item);
 	}
 
 	/** Read-only gathering priority: structural logs need no workshop and must be publicly consumable. */
@@ -94,7 +108,7 @@ public final class SettlementMaterialCrafting {
 			+ availablePlain(stockpile, state, Items.STICK);
 		for (Map<Item, Integer> demand : demands) {
 			for (Recipe recipe : Recipe.values()) {
-				if (demand.getOrDefault(recipe.output(), 0) <= countPlain(stockpile, recipe.output())) {
+				if (demand.getOrDefault(recipe.output(), 0) <= availableProduct(stockpile, state, recipe.output())) {
 					continue;
 				}
 				int planks = Math.max(0, recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0)

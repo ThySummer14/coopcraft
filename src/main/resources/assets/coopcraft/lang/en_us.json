@@ -541,5 +541,7 @@
 	"coopcraft.interaction.blocker.construction_workshop_out_of_bounds": "Paused: the workshop or working space is outside the building bounds",
 	"coopcraft.interaction.blocker.construction_workshop_not_ticking": "Paused: the workshop or working space is not fully loaded and entity-ticking",
 	"coopcraft.interaction.blocker.construction_workshop_foundation_unsupported": "Paused: safe full-block support is missing below the workshop working area",
-	"coopcraft.interaction.blocker.construction_workshop_volume_occupied": "Paused: blocks, fluids or vegetation occupy the workshop or working space"
+	"coopcraft.interaction.blocker.construction_workshop_volume_occupied": "Paused: blocks, fluids or vegetation occupy the workshop or working space",
+	"coopcraft.command.settlement.wool_supply": "Bed input budget: %s white beds missing; %s more white wool, alternatively %s plain string (%s in the communal store). Planks, a usable workbench and crafting space are also required. Per-project estimate; no items reserved.",
+	"coopcraft.command.settlement.material_sources": "Sources: wood/stone gathering uses marked blocks within the resident's 12-block search range; no whole-tree marking or replanting. Supply wool, string and coal/charcoal to the communal store."
 }

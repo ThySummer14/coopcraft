@@ -541,5 +541,7 @@
 	"coopcraft.interaction.blocker.construction_workshop_out_of_bounds": "暂停：打制点或操作空间超出建造边界",
 	"coopcraft.interaction.blocker.construction_workshop_not_ticking": "暂停：打制点或操作空间未全部加载并处于实体活动区块",
 	"coopcraft.interaction.blocker.construction_workshop_foundation_unsupported": "暂停：打制点操作区下方缺少安全完整支撑",
-	"coopcraft.interaction.blocker.construction_workshop_volume_occupied": "暂停：打制点或操作空间被方块、液体或植被占据"
+	"coopcraft.interaction.blocker.construction_workshop_volume_occupied": "暂停：打制点或操作空间被方块、液体或植被占据",
+	"coopcraft.command.settlement.wool_supply": "白床原料预算：缺%s张床；尚缺%s白羊毛，可改用%s根普通线（公仓现有%s根）。另需木板、可用工作台及加工空间；按此项目单独估算，不预留物资。",
+	"coopcraft.command.settlement.material_sources": "原料来源：木石仅采居民12格搜索范围内的已标记方块，不自动认整树或补种；羊毛、线、煤/木炭仍需玩家投入公仓。"
 }
