@@ -79,8 +79,10 @@ public final class SettlementCropHarvest {
 		villager.swing(InteractionHand.MAIN_HAND);
 		int potatoes = output.get().stream().filter(SettlementCropHarvest::ordinaryPotato).mapToInt(ItemStack::getCount).sum();
 		if (potatoes > 0) SettlementSimulationService.recordProduction(villager, data, settlement, Items.POTATO, potatoes, "harvest_crop");
-		var stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		if (stockpile != null) SettlementStockpile.depositItem(stockpile, villager.getInventory(), Items.POTATO);
+		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+			var stockpile = SettlementStockpile.getStockpile(level, data, settlement);
+			if (stockpile != null) SettlementStockpile.depositItem(stockpile, villager.getInventory(), Items.POTATO);
+		}
 		return potatoes;
 	}
 }

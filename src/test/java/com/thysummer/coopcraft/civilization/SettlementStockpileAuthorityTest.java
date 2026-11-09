@@ -136,7 +136,7 @@ class SettlementStockpileAuthorityTest {
 	}
 
 	@Test
-	void disablingSurvivalRestoresLegacyDistributionAndExcessDeposits() {
+	void disablingSurvivalRestoresDistributionButPotatoSurplusRequiresArrival() {
 		Fixture f = fixture(true);
 		f.stockpile().setItem(0, new ItemStack(Items.POTATO, 64));
 		repeatTicks(f);
@@ -155,9 +155,8 @@ class SettlementStockpileAuthorityTest {
 		f.inventory().clearContent();
 		f.inventory().setItem(0, new ItemStack(Items.POTATO, 64));
 		tick(f, scheduledTime(f) + 40);
-		int retained = f.data().membersOf(f.settlement()).getFirst().personality().foodRetentionPoints(12);
-		assertEquals(Math.max(12, retained), f.inventory().countItem(Items.POTATO));
-		assertEquals(64 - Math.max(12, retained), f.stockpile().countItem(Items.POTATO));
+		assertEquals(64, f.inventory().countItem(Items.POTATO));
+		assertEquals(0, f.stockpile().countItem(Items.POTATO));
 	}
 
 	@Test

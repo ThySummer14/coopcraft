@@ -56,6 +56,46 @@ class SettlementCargoRecoveryTest {
 		return data.captureDeath(member(dead), Level.OVERWORLD, dead, PLACE, "Resident", () -> source);
 	}
 
+	@Test void ordinaryFoodCargoAndPersonalRemainderSurviveSaveAndPartialRecovery() {
+		UUID dead = new UUID(57, 1);
+		SimpleContainer source = new SimpleContainer(8);
+		ItemStack named = new ItemStack(Items.SWEET_BERRIES, 3);
+		named.set(DataComponents.CUSTOM_NAME, Component.literal("Harvest"));
+		source.setItem(0, named.copy());
+		source.setItem(1, new ItemStack(Items.POTATO, 4));
+		source.setItem(2, new ItemStack(Items.BREAD, 2));
+		var data = new SettlementCargoRecovery();
+		assertEquals(7, capture(data, dead, source));
+		assertEquals(2, source.countItem(Items.BREAD));
+		assertEquals(0, source.countItem(Items.POTATO));
+		assertEquals(0, source.countItem(Items.SWEET_BERRIES));
+		var loaded = SettlementCargoRecovery.load(data.save(new CompoundTag(), registries), registries);
+		SimpleContainer recipient = new SimpleContainer(1);
+		assertEquals(3, loaded.recover(dead, recipient, () -> true).moved());
+		assertTrue(ItemStack.isSameItemSameComponents(named, recipient.getItem(0)));
+		assertEquals(4, loaded.inspect(dead).orElseThrow().totalCount());
+		recipient.clearContent();
+		assertEquals(4, loaded.recover(dead, recipient, () -> true).moved());
+		assertEquals(0, loaded.recover(dead, recipient, () -> true).moved());
+	}
+
+	@Test void survivalDeathKeepsPhysicalFoodOutsideTheNewCustodyRule() {
+		UUID dead = new UUID(57, 2);
+		var claims = member(dead);
+		var claim = claims.uniqueClaim().orElseThrow();
+		var simulation = claim.data().getOrCreateSimulation(claim.settlement());
+		simulation.mapResident(dead, false, 0);
+		simulation.setSurvivalEnabled(true, 0);
+		SimpleContainer source = new SimpleContainer(new ItemStack(Items.POTATO, 8),
+			new ItemStack(Items.SWEET_BERRIES, 9), new ItemStack(Items.COBBLESTONE, 2));
+		var before = simulation.save();
+		var data = new SettlementCargoRecovery();
+		assertEquals(2, data.captureDeath(claims, Level.OVERWORLD, dead, PLACE, "Resident", () -> source));
+		assertEquals(8, source.countItem(Items.POTATO));
+		assertEquals(9, source.countItem(Items.SWEET_BERRIES));
+		assertEquals(before, simulation.save());
+	}
+
 	@Test void movesActualMaterialSlotsAndPreservesAllOtherInventory() {
 		SettlementCargoRecovery data = new SettlementCargoRecovery();
 		UUID dead = UUID.randomUUID();

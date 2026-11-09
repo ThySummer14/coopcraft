@@ -29,7 +29,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
 
 /**
- * Dimension-local custody of real material stacks from an observed member death. Server thread only.
+ * Dimension-local custody of real cargo stacks from an observed member death. Server thread only.
  * This is not loot: it neither spawns entities nor reads doMobLoot, tickets or abstract resources.
  * Standard synchronous, non-reentrant Container mutation semantics are required. Normal saves preserve
  * custody; separate entity/chunk/player files do not provide process-crash atomicity.
@@ -81,11 +81,15 @@ public final class SettlementCargoRecovery extends SavedData {
 			|| records.containsKey(deceasedId)) return 0;
 		Container source = inventory.get();
 		if (source == null || source.getContainerSize() > MAX_CARGO_SLOTS) return 0;
+		var claim = claims.uniqueClaim().orElseThrow();
+		// Ordinary real-inventory food has no expiry metadata. Preserve its remaining transport
+		// types including personal rations; survival's abstract food authority is unchanged.
+		boolean preserveFood = !SettlementSimulationService.isSurvivalEnabled(claim.data(), claim.settlement());
 		CargoRecord record = new CargoRecord(deceasedId, position, safeName(name), new ArrayList<>());
 		// Move only actual source contents. Repeated callbacks see the drained inventory.
 		for (int slot = 0; slot < source.getContainerSize(); slot++) {
 			ItemStack stack = source.getItem(slot);
-			if (!SettlementCargo.isMaterial(stack)) continue;
+			if (!SettlementCargo.isMaterial(stack) && !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
 			ItemStack removed = source.removeItem(slot, stack.getCount());
 			if (!removed.isEmpty()) record.stacks.add(removed.copy());
 		}

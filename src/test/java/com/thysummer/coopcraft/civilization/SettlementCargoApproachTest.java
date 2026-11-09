@@ -135,6 +135,8 @@ class SettlementCargoApproachTest {
 		assertTrue(tick.indexOf("if (atCargoStore())") < tick.indexOf("Container currentStore"));
 		assertTrue(tick.contains("currentStore, this::atCargoStore"));
 		assertTrue(tick.contains("SettlementMembershipClaims.belongsTo"));
+		assertTrue(tick.contains("if (!hasReturnCargo()) { cargoBlocker = null; stop(); return; }"));
+		assertTrue(source.contains("SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory())"));
 		assertTrue(tick.contains("this::navigationSearchRegionLoaded"));
 		assertFalse(tick.contains("navigateTo(target.above())"));
 		for (String blocker : List.of("cargo_store_unavailable", "cargo_path_blocked", "cargo_store_full")) assertTrue(source.contains(blocker));

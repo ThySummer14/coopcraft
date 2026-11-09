@@ -20,8 +20,8 @@ public final class SettlementCargoDelivery {
 	public static Ticket prepare(SettlementSavedData data, Settlement camp, UUID actor,
 		Container inventory, BooleanSupplier identityAndPresence) {
 		if (data == null || camp == null || actor == null || inventory == null || identityAndPresence == null
-			|| !data.isMember(camp, actor) || data.getStockpile(camp).isEmpty()
-			|| !identityAndPresence.getAsBoolean()) return null;
+			|| !identityAndPresence.getAsBoolean()
+			|| !data.isMember(camp, actor) || data.getStockpile(camp).isEmpty()) return null;
 		return new Ticket(data, camp, actor, inventory, identityAndPresence);
 	}
 
@@ -33,11 +33,14 @@ public final class SettlementCargoDelivery {
 
 	private static boolean matches(Ticket ticket, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
 		return data == ticket.data && camp != null
+			&& ticket.identityAndPresence.getAsBoolean()
+			&& ticket.survival == SettlementSimulationService.isSurvivalEnabled(data, camp)
+			&& ticket.simulation == data.simulationOf(camp).orElse(null)
+			&& (ticket.simulation == null || ticket.modeVersion == ticket.simulation.foodRequestModeVersion())
 			&& ticket.camp.equals(camp.id()) && ticket.actor.equals(actor) && inventory == ticket.inventory
 			&& data.isMember(camp, actor) && ticket.member == data.memberIdentity(actor)
 			&& ticket.binding == data.stockpileBindingToken(camp)
-			&& data.getStockpile(camp).filter(ticket.store::equals).isPresent()
-			&& ticket.identityAndPresence.getAsBoolean();
+			&& data.getStockpile(camp).filter(ticket.store::equals).isPresent();
 	}
 
 	public static Result finish(Ticket ticket, SettlementSavedData data, Settlement camp, UUID actor,
@@ -49,6 +52,7 @@ public final class SettlementCargoDelivery {
 		if (!atStore.getAsBoolean()) return new Result(Status.NOT_AT_STORE, 0);
 		if (!matches(ticket, data, camp, actor, inventory)) return new Result(Status.INVALID, 0);
 		int moved = SettlementStockpile.depositGatheredResources(currentStore, inventory);
+		if (!ticket.survival) moved += SettlementFoodCargo.depositSurplus(data, camp, actor, inventory, currentStore);
 		return new Result(moved > 0 ? Status.DELIVERED : Status.NO_CAPACITY, moved);
 	}
 
@@ -59,6 +63,9 @@ public final class SettlementCargoDelivery {
 		private final BlockPos store;
 		private final Container inventory;
 		private final BooleanSupplier identityAndPresence;
+		private final boolean survival;
+		private final SettlementSimulationState simulation;
+		private final long modeVersion;
 		private boolean used;
 
 		private Ticket(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
@@ -67,6 +74,9 @@ public final class SettlementCargoDelivery {
 			this.member = data.memberIdentity(actor); this.binding = data.stockpileBindingToken(camp);
 			this.store = data.getStockpile(camp).orElseThrow(); this.inventory = inventory;
 			this.identityAndPresence = identityAndPresence;
+			this.survival = SettlementSimulationService.isSurvivalEnabled(data, camp);
+			this.simulation = data.simulationOf(camp).orElse(null);
+			this.modeVersion = simulation == null ? 0 : simulation.foodRequestModeVersion();
 		}
 
 		public BlockPos store() { return store; }

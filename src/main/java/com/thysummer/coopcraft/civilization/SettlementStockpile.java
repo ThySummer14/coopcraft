@@ -58,10 +58,11 @@ public final class SettlementStockpile {
 			// Survival rations belong solely to the abstract common store. Legacy food handoffs
 			// would hide pending imports in personal inventories without feeding the resident.
 			if (!SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-				depositExcessFood(stockpile, inventory, member.personality().foodRetentionPoints(BASIC_FOOD_POINTS));
+				depositExcessFood(stockpile, inventory, member.personality().foodRetentionPoints(BASIC_FOOD_POINTS),
+					stack -> !SettlementFoodCargo.isFood(stack));
 				distributeBasicFood(stockpile, inventory, member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
 			}
-			// Material cargo is delivered only after physical arrival through SettlementCargoDelivery.
+			// Materials and berry/potato surplus require arrival through SettlementCargoDelivery.
 		}
 	}
 
@@ -160,11 +161,17 @@ public final class SettlementStockpile {
 	}
 
 	static int depositExcessFood(Container stockpile, Container villagerInventory, int retainedFoodPoints) {
+		return depositExcessFood(stockpile, villagerInventory, retainedFoodPoints, stack -> true);
+	}
+
+	private static int depositExcessFood(Container stockpile, Container villagerInventory, int retainedFoodPoints,
+		java.util.function.Predicate<ItemStack> eligible) {
 		int retained = Math.max(BASIC_FOOD_POINTS, retainedFoodPoints);
 		int remainingFoodPoints = foodPoints(villagerInventory);
 		int insertedTotal = 0;
 		for (int slot = 0; slot < villagerInventory.getContainerSize() && remainingFoodPoints > retained; slot++) {
 			ItemStack stack = villagerInventory.getItem(slot);
+			if (!eligible.test(stack)) continue;
 			int points = SettlementFood.points(stack.getItem());
 			if (points <= 0) {
 				continue;

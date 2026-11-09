@@ -121,7 +121,9 @@ public final class SettlementForaging {
 			mature -> level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
 		if (harvested > 0) {
 			villager.swing(InteractionHand.MAIN_HAND);
-			depositForagedFood(level, data, settlement, villager);
+			if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+				depositForagedFood(level, data, settlement, villager);
+			}
 		}
 		return harvested;
 	}
