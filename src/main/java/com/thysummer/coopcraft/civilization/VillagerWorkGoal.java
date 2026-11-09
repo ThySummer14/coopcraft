@@ -603,34 +603,10 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean needsConstructionLogs() {
 		List<Map<Item, Integer>> demands = constructionMaterialDemands();
-		if (demands.isEmpty() || !hasCraftingStation()) {
-			return false;
-		}
+		if (demands.isEmpty()) { return false; }
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile == null) {
-			return false;
-		}
-		SettlementSimulationState state = settlementData().simulationOf(settlement).orElse(null);
-		long logs = SettlementMaterialCrafting.countPlain(villager.getInventory(), Items.OAK_LOG)
-			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.OAK_LOG);
-		long availableSticks = SettlementMaterialCrafting.countPlain(villager.getInventory(), Items.STICK)
-			+ SettlementMaterialCrafting.availablePlain(stockpile, state, Items.STICK);
-		for (Map<Item, Integer> demand : demands) {
-			for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
-				if (demand.getOrDefault(recipe.output(), 0) <= SettlementMaterialCrafting.countPlain(stockpile, recipe.output())) {
-					continue;
-				}
-				int planks = Math.max(0, recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0)
-					- SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_PLANKS));
-				long sticks = Math.max(0L, recipe.ingredients().getOrDefault(Items.STICK, 0) - availableSticks);
-				long requiredLogs = recipe.ingredients().getOrDefault(Items.OAK_LOG, 0)
-					+ (planks + 3) / 4 + (sticks + 7) / 8;
-				if (logs < requiredLogs) {
-					return true;
-				}
-			}
-		}
-		return false;
+		return SettlementMaterialCrafting.needsConstructionLogs(stockpile, villager.getInventory(),
+			settlementData().simulationOf(settlement).orElse(null), demands, hasCraftingStation());
 	}
 
 	private void craftMaterials() {

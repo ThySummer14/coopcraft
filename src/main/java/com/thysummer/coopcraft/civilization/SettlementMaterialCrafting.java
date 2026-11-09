@@ -77,6 +77,38 @@ public final class SettlementMaterialCrafting {
 		return Optional.empty();
 	}
 
+	/** Read-only gathering priority: structural logs need no workshop and must be publicly consumable. */
+	static boolean needsConstructionLogs(Container stockpile, Container actorInventory,
+		SettlementSimulationState state, List<Map<Item, Integer>> demands, boolean hasCraftingStation) {
+		if (stockpile == null || demands.isEmpty()) { return false; }
+		long structuralLogs = ConstructionMaterials.available(stockpile, state, Items.OAK_LOG);
+		for (Map<Item, Integer> demand : demands) {
+			if (demand.getOrDefault(Items.OAK_LOG, 0) > structuralLogs) { return true; }
+		}
+		if (!hasCraftingStation) { return false; }
+		// Preserve the one-batch crafting shortage rule, including carried plain intermediates.
+		long logs = countPlain(actorInventory, Items.OAK_LOG)
+			+ availablePlain(stockpile, state, Items.OAK_LOG);
+		long availableSticks = countPlain(actorInventory, Items.STICK)
+			+ availablePlain(stockpile, state, Items.STICK);
+		for (Map<Item, Integer> demand : demands) {
+			for (Recipe recipe : Recipe.values()) {
+				if (demand.getOrDefault(recipe.output(), 0) <= countPlain(stockpile, recipe.output())) {
+					continue;
+				}
+				int planks = Math.max(0, recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0)
+					- countPlain(stockpile, Items.OAK_PLANKS));
+				long sticks = Math.max(0L, recipe.ingredients().getOrDefault(Items.STICK, 0) - availableSticks);
+				long requiredLogs = recipe.ingredients().getOrDefault(Items.OAK_LOG, 0)
+					+ (planks + 3) / 4 + (sticks + 7) / 8;
+				if (logs < requiredLogs) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
 	/** Call on the server thread. Failed exports may leave real ingredients, never a half-consumed recipe. */
 	public static boolean craft(Container stockpile, SettlementSimulationState state, Recipe recipe,
 		UUID actor, Runnable dirtyCallback) {
