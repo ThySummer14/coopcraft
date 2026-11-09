@@ -403,3 +403,5 @@
 - 范围限制：不扫描移除维度，不修复旧重复归属/资产迁移/转化UUID；原版DimensionDataStorage吞掉损坏文件异常并返回空数据时不能靠外层catch识别旧claim。交易保护不承诺覆盖第三方直接调用菜单内部方法。未启动Minecraft客户端、服务器或GameTest；真正Mixin应用、物品交互、交易返还与聊天体验待用户统一验收。
 
 - 新增13项JUnit：5项全局claim/来源/登记/死亡回归、1项全局出生与重复扫描票据保持、7项独立互动路由/模式组合/NBT/双语/Mixin注册回归。两组纯Java实验再次复跑保持原结果；完整build和JUnit以如下CI最终记录为准，不把共享逻辑测试当作Mixin执行或实际交易验收。
+
+- 验证完成：代码提交 `4575db3e` 的[居民独立互动构建](https://github.com/ThySummer14/coopcraft/actions/runs/42555335248)已通过完整build和643项JUnit，0失败/0跳过，新增13项回归全过。206行配给与48行多人顺序CSV同最终核心源码本地复跑逐字一致，SHA-256沿用前轮。[运行包](https://github.com/ThySummer14/coopcraft/actions/runs/42555335248/artifacts/13647535430)内 `coopcraft-0.1.0.jar` 为775548字节，SHA-256 `bc3ececdf9c34dde331111d4c9cab99895486fea10079123082c4f07f0fbf409`。本轮仍是聊天式互动，不含独立GUI；没有启动Minecraft客户端、服务器或GameTest。真实Mixin应用、双手及重要物品交互、已开交易菜单返还、跨维度传送与死亡仍待用户统一验收。
