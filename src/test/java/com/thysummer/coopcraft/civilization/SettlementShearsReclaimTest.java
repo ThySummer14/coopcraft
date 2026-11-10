@@ -310,15 +310,21 @@ class SettlementShearsReclaimTest {
 
 	@Test void foreignCampLoanDoesNotProveOwnershipAndNormalRecoverKeepsEveryMarkerRaw() {
 		Fixture f = new Fixture(); ItemStack foreign = alter(f.loan(), stamp -> stamp.putUUID("Settlement", FOREIGN));
+		assertTrue(SettlementShearsLoan.isRecognized(foreign));
+		CompoundTag expected = (CompoundTag) foreign.save(registries);
 		f.bag.setItem(0, foreign); assertEquals(1, f.capture());
+		assertTrue(foreign.isEmpty(), "Removing the loan drains the original source reference");
 		f.recovery = SettlementCargoRecovery.load(save(f.recovery), registries);
 		CompoundTag before = save(f.recovery); SimpleContainer destination = new SimpleContainer(36);
-		assertTrue(SettlementShearsLoan.isRecognized(foreign)); assertTrue(f.recovery.reclaimableShears(f.actor, DIMENSION).isEmpty());
+		assertEquals(expected, stacks(before).getCompound(0));
+		assertTrue(SettlementShearsLoan.isRecognized(ItemStack.parseOptional(registries, stacks(before).getCompound(0))));
+		assertTrue(f.recovery.reclaimableShears(f.actor, DIMENSION).isEmpty());
 		assertEquals(SettlementCargoRecovery.Status.INVALID, f.reclaim(destination, () -> true).status());
 		assertEquals(SettlementCargoRecovery.Status.INVALID,
 			f.recovery.reclaimShears(f.actor, DIMENSION, FOREIGN, destination, () -> true).status());
 		assertEquals(before, save(f.recovery)); assertEquals(1, f.recovery.recover(f.actor, destination, () -> true).moved());
-		assertEquals(foreign.save(registries), destination.getItem(0).save(registries));
+		assertEquals(expected, destination.getItem(0).save(registries));
+		assertTrue(SettlementShearsLoan.ownedBy(destination.getItem(0), DIMENSION, FOREIGN, f.actor));
 		assertEquals(0, f.reclaim(destination, () -> true).moved());
 	}
 
