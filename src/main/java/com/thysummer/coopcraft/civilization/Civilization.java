@@ -439,7 +439,8 @@ public final class Civilization {
 		String recipeLabel = recipeId;
 		for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
 			if (recipe.id().equals(recipeId)) {
-				recipeLabel = recipe.output().getDescriptionId();
+				recipeLabel = recipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE
+					? "coopcraft.interaction.action.polish" : recipe.output().getDescriptionId();
 				break;
 			}
 		}

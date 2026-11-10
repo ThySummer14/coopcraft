@@ -255,11 +255,7 @@ public final class CivilizationGameTest implements FabricGameTest {
 					+ ", torches=" + stockpile.countItem(Items.TORCH) + ", nextTarget=" + nextTargetState
 					+ ", work=" + workState + ", testTick=" + helper.getTick()
 			);
-			BlockPos grindingStation = helper.absolutePos(GRINDING_STATION);
-			if (villager.distanceToSqr(grindingStation.getCenter()) > 9.0) {
-				villager.teleportTo(grindingStation.getX() + 0.5, grindingStation.getY() + 1.0, grindingStation.getZ() + 0.5);
-				villager.getNavigation().stop();
-			}
+			// Let the worker visit the warehouse and stonecutter; pinning it above the station blocks pickup.
 			ItemStack tool = villager.getItemInHand(InteractionHand.MAIN_HAND);
 			helper.assertTrue(tool.is(Items.STONE_PICKAXE), "Polishing must retain a stone pickaxe");
 			var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);

@@ -1353,8 +1353,7 @@ public class VillagerWorkGoal extends Goal {
 				case BUILD -> ConstructionSystem.buildNext(
 					(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
 				);
-				case POLISH_PICKAXE -> craftPolishedPickaxe();
-				case GRIND_SMOOTH_STONE, COLLECT_GRINDING_MATERIALS, FEED_CHILD, SOW_POTATO, DISCUSS_COUNCIL, ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PICKAXE_MATERIALS, WORKBENCH_PICKAXE, COLLECT_STICK_INPUTS, CRAFT_STICKS_AT_WORKBENCH, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
+				case POLISH_PICKAXE, COLLECT_POLISHING_MATERIALS, GRIND_SMOOTH_STONE, COLLECT_GRINDING_MATERIALS, FEED_CHILD, SOW_POTATO, DISCUSS_COUNCIL, ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PICKAXE_MATERIALS, WORKBENCH_PICKAXE, COLLECT_STICK_INPUTS, CRAFT_STICKS_AT_WORKBENCH, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -1429,7 +1428,8 @@ public class VillagerWorkGoal extends Goal {
 		if (prepareFirstPickaxeCrafting()) return Action.COLLECT_PICKAXE_MATERIALS;
 		if (prepareToolStickCrafting()) return Action.COLLECT_STICK_INPUTS;
 		if (canPolishPickaxe()) {
-			return Action.POLISH_PICKAXE;
+			workbenchTicket = preparePolishingCrafting();
+			if (workbenchTicket != null) return Action.COLLECT_POLISHING_MATERIALS;
 		}
 		if (canGrindSmoothStone()) {
 			currentMaterialRecipe = SettlementMaterialCrafting.Recipe.SMOOTH_STONE;
@@ -1672,7 +1672,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isWorkbenchAction() {
-		return isCollectWorkbenchAction() || action == Action.GRIND_SMOOTH_STONE || action == Action.CRAFT_STICKS_AT_WORKBENCH || action == Action.WORKBENCH_PICKAXE || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL || action == Action.WORKBENCH_TORCHES;
+		return isCollectWorkbenchAction() || action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE || action == Action.CRAFT_STICKS_AT_WORKBENCH || action == Action.WORKBENCH_PICKAXE || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL || action == Action.WORKBENCH_TORCHES;
 	}
 
 	/** The live sheep position, not the originally selected block, drives both travel and work. */
@@ -1725,7 +1725,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isCollectWorkbenchAction() {
-		return action == Action.COLLECT_GRINDING_MATERIALS || action == Action.COLLECT_STICK_INPUTS || action == Action.COLLECT_PICKAXE_MATERIALS || action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS || action == Action.COLLECT_WOOL_MATERIALS || action == Action.COLLECT_TORCH_MATERIALS;
+		return action == Action.COLLECT_POLISHING_MATERIALS || action == Action.COLLECT_GRINDING_MATERIALS || action == Action.COLLECT_STICK_INPUTS || action == Action.COLLECT_PICKAXE_MATERIALS || action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS || action == Action.COLLECT_WOOL_MATERIALS || action == Action.COLLECT_TORCH_MATERIALS;
 	}
 
 	private void cancelWorkbenchCrafting() {
@@ -1813,7 +1813,7 @@ public class VillagerWorkGoal extends Goal {
 		for (Map<Item, Integer> demand : demands) {
 			if (demand.getOrDefault(Items.STICK, 0) > sticks) return true;
 			for (var recipe : SettlementMaterialCrafting.Recipe.values()) {
-				if (recipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE) continue;
+				if (recipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE || recipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE) continue;
 				if (demand.getOrDefault(recipe.output(), 0) > SettlementMaterialCrafting.countPlain(stockpile, recipe.output())
 					&& recipe.ingredients().getOrDefault(Items.STICK, 0) > sticks) return true;
 			}
@@ -1868,7 +1868,8 @@ public class VillagerWorkGoal extends Goal {
 			Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
 			if (!SettlementWorkbenchCrafting.pickup(workbenchTicket, settlementData(), settlement,
 				villager.getUUID(), villager.getInventory(), stockpile, () -> isTargetValid() && atCargoStore())) { stop(); return; }
-			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.SMOOTH_STONE ? Action.GRIND_SMOOTH_STONE
+			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE ? Action.POLISH_PICKAXE
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.SMOOTH_STONE ? Action.GRIND_SMOOTH_STONE
 				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.STONE_PICKAXE ? Action.WORKBENCH_PICKAXE
 				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.STICKS ? Action.CRAFT_STICKS_AT_WORKBENCH
 				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.WOOL ? Action.WORKBENCH_WOOL
@@ -1886,7 +1887,10 @@ public class VillagerWorkGoal extends Goal {
 		if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
 		duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
 		if (++progress < duration) return;
-		boolean finished = SettlementWorkbenchCrafting.finish(workbenchTicket, settlementData(), settlement, villager.getUUID(),
+		boolean finished = action == Action.POLISH_PICKAXE
+			? SettlementWorkbenchCrafting.finishPolishing(workbenchTicket, settlementData(), settlement, villager.getUUID(),
+				villager.getInventory(), () -> isTargetValid() && atCargoStore())
+			: SettlementWorkbenchCrafting.finish(workbenchTicket, settlementData(), settlement, villager.getUUID(),
 			villager.getInventory(), () -> isTargetValid() && atCargoStore());
 		if (finished && action == Action.WORKBENCH_PICKAXE) {
 			SettlementWorkbenchToolEquipment.equipFinishedPickaxe(workbenchTicket, settlementData(), settlement,
@@ -1960,7 +1964,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private void craftMaterials() {
 		// Recheck shortages and the pinned plan after travel/work, including a data-pack reload.
-		if (currentMaterialRecipe == null || currentMaterialRecipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE
+		if (currentMaterialRecipe == null || currentMaterialRecipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.STICKS
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS
@@ -2249,7 +2254,8 @@ public class VillagerWorkGoal extends Goal {
 			&& workbenchTicket.collected() == !isCollectWorkbenchAction()
 			&& ((action != Action.COLLECT_TORCH_MATERIALS && action != Action.WORKBENCH_TORCHES)
 				|| isTorchRecipe(currentMaterialRecipe))
-			&& workbenchTicket.recipe() == ((action == Action.COLLECT_GRINDING_MATERIALS || action == Action.GRIND_SMOOTH_STONE)
+			&& workbenchTicket.recipe() == ((action == Action.COLLECT_POLISHING_MATERIALS || action == Action.POLISH_PICKAXE)
+				? SettlementMaterialCrafting.Recipe.POLISH_PICKAXE : (action == Action.COLLECT_GRINDING_MATERIALS || action == Action.GRIND_SMOOTH_STONE)
 				? SettlementMaterialCrafting.Recipe.SMOOTH_STONE : (action == Action.COLLECT_TORCH_MATERIALS || action == Action.WORKBENCH_TORCHES)
 				? currentMaterialRecipe : (action == Action.COLLECT_STICK_INPUTS || action == Action.CRAFT_STICKS_AT_WORKBENCH)
 				? SettlementMaterialCrafting.Recipe.STICKS : (action == Action.COLLECT_PICKAXE_MATERIALS || action == Action.WORKBENCH_PICKAXE)
@@ -2808,13 +2814,47 @@ public class VillagerWorkGoal extends Goal {
 		return VillagerToolDemand.needsSticks(hand, grinding, sticks);
 	}
 
+	/** Selection is observational: personal/custom supplies and automatic equipment cannot satisfy it. */
 	private boolean canPolishPickaxe() {
-		return hasGrindingStation()
-			&& hasStonePickaxe()
-			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
-			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
-			&& availableItems(Items.SMOOTH_STONE) >= 3
-			&& availableItems(Items.STICK) >= 2;
+		if (!polishingDemandStillNeeded() || hasReturnCargo() || hasTeachingCustody() || hasAnyShearsLoan()) return false;
+		Container store = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		return store != null && SettlementMaterialCrafting.availablePlain(store, state, Items.SMOOTH_STONE) >= 3
+			&& SettlementMaterialCrafting.availablePlain(store, state, Items.STICK) >= 2;
+	}
+
+	/** The last public batch may already be in custody. Only the original tool still needs upgrading. */
+	private boolean polishingDemandStillNeeded() {
+		ItemStack hand = villager.getMainHandItem();
+		return hasGrindingStation() && SettlementToolUpgrade.supportsPolishing(hand) && !isPolishedPickaxe(hand);
+	}
+
+	private SettlementWorkbenchCrafting.Ticket preparePolishingCrafting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		BlockPos station = data.getGrindingStation(camp).orElse(null);
+		if (store == null || station == null || !ConstructionWorkshop.withinWorkRange(camp.center(), store)
+			|| !ConstructionWorkshop.withinWorkRange(camp.center(), station) || !foragePositionAccessible(level, station)) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		BlockState stationState = level.getBlockState(station);
+		if (binding == null || !stationState.is(Blocks.STONECUTTER)) return null;
+		var enchantments = level.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+		return SettlementWorkbenchCrafting.preparePolishing(data, camp, villager.getUUID(), villager.getInventory(),
+			new SettlementShearsLoan.Hand() {
+				public ItemStack get() { return villager.getMainHandItem(); }
+				public void set(ItemStack stack) { throw new UnsupportedOperationException("Polishing never replaces the hand"); }
+			}, enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), enchantments.getHolderOrThrow(Enchantments.UNBREAKING),
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+				&& level.getEntity(villager.getUUID()) == villager && foragePositionAccessible(level, villager.blockPosition())
+				&& !shouldEat() && meetingTicket == null && !emergencyForage()
+				&& binding.valid() && foragePositionAccessible(level, station)
+				&& level.getBlockState(station).equals(stationState)
+				&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+					level.dimension(), data, camp), this::polishingDemandStillNeeded);
 	}
 
 	private boolean canGrindSmoothStone() {
@@ -2832,25 +2872,6 @@ public class VillagerWorkGoal extends Goal {
 			&& !SettlementWorkbenchCargo.isMarked(hand) && !SettlementShearingCargo.isMarked(hand)
 			&& !SettlementShearsLoan.isMarked(hand) && SettlementToolUpgrade.supportsPolishing(hand)
 			&& !isPolishedPickaxe(hand) && availableItems(Items.SMOOTH_STONE) < 3;
-	}
-
-	private void craftPolishedPickaxe() {
-		if (!canPolishPickaxe()) return;
-		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
-		Optional<ItemStack> polished = SettlementToolUpgrade.polish(
-			villager.getItemInHand(InteractionHand.MAIN_HAND),
-			enchantments.getHolderOrThrow(Enchantments.EFFICIENCY),
-			enchantments.getHolderOrThrow(Enchantments.UNBREAKING));
-		if (polished.isEmpty()) return;
-		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
-			"polished_stone_pickaxe", Items.STONE_PICKAXE, 1);
-		if (!withdrawItems(Items.SMOOTH_STONE, 3) || !withdrawItems(Items.STICK, 2)) {
-			return;
-		}
-		removeItems(villager.getInventory(), Items.SMOOTH_STONE, 3);
-		removeItems(villager.getInventory(), Items.STICK, 2);
-		villager.setItemInHand(InteractionHand.MAIN_HAND, polished.get());
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
 	}
 
 
@@ -3065,6 +3086,7 @@ public class VillagerWorkGoal extends Goal {
 		WORKBENCH_TORCHES("workbench_torches"),
 		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
 		BUILD("build"),
+		COLLECT_POLISHING_MATERIALS("collect_polishing_materials"),
 		POLISH_PICKAXE("polish"),
 		COLLECT_GRINDING_MATERIALS("collect_grinding_materials"),
 		GRIND_SMOOTH_STONE("grind"),

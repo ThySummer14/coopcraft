@@ -295,7 +295,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			deliverCargoAtStore(helper, data, settlement, villager, chest, 1);
 			helper.assertValueEqual(batch + 1, chest.countItem(Items.SMOOTH_STONE), "Each explicit service delivery adds one real smooth stone");
 		}
-		runWorkshopAction(helper, polishGoal, "polish", GRINDING_STATION);
+		runPolishingAction(helper, polishGoal, villager);
 
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Polishing must retain a real stone pickaxe");
 		helper.assertValueEqual(1,
@@ -455,7 +455,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
 			"The replenishment must consume the only abstract log");
 		deliverCargoAtStore(helper, data, settlement, villager, chest, 8);
-		runWorkshopAction(helper, goal, "polish", GRINDING_STATION);
+		runPolishingAction(helper, goal, villager);
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The upgraded tool must remain a real stone pickaxe");
 		helper.assertValueEqual(1,
 			villager.getMainHandItem().getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
@@ -639,6 +639,36 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			goal.stop();
 			villager.setNoAi(noAi);
 			villager.setPos(original.x, original.y, original.z);
+		}
+	}
+
+	/** Explicit store/station arrivals verify custody and identity, not navigation. */
+	private static void runPolishingAction(GameTestHelper helper, VillagerWorkGoal goal, Villager villager) {
+		var original = villager.position();
+		boolean noAi = villager.isNoAi();
+		ItemStack originalTool = villager.getMainHandItem();
+		ItemStack snapshot = originalTool.copy();
+		try {
+			villager.setNoAi(false);
+			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(GRINDING_STATION);
+			placeAtCargoFace(helper, villager, store);
+			helper.assertTrue(goal.canUse(), "Polishing must select public material pickup");
+			helper.assertValueEqual("collect_polishing_materials", goal.status().action(), "Collect the complete polishing batch");
+			helper.assertValueEqual(store, goal.status().target(), "Only the registered public warehouse supplies the batch");
+			goal.start();
+			helper.assertValueEqual("polish", goal.status().action(), "Carry materials to the stonecutter");
+			helper.assertValueEqual(station, goal.status().target(), "Use the registered stonecutter");
+			helper.assertValueEqual(3, villager.getInventory().countItem(Items.SMOOTH_STONE), "Carry exactly three stones");
+			helper.assertValueEqual(2, villager.getInventory().countItem(Items.STICK), "Carry exactly two sticks");
+			helper.assertTrue(villager.getMainHandItem() == originalTool && ItemStack.matches(snapshot, originalTool),
+				"Pickup leaves the original personal tool untouched");
+			placeAtCargoFace(helper, villager, station);
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			helper.assertFalse(goal.canContinueToUse(), "Complete one arrived polishing job within the work budget");
+			helper.assertTrue(villager.getMainHandItem() == originalTool, "Upgrade the original personal object");
+			helper.assertValueEqual(0, villager.getInventory().countItem(Items.STONE_PICKAXE), "Do not create a second public tool");
+		} finally {
+			goal.stop(); villager.setNoAi(noAi); villager.setPos(original.x, original.y, original.z);
 		}
 	}
 

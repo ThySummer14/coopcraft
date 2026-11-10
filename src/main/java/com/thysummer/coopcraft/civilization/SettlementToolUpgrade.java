@@ -17,7 +17,9 @@ public final class SettlementToolUpgrade {
 	/** Explicitly removed enchantments remain disabled; polishing must not restore that component. */
 	public static boolean supportsPolishing(ItemStack source) {
 		return !source.isEmpty() && source.is(Items.STONE_PICKAXE) && source.getCount() == 1
-			&& source.get(DataComponents.ENCHANTMENTS) != null && !SettlementShearsLoan.isMarked(source);
+			&& source.get(DataComponents.ENCHANTMENTS) != null && !SettlementShearsLoan.isMarked(source)
+			&& !SettlementWorkbenchCargo.isMarked(source) && !SettlementShearingCargo.isMarked(source)
+			&& !ConstructionSupply.isMarked(source);
 	}
 
 	/** Returns a changed copy, or no result when the stack is invalid or already polished. */

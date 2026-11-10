@@ -46,8 +46,9 @@ class SettlementWorkbenchTorchGoalWiringTest {
 		assertTrue(valid.contains("target.equals(isCollectWorkbenchAction()?workbenchTicket.store():workbenchTicket.station())"));
 		assertTrue(valid.contains("workbenchTicket.collected()==!isCollectWorkbenchAction()"));
 		assertTrue(valid.contains("||isTorchRecipe(currentMaterialRecipe)"));
-		// The grinding branch precedes torches, which must still compare the ticket with the exact chosen fuel.
-		assertTrue(valid.contains("workbenchTicket.recipe()==((action==Action.COLLECT_GRINDING_MATERIALS||action==Action.GRIND_SMOOTH_STONE)"
+		// Tool polishing and grinding precede torches; exact chosen-fuel identity must remain pinned.
+		assertTrue(valid.contains("workbenchTicket.recipe()==((action==Action.COLLECT_POLISHING_MATERIALS||action==Action.POLISH_PICKAXE)"
+			+ "?SettlementMaterialCrafting.Recipe.POLISH_PICKAXE:(action==Action.COLLECT_GRINDING_MATERIALS||action==Action.GRIND_SMOOTH_STONE)"
 			+ "?SettlementMaterialCrafting.Recipe.SMOOTH_STONE:(action==Action.COLLECT_TORCH_MATERIALS||action==Action.WORKBENCH_TORCHES)?currentMaterialRecipe:"));
 		assertTrue(valid.contains("SettlementWorkbenchCrafting.valid("));
 		assertTrue(methods.get("chooseTarget").contains("isCollectWorkbenchAction()?workbenchTicket.store():workbenchTicket.station()"));

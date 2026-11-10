@@ -31,7 +31,7 @@ public final class SettlementWorkbenchCargo {
 		return custom != null && custom.copyTag().contains(KEY);
 	}
 
-	public static boolean supported(Recipe recipe) { return recipe == Recipe.SMOOTH_STONE || recipe == Recipe.PLANKS || recipe == Recipe.STICKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
+	public static boolean supported(Recipe recipe) { return recipe == Recipe.POLISH_PICKAXE || recipe == Recipe.SMOOTH_STONE || recipe == Recipe.PLANKS || recipe == Recipe.STICKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
 		|| recipe == Recipe.STONE_PICKAXE || recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL; }
 
 	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
@@ -54,6 +54,7 @@ public final class SettlementWorkbenchCargo {
 	}
 
 	public static ItemStack output(UUID camp, UUID batch, Recipe recipe) {
+		if (recipe == Recipe.POLISH_PICKAXE) throw new IllegalArgumentException("Polishing inputs never produce public tool cargo");
 		validate(camp, batch, recipe);
 		return stamp(camp, batch, Phase.OUTPUT, recipe, new ItemStack(recipe.output(), recipe.count()));
 	}
@@ -66,7 +67,7 @@ public final class SettlementWorkbenchCargo {
 	private static ItemStack stamp(UUID camp, UUID batch, Phase phase, Recipe recipe, ItemStack stack) {
 		CompoundTag tag = new CompoundTag();
 		// Preserve V1 planks and existing V2 recipes. Grinding uses its own strict V3 encoding.
-		tag.putInt("Version", recipe == Recipe.PLANKS ? 1 : recipe == Recipe.SMOOTH_STONE ? 3 : 2);
+		tag.putInt("Version", recipe == Recipe.POLISH_PICKAXE ? 4 : recipe == Recipe.PLANKS ? 1 : recipe == Recipe.SMOOTH_STONE ? 3 : 2);
 		if (recipe != Recipe.PLANKS) tag.putString("Recipe", recipe.name());
 		tag.putUUID("Settlement", camp); tag.putUUID("Batch", batch);
 		tag.putString("Phase", phase.name());
@@ -106,6 +107,12 @@ public final class SettlementWorkbenchCargo {
 			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)
 				|| !tag.getString("Recipe").equals("SMOOTH_STONE")) return null;
 			recipe = Recipe.SMOOTH_STONE;
+		} else if (tag.getInt("Version") == 4) {
+			// Input-only purpose; V2/V3 strings with this name remain quarantined.
+			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)
+				|| !tag.getString("Recipe").equals("POLISH_PICKAXE")
+				|| !tag.getString("Phase").equals("INPUT")) return null;
+			recipe = Recipe.POLISH_PICKAXE;
 		} else return null;
 		Phase phase = switch (tag.getString("Phase")) {
 			case "INPUT" -> Phase.INPUT;

@@ -71,7 +71,7 @@ class SettlementWorkbenchPickaxeGoalWiringTest {
 		assertBefore(tick, "if(!atCargoStore())", "SettlementWorkbenchCrafting.pickup(");
 		assertTrue(tick.contains("workbenchTicket.recipe()==SettlementMaterialCrafting.Recipe.STONE_PICKAXE?Action.WORKBENCH_PICKAXE"));
 		assertBefore(tick, "target=workbenchTicket.station();progress=0;travelTicks=0;return;", "if(++progress<duration)return;");
-		assertBefore(tick, "if(++progress<duration)return;", "booleanfinished=SettlementWorkbenchCrafting.finish(");
+		assertBefore(tick, "if(++progress<duration)return;", "SettlementWorkbenchCrafting.finish(");
 		assertBefore(tick, "if(finished&&action==Action.WORKBENCH_PICKAXE)", "SettlementWorkbenchToolEquipment.equipFinishedPickaxe(");
 		assertTrue(tick.contains("villager.getInventory(),()->isTargetValid()&&atCargoStore()"));
 		assertTrue(tick.contains("villager::getOffhandItem,()->action==Action.WORKBENCH_PICKAXE&&target.equals(workbenchTicket.station())&&atCargoStore()"));

@@ -39,7 +39,8 @@ class SettlementMaterialCraftingTest {
 		for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
 			// Pickaxes and grinding require physical transport to their registered station.
 			if (recipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE
-				|| recipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE) continue;
+				|| recipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE
+				|| recipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE) continue;
 			SimpleContainer stock = new SimpleContainer(9);
 			recipe.ingredients().forEach((item, count) -> SettlementStockpile.insert(stock, new ItemStack(item, count)));
 			AtomicInteger dirty = new AtomicInteger();

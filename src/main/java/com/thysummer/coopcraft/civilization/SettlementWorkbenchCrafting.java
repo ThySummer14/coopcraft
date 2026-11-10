@@ -10,6 +10,9 @@ import java.util.function.BooleanSupplier;
 import com.thysummer.coopcraft.civilization.SettlementMaterialCrafting.Recipe;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.Item;
@@ -34,6 +37,9 @@ final class SettlementWorkbenchCrafting {
 		private final UUID batch = UUID.randomUUID();
 		private boolean collected, used, finished, equipmentAttempted;
 		private SettlementSimulationService.CraftingAttempt attempt;
+		private SettlementShearsLoan.Hand hand;
+		private ItemStack originalTool, toolSnapshot;
+		private Holder<Enchantment> efficiency, unbreaking;
 
 		private Ticket(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
 			Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demand) {
@@ -59,11 +65,11 @@ final class SettlementWorkbenchCrafting {
 	}
 
 	private static java.util.Optional<BlockPos> station(SettlementSavedData data, Settlement camp, Recipe recipe) {
-		return recipe == Recipe.SMOOTH_STONE ? data.getGrindingStation(camp) : data.getCraftingStation(camp);
+		return (recipe == Recipe.SMOOTH_STONE || recipe == Recipe.POLISH_PICKAXE) ? data.getGrindingStation(camp) : data.getCraftingStation(camp);
 	}
 
 	private static Object stationToken(SettlementSavedData data, Settlement camp, Recipe recipe) {
-		return recipe == Recipe.SMOOTH_STONE ? data.grindingStationBindingToken(camp) : data.craftingStationBindingToken(camp);
+		return (recipe == Recipe.SMOOTH_STONE || recipe == Recipe.POLISH_PICKAXE) ? data.grindingStationBindingToken(camp) : data.craftingStationBindingToken(camp);
 	}
 
 	/** Read-only: neither reserves supplies nor starts a provenance attempt. */
@@ -75,6 +81,12 @@ final class SettlementWorkbenchCrafting {
 	/** Demand checks remaining product need, never whether the withdrawn ingredients remain in the store. */
 	static Ticket prepare(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
 		Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demandStillNeeded) {
+		if (recipe == Recipe.POLISH_PICKAXE) return null;
+		return prepareInternal(data, camp, actor, inventory, recipe, worldValid, demandStillNeeded);
+	}
+
+	private static Ticket prepareInternal(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
+		Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demandStillNeeded) {
 		if (!SettlementWorkbenchCargo.supported(recipe)) return null;
 		if (data == null || camp == null || actor == null || inventory == null || worldValid == null
 			|| demandStillNeeded == null || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
@@ -84,19 +96,48 @@ final class SettlementWorkbenchCrafting {
 			if (SettlementWorkbenchCargo.isMarked(inventory.getItem(slot))) return null;
 		}
 		Ticket ticket = new Ticket(data, camp, actor, inventory, recipe, worldValid, demandStillNeeded);
-		return valid(ticket, data, camp, actor, inventory) ? ticket : null;
+		return recipe == Recipe.POLISH_PICKAXE || valid(ticket, data, camp, actor, inventory) ? ticket : null;
+	}
+
+	/** Dedicated entry: the original personal object and its entire component patch/count are pinned. */
+	static Ticket preparePolishing(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
+		SettlementShearsLoan.Hand hand, Holder<Enchantment> efficiency, Holder<Enchantment> unbreaking,
+		BooleanSupplier worldValid, BooleanSupplier demand) {
+		if (hand == null || efficiency == null || unbreaking == null) return null;
+		ItemStack original = hand.get();
+		if (original == null || SettlementToolUpgrade.polish(original, efficiency, unbreaking).isEmpty()) return null;
+		Ticket t = prepareInternal(data, camp, actor, inventory, Recipe.POLISH_PICKAXE, worldValid, demand);
+		if (t == null) return null;
+		t.hand = hand; t.originalTool = original; t.toolSnapshot = original.copy();
+		t.efficiency = efficiency; t.unbreaking = unbreaking;
+		return valid(t, data, camp, actor, inventory) ? t : null;
+	}
+
+	private static boolean sameTool(Ticket t) {
+		if (t.recipe == Recipe.POLISH_PICKAXE && containsReference(t.inventory, t.originalTool)) return false;
+		return t.recipe != Recipe.POLISH_PICKAXE || (t.hand != null && t.hand.get() == t.originalTool
+			&& ItemStack.matches(t.originalTool, t.toolSnapshot)
+			&& t.originalTool.getComponentsPatch().equals(t.toolSnapshot.getComponentsPatch()));
+	}
+
+	private static boolean containsReference(Container inventory, ItemStack stack) {
+		if (stack == null) return false;
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++)
+			if (inventory.getItem(slot) == stack) return true;
+		return false;
 	}
 
 	static boolean valid(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
 		if (t == null || t.used || !currentIdentity(t, data, camp, actor, inventory)) return false;
 		if (t.collected && !hasExactInputs(t, inventory)) return false;
 		if (!t.demand.getAsBoolean()) return false;
+		if (t.recipe == Recipe.POLISH_PICKAXE && !t.worldValid.getAsBoolean()) return false;
 		return !strictCallbacks(t) || (!t.used && identityMatches(t, data, camp, actor, inventory)
 			&& (!t.collected || hasExactInputs(t, inventory)));
 	}
 
 	private static boolean strictCallbacks(Ticket t) {
-		return t.recipe == Recipe.SMOOTH_STONE || t.recipe == Recipe.STONE_PICKAXE || t.recipe == Recipe.STICKS;
+		return t.recipe == Recipe.POLISH_PICKAXE || t.recipe == Recipe.SMOOTH_STONE || t.recipe == Recipe.STONE_PICKAXE || t.recipe == Recipe.STICKS;
 	}
 
 	private static boolean currentIdentity(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
@@ -105,7 +146,7 @@ final class SettlementWorkbenchCrafting {
 	}
 
 	private static boolean identityMatches(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
-		if (t == null || t.data != data || t.camp != camp || !t.actor.equals(actor)
+		if (t == null || !sameTool(t) || t.data != data || t.camp != camp || !t.actor.equals(actor)
 			|| t.inventory != inventory || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
 			|| t.member != data.memberIdentity(actor) || t.storeToken != data.stockpileBindingToken(camp)
 			|| t.stationToken != stationToken(data, camp, t.recipe)
@@ -121,6 +162,7 @@ final class SettlementWorkbenchCrafting {
 		Container stockpile, BooleanSupplier atStore) {
 		if (!valid(t, data, camp, actor, inventory) || t.collected || stockpile == null
 			|| stockpile == inventory || atStore == null || !atStore.getAsBoolean()) return fail(t);
+		if (t.recipe == Recipe.POLISH_PICKAXE && containsReference(stockpile, t.originalTool)) return fail(t);
 		List<ItemStack> inputs = SettlementWorkbenchCargo.inputs(camp.id(), t.batch, t.recipe);
 		SimpleContainer bag = pickupPreview(t, inventory, inputs);
 		if (bag == null) return fail(t);
@@ -171,16 +213,19 @@ final class SettlementWorkbenchCrafting {
 			}
 			if (remaining != 0) return fail(t);
 		}
+		if (t.recipe == Recipe.POLISH_PICKAXE) t.used = true; // Exceptions cannot replay a partial pickup.
 		apply(stockpile, store);
 		apply(inventory, bag);
 		SettlementSimulationService.sealCraftingInputs(t.attempt);
 		t.collected = true;
+		if (t.recipe == Recipe.POLISH_PICKAXE) t.used = false;
 		data.setDirty();
 		return true;
 	}
 
 	static boolean finish(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
 		BooleanSupplier atStation) {
+		if (t != null && t.recipe == Recipe.POLISH_PICKAXE) return fail(t);
 		if (!valid(t, data, camp, actor, inventory) || !t.collected || atStation == null
 			|| !atStation.getAsBoolean()) return fail(t);
 		// Arrival callbacks may observe changed hand/demand or binding authority.
@@ -189,6 +234,32 @@ final class SettlementWorkbenchCrafting {
 		SimpleContainer result = craftPreview(t, inventory);
 		if (result == null) return false;
 		apply(inventory, result);
+		t.finished = true;
+		SettlementSimulationService.recordCrafting(data, camp, actor, t.attempt);
+		data.setDirty();
+		return true;
+	}
+
+	/**
+	 * Server-thread transaction for standard synchronous, non-reentrant containers and hand readers.
+	 * Validation callbacks may revoke authority and are rechecked before mutation. Setters must not throw
+	 * or reenter; this is not crash atomicity. Mark used BEFORE either mutation; an unexpected exception
+	 * cannot replay/refund copies. Remaining actual marked inputs stay returnable through cargo delivery.
+	 * Never replace the personal hand object or create a public output, including during preview.
+	 */
+	static boolean finishPolishing(Ticket t, SettlementSavedData data, Settlement camp, UUID actor,
+		Container inventory, BooleanSupplier atStation) {
+		if (t == null || t.recipe != Recipe.POLISH_PICKAXE || !valid(t, data, camp, actor, inventory)
+			|| !t.collected || atStation == null || !atStation.getAsBoolean()
+			|| !valid(t, data, camp, actor, inventory)) return fail(t);
+		var upgraded = SettlementToolUpgrade.polish(t.originalTool, t.efficiency, t.unbreaking);
+		if (upgraded.isEmpty()) return fail(t);
+		SimpleContainer before = copy(inventory);
+		SimpleContainer remaining = consumedInputsPreview(t, before);
+		if (remaining == null || !valid(t, data, camp, actor, inventory) || !sameContents(inventory, before)) return fail(t);
+		t.used = true;
+		apply(inventory, remaining);
+		t.originalTool.set(DataComponents.ENCHANTMENTS, upgraded.get().get(DataComponents.ENCHANTMENTS));
 		t.finished = true;
 		SettlementSimulationService.recordCrafting(data, camp, actor, t.attempt);
 		data.setDirty();
@@ -216,7 +287,8 @@ final class SettlementWorkbenchCrafting {
 
 	private static boolean canExport(Ticket t, Item item) {
 		if (t.state == null || !t.state.survivalEnabled() || !t.state.productionEnabled()) return false;
-		return (t.recipe == Recipe.SMOOTH_STONE && item == Items.COBBLESTONE)
+		return (t.recipe == Recipe.POLISH_PICKAXE && (item == Items.SMOOTH_STONE || item == Items.STICK))
+			|| (t.recipe == Recipe.SMOOTH_STONE && item == Items.COBBLESTONE)
 			|| ((t.recipe == Recipe.PLANKS || t.recipe == Recipe.STICKS) && item == Items.OAK_LOG)
 			|| ((t.recipe == Recipe.TORCH_COAL || t.recipe == Recipe.TORCH_CHARCOAL) && item == Items.STICK)
 			|| (t.recipe == Recipe.STONE_PICKAXE && (item == Items.COBBLESTONE || item == Items.STICK));
@@ -238,11 +310,11 @@ final class SettlementWorkbenchCrafting {
 		SimpleContainer bag = copy(inventory);
 		for (ItemStack input : inputs)
 			if (SettlementStockpile.insert(bag, input) != input.getCount()) return null;
-		return craftPreview(t, bag) == null ? null : bag;
+		return (t.recipe == Recipe.POLISH_PICKAXE ? consumedInputsPreview(t, bag) : craftPreview(t, bag)) == null ? null : bag;
 	}
 
 	/** Work only on a copy: insufficient/duplicated custody or output restrictions keep every real input. */
-	private static SimpleContainer craftPreview(Ticket t, Container inventory) {
+	private static SimpleContainer consumedInputsPreview(Ticket t, Container inventory) {
 		if (!hasExactInputs(t, inventory)) return null;
 		SimpleContainer result = copy(inventory);
 		for (int slot = 0; slot < result.getContainerSize(); slot++) {
@@ -250,6 +322,13 @@ final class SettlementWorkbenchCrafting {
 			if (SettlementWorkbenchCargo.matchesInput(stack, t.camp.id(), t.batch, t.recipe))
 				result.removeItem(slot, stack.getCount());
 		}
+		return result;
+	}
+
+	private static SimpleContainer craftPreview(Ticket t, Container inventory) {
+		if (t.recipe == Recipe.POLISH_PICKAXE) return null;
+		SimpleContainer result = consumedInputsPreview(t, inventory);
+		if (result == null) return null;
 		ItemStack output = SettlementWorkbenchCargo.output(t.camp.id(), t.batch, t.recipe);
 		return SettlementStockpile.insert(result, output) == output.getCount() ? result : null;
 	}
@@ -262,6 +341,15 @@ final class SettlementWorkbenchCrafting {
 		for (int slot = 0; slot < source.getContainerSize(); slot++) result.setItem(slot, source.getItem(slot).copy());
 		return result;
 	}
+	private static boolean sameContents(Container current, Container before) {
+		if (current.getContainerSize() != before.getContainerSize()) return false;
+		for (int slot = 0; slot < current.getContainerSize(); slot++) {
+			ItemStack a = current.getItem(slot), b = before.getItem(slot);
+			if (!ItemStack.matches(a, b) || !a.getComponentsPatch().equals(b.getComponentsPatch())) return false;
+		}
+		return true;
+	}
+
 	private static void apply(Container target, Container result) {
 		for (int slot = 0; slot < target.getContainerSize(); slot++) {
 			if (!ItemStack.matches(target.getItem(slot), result.getItem(slot))) target.setItem(slot, result.getItem(slot).copy());

@@ -35,7 +35,7 @@ class SettlementCraftingTraceTest {
 
 	@Test
 	void everyCraftingPathFiltersOldExportsAndUnrelatedActorRecipeActivityAndType() {
-		List<String> recipes = new java.util.ArrayList<>(List.of("stone_pickaxe", "sticks", "polished_stone_pickaxe", "smooth_stone"));
+		List<String> recipes = new java.util.ArrayList<>(List.of("sticks"));
 		for (SettlementMaterialCrafting.Recipe recipe : SettlementMaterialCrafting.Recipe.values()) {
 			recipes.add(recipe.id());
 		}
