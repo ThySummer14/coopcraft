@@ -40,8 +40,8 @@ class SettlementShearingTest {
 		int reads;
 		Runnable targetRead = () -> {}, sightRead = () -> {};
 		Fixture() { data.registerMember(camp, ACTOR, 0); data.setStockpile(camp, HOME.east()); add(SHEEP, 2); }
-		void add(UUID id, double x) { data.permitShearing(camp, ACTOR, id); targets.put(id, target(id, new Object(), x, true, true)); }
-		void move(double x) { targets.put(SHEEP, target(SHEEP, targets.get(SHEEP).identity(), x, true, true)); }
+		void add(UUID id, double x) { data.permitShearing(camp, ACTOR, id); targets.put(id, SettlementShearingTest.target(id, new Object(), x, true, true)); }
+		void move(double x) { targets.put(SHEEP, SettlementShearingTest.target(SHEEP, targets.get(SHEEP).identity(), x, true, true)); }
 		SettlementShearing.Session session() { var s = prepare(); assertNotNull(s); return s; }
 		SettlementShearing.Session prepare() { return SettlementShearing.prepare(data, camp, ACTOR, this, () -> demand); }
 		public SettlementSavedData currentData() { return current; }
