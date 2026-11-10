@@ -33,11 +33,19 @@ class SettlementWorkbenchToolEquipmentTest {
 		assertFalse(SettlementWorkbenchCrafting.finish(f.ticket, f.data, f.camp, ACTOR, f.bag, () -> true));
 	}
 
+	@Test void settingSameStationPositionKeepsCompletedBatchAuthorized() {
+		Fixture f = new Fixture(); f.finish(); ItemStack actual = f.bag.getItem(0);
+		Object binding = f.data.craftingStationBindingToken(f.camp);
+		f.data.setCraftingStation(f.camp, f.ticket.station());
+		assertSame(binding, f.data.craftingStationBindingToken(f.camp));
+		assertTrue(f.equip()); assertSame(actual, f.hand.get()); assertTrue(f.bag.isEmpty());
+	}
+
 	@Test void occupiedHandAndStaleAuthorityPreserveMarkedOutput() {
 		for (int scenario = 0; scenario < 3; scenario++) {
 			Fixture f = new Fixture(); f.finish(); ItemStack actual = f.bag.getItem(0), before = actual.copy();
 			if (scenario == 0) f.hand.stack = new ItemStack(Items.APPLE);
-			if (scenario == 1) f.data.setCraftingStation(f.camp, f.ticket.station());
+			if (scenario == 1) f.rebindStation();
 			if (scenario == 2) f.atStation = () -> false;
 			assertFalse(f.equip()); assertSame(actual, f.bag.getItem(0)); assertTrue(ItemStack.matches(before, actual));
 			f.hand.stack = ItemStack.EMPTY; f.atStation = () -> true;
@@ -52,7 +60,7 @@ class SettlementWorkbenchToolEquipmentTest {
 			f.atStation = () -> {
 				if (action == 0) f.hand.stack = new ItemStack(Items.APPLE);
 				if (action == 1) f.bag.setItem(0, actual.copy());
-				if (action == 2) f.data.setCraftingStation(f.camp, f.ticket.station());
+				if (action == 2) f.rebindStation();
 				return true;
 			};
 			assertFalse(f.equip()); assertEquals(1, f.bag.countItem(Items.STONE_PICKAXE));
@@ -185,6 +193,10 @@ class SettlementWorkbenchToolEquipmentTest {
 			data.setStockpile(camp, new BlockPos(1, 0, 0)); data.setCraftingStation(camp, new BlockPos(3, 0, 0));
 			var state = data.getOrCreateSimulation(camp); state.mapResident(ACTOR, false, 0);
 			state.setSurvivalEnabled(true, 0); state.setProductionEnabled(true);
+		}
+		void rebindStation() {
+			data.setCraftingStation(camp, ticket.station().offset(1, 0, 0));
+			data.setCraftingStation(camp, ticket.station());
 		}
 		void finish() {
 			SimpleContainer store = new SimpleContainer(new ItemStack(Items.COBBLESTONE, 3), new ItemStack(Items.STICK, 2));
