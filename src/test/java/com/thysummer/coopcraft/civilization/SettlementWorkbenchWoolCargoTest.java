@@ -141,6 +141,6 @@ class SettlementWorkbenchWoolCargoTest {
 			assertTrue(ItemStack.matches(originals.get(index), rescued.getItem(index)));
 		SimpleContainer store = new SimpleContainer(3);
 		assertEquals(3, SettlementWorkbenchCargo.deposit(rescued, store, camp.id()));
-		assertTrue(ItemStack.matches(unknown, rescued.getItem(2)));
+		assertTrue(ItemStack.matches(originals.get(2), rescued.getItem(2)));
 	}
 }
