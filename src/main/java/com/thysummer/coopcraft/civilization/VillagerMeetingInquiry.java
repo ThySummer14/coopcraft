@@ -70,17 +70,21 @@ final class VillagerMeetingInquiry {
 		return message(inquiry.known() ? "introduce_no_source" : "introduce_unknown");
 	}
 
-	private static Component factors(NormSystem.ProposalOpinion opinion) {
-		List<NormSystem.ProposalFactor> prominent = opinion.factors().stream()
+	static Component factors(NormSystem.ProposalOpinion opinion) {
+		List<NormSystem.ProposalFactor> prominent = new ArrayList<>(opinion.factors().stream()
 			.filter(factor -> factor.contribution() != 0)
 			.sorted(Comparator.comparingDouble((NormSystem.ProposalFactor factor) -> Math.abs(factor.contribution())).reversed()
 				.thenComparing(NormSystem.ProposalFactor::kind))
-			.limit(3).toList();
+			.limit(3).toList());
+		// Keep the small personality adjustment visible without displacing stronger situational reasons.
+		opinion.factors().stream().filter(factor -> factor.kind() == NormSystem.ProposalFactorKind.SELFISHNESS
+			&& factor.contribution() != 0 && !prominent.contains(factor)).findFirst().ifPresent(prominent::add);
 		if (prominent.isEmpty()) return message("factors_none");
 		MutableComponent result = Component.empty();
 		for (NormSystem.ProposalFactor factor : prominent) {
 			if (!result.getSiblings().isEmpty()) result.append(message("factor_separator"));
-			result.append(message("factor_" + factor.kind().name().toLowerCase(Locale.ROOT)));
+			result.append(message("factor_weight", message("factor_" + factor.kind().name().toLowerCase(Locale.ROOT)),
+				message(factor.contribution() > 0 ? "factor_positive" : "factor_negative")));
 		}
 		return result;
 	}

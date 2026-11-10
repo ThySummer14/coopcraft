@@ -108,12 +108,12 @@ class ResidentMeetingViewTest {
         var second = result(f, true);
         assertTrue(ResidentMeetingView.receipt(second).size() <= 12);
         assertEquals("adopted", second.discussion().outcome());
-        assertEquals(2, SettlementRations.inspect(f.data, f.settlement).getFirst().dailyUnitCap());
+        assertEquals(4, SettlementRations.inspect(f.data, f.settlement).getFirst().dailyUnitCap());
         assertEquals(stock, f.state.world().inventoryTotals());
         SettlementSimulationService.eat(f.data, f.settlement, id(1));
         var ration = SettlementRations.inspect(f.data, f.settlement).getFirst();
-        assertEquals(2, ration.allocatedUnits()); assertEquals(0, ration.remainingUnits());
-        assertEquals(40, ration.foodNutritionReceived().orElseThrow()); assertEquals(60, ration.hunger());
+        assertEquals(4, ration.allocatedUnits()); assertEquals(0, ration.remainingUnits());
+        assertEquals(80, ration.foodNutritionReceived().orElseThrow()); assertEquals(20, ration.hunger());
         assertEquals(frozen, receipt, "An old receipt is not recomputed from the next round or current rules");
         assertEquals(first.discussion().deliberationEventId(), args(find(receipt,
             "coopcraft.command.settlement.meeting_receipt_reference"))[0]);
@@ -205,7 +205,7 @@ class ResidentMeetingViewTest {
         Map<String,NormProposal.Position> positions = new LinkedHashMap<>();
         for (int i : members) positions.put(f.person(i).id(), NormProposal.Position.SUPPORT);
         f.state.world().registerProposal(NormProposal.restore(id, f.camp(), Norm.NEED_FIRST_COMMON_STORE,
-            f.person(1).id(), f.state.world().day(), origin, 2, 0, 0, NormProposal.Status.OPEN, positions));
+            f.person(1).id(), f.state.world().day(), origin, 4, 0, 0, NormProposal.Status.OPEN, positions));
         MeetingTestEvents.record(f.state.world(), EventType.NORM_PROPOSED, List.of(f.person(1).id()), Map.of("proposalId", id), List.of(origin));
     }
     private static SettlementMeetings.Result result(Fixture f, boolean hold) {

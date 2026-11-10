@@ -39,13 +39,13 @@ class SettlementAutonomousCouncilTest {
 		long request = state.world().recordShareRequest(first.id(), state.campOwner().id(), 40);
 		long refusal = state.world().recordShareRefusal(request, first.id(), state.campOwner().id(), 20);
 		var proposal = NormProposal.restore("council-proposal", state.campOwner().id(), Norm.NEED_FIRST_COMMON_STORE,
-			first.id(), 0, refusal, 2, 0, 0, NormProposal.Status.OPEN,
+			first.id(), 0, refusal, 4, 0, 0, NormProposal.Status.OPEN,
 			allKnown ? Map.of(first.id(), NormProposal.Position.SUPPORT,
 				state.residentId(id(2)).orElseThrow(), NormProposal.Position.UNDECIDED)
 				: Map.of(first.id(), NormProposal.Position.SUPPORT));
 		state.world().registerProposal(proposal);
 		long event = MeetingTestEvents.record(state.world(), EventType.NORM_PROPOSED, List.of(first.id()),
-			Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "cap", "2", "revision", "0"), List.of(refusal));
+			Map.of("proposalId", proposal.proposalId(), "normId", proposal.normId(), "cap", "4", "revision", "0"), List.of(refusal));
 		if (attachInformation) first.learnInformation(new SocialInformation("council-info", SocialInformation.Kind.NORM_PROPOSAL,
 			first.id(), proposal.proposalId(), event, 0, null, 1.0));
 		return new Fixture(data, camp, state, proposal);

@@ -391,7 +391,20 @@ public final class SettlementSavedData extends SavedData {
 	public SettlementSimulationState getOrCreateSimulation(Settlement settlement) {
 		return simulations.computeIfAbsent(settlement.id(), id -> {
 			setDirty();
-			return SettlementSimulationState.create(settlement);
+			SettlementSimulationState state = SettlementSimulationState.create(settlement);
+			bindOpinionPersonality(settlement, state);
+			return state;
+		});
+	}
+
+	/** Read the current authoritative member, never the UUID-generated fallback. */
+	private void bindOpinionPersonality(Settlement settlement, SettlementSimulationState state) {
+		state.bindOpinionSelfishness(resident -> {
+			if (settlements.get(settlement.center()) != settlement
+					|| simulations.get(settlement.id()) != state) return 50;
+			SettlementMember member = members.get(resident);
+			return member != null && member.settlementId().equals(settlement.id())
+				? member.personality().selfishness() : 50;
 		});
 	}
 
@@ -978,7 +991,9 @@ public final class SettlementSavedData extends SavedData {
 				.filter(settlement -> settlement.id().equals(settlementId))
 				.findFirst()
 				.ifPresent(settlement -> {
-					data.simulations.put(settlementId, SettlementSimulationState.load(settlement, simulationTag));
+					SettlementSimulationState state = SettlementSimulationState.load(settlement, simulationTag);
+					data.simulations.put(settlementId, state);
+					data.bindOpinionPersonality(settlement, state);
 					// Persist a newly assigned clock for legacy states, even without further activity.
 					if (!simulationTag.contains("FoodClockId")) data.setDirty();
 				});

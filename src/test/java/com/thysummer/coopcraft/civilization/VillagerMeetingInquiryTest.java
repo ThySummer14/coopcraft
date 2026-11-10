@@ -16,6 +16,7 @@ import com.thysummer.coopcraft.civilization.simulation.EventType;
 import com.thysummer.coopcraft.civilization.simulation.MeetingTestEvents;
 import com.thysummer.coopcraft.civilization.simulation.Norm;
 import com.thysummer.coopcraft.civilization.simulation.NormProposal;
+import com.thysummer.coopcraft.civilization.simulation.NormSystem;
 import com.thysummer.coopcraft.civilization.simulation.Person;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 import com.thysummer.coopcraft.civilization.simulation.SocialInformation;
@@ -258,7 +259,7 @@ class VillagerMeetingInquiryTest {
 			Fixture f = fixture(2, false);
 			f.people().forEach(person -> person.setHunger(0));
 			seed(f, "agenda", variant.equals("care") ? Norm.CARE_FIRST_COMMON_STORE : Norm.NEED_FIRST_COMMON_STORE,
-				variant.equals("care") ? 1 : 3, Map.of(1, SUPPORT), !variant.equals("no-source"));
+				variant.equals("care") ? 1 : 4, Map.of(1, SUPPORT), !variant.equals("no-source"));
 			switch (variant) {
 				case "grievance" -> f.person(1).restoreSocialState(8, 0, 0);
 				case "trust" -> f.person(1).setTrust(f.person(1).id(), 100);
@@ -270,16 +271,65 @@ class VillagerMeetingInquiryTest {
 		}
 		Fixture undecided = fixture(2, true);
 		undecided.people().forEach(person -> person.setHunger(0));
-		seed(undecided, "agenda", Norm.NEED_FIRST_COMMON_STORE, 2, Map.of(1, SUPPORT), true);
+		undecided.person(1).setTrust(undecided.person(1).id(), 40);
+		seed(undecided, "agenda", Norm.NEED_FIRST_COMMON_STORE, 3, Map.of(1, SUPPORT), true);
 		collect(actual, inspect(undecided, 1));
+		// Exercise the shared rendering adapter for both signs of every factor, including
+		// legacy-only LARGE_ALLOCATION which real-world directional opinions no longer emit.
+		for (NormSystem.ProposalFactorKind kind : NormSystem.ProposalFactorKind.values()) {
+			for (double contribution : List.of(-1.0, 1.0)) {
+				actual.add(VillagerMeetingInquiry.factors(new NormSystem.ProposalOpinion(UNDECIDED, 35 + contribution,
+					List.of(new NormSystem.ProposalFactor(kind, contribution)))));
+			}
+		}
+		actual.add(VillagerMeetingInquiry.factors(new NormSystem.ProposalOpinion(OPPOSE, 35, List.of())));
 		Set<String> emitted = keys(actual);
 		for (String locale : List.of("en_us", "zh_cn")) {
 			JsonObject json = translations(locale);
 			for (Component component : actual) assertTranslatedArguments(json, locale, component);
 			Set<String> declared = json.keySet().stream().filter(key -> key.startsWith(PREFIX)).collect(java.util.stream.Collectors.toSet());
 			assertEquals(declared, emitted.stream().filter(key -> key.startsWith(PREFIX)).collect(java.util.stream.Collectors.toSet()),
-				"Exercise every inquiry translation through real adapter output: " + locale);
+				"Exercise every inquiry translation through query and shared factor-renderer output: " + locale);
 		}
+	}
+
+
+	@Test
+	void realIncreasesAndCutsRenderActualSignsWithoutChangingStoredVotes() {
+		for (int cap : List.of(2, 4)) {
+			Fixture f = fixture(2, true);
+			NormProposal proposal = seed(f, "direction", Norm.NEED_FIRST_COMMON_STORE, cap, Map.of(1, SUPPORT), true);
+			CompoundTag before = save(f);
+			var opinion = f.state.norms().inspectProposal(f.person(1), proposal.proposalId()).orElseThrow().opinion().orElseThrow();
+			var hunger = opinion.factors().stream().filter(factor -> factor.kind() == NormSystem.ProposalFactorKind.PERSONAL_HUNGER)
+				.findFirst().orElseThrow();
+			Component rendered = VillagerMeetingInquiry.factors(new NormSystem.ProposalOpinion(opinion.position(), opinion.score(), List.of(hunger)));
+			assertTrue(keys(List.of(rendered)).contains(PREFIX + (cap == 4 ? "factor_positive" : "factor_negative")));
+			assertFalse(keys(List.of(rendered)).contains(PREFIX + (cap == 4 ? "factor_negative" : "factor_positive")));
+			assertEquals(SUPPORT, proposal.positions().get(f.person(1).id()));
+			assertEquals(before, save(f));
+		}
+	}
+
+	@Test
+	void smallPersonalityEffectRemainsVisibleAlongsideThreeStrongerContextualReasons() {
+		var opinion = new NormSystem.ProposalOpinion(SUPPORT, 70.5, List.of(
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.PERSONAL_HUNGER, 15),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.NEIGHBOR_REQUESTS, 15),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.HOUSEHOLD_HUNGER, 10),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.COMMUNITY_RESERVE, -5),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.SELFISHNESS, 0.5)));
+		Component rendered = VillagerMeetingInquiry.factors(opinion);
+		assertEquals(7, rendered.getSiblings().size(), "Four factors and three separators");
+		Set<String> shown = keys(List.of(rendered));
+		assertTrue(shown.contains(PREFIX + "factor_personal_hunger"));
+		assertTrue(shown.contains(PREFIX + "factor_household_hunger"));
+		assertTrue(shown.contains(PREFIX + "factor_neighbor_requests"));
+		assertTrue(shown.contains(PREFIX + "factor_selfishness"));
+		assertFalse(shown.contains(PREFIX + "factor_community_reserve"));
+		var duplicate = new NormSystem.ProposalOpinion(UNDECIDED, 40, List.of(
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.SELFISHNESS, 5)));
+		assertEquals(1, VillagerMeetingInquiry.factors(duplicate).getSiblings().size());
 	}
 
 	private static void collect(List<Component> all, List<Component> lines) {

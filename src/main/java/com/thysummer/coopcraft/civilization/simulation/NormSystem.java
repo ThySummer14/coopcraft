@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Objects;
+import java.util.function.ToIntFunction;
 
 public final class NormSystem {
 	private static final String NEIGHBOR_REQUESTS = "neighbor-requests";
@@ -21,6 +23,7 @@ public final class NormSystem {
 	private final SimulationWorld world;
 	private final SimulationConfig config;
 	private final Integer defaultBaseAllowance;
+	private ToIntFunction<Person> opinionSelfishnessProvider = person -> 50;
 	private final Set<String> chargedSupervision = new LinkedHashSet<>();
 	private final Map<String, Integer> commonAllocations = new HashMap<>();
 	private long lastPropagationDay = Long.MIN_VALUE;
@@ -30,7 +33,7 @@ public final class NormSystem {
 		this(world, config, null);
 	}
 
-	/** Adapter baseline for new proposals only; care bonuses and saved proposals are unchanged. */
+	/** Explicit adapter policy used for new proposals and current opinions, never historical votes. */
 	public NormSystem(SimulationWorld world, SimulationConfig config, int defaultBaseAllowance) {
 		this(world, config, Integer.valueOf(defaultBaseAllowance));
 		if (defaultBaseAllowance < 1 || defaultBaseAllowance > 4) {
@@ -42,6 +45,15 @@ public final class NormSystem {
 		this.world = world;
 		this.config = config;
 		this.defaultBaseAllowance = defaultBaseAllowance;
+	}
+
+	/**
+	 * Supply the authoritative saved personality without copying it into simulation history.
+	 * The callback must be read-only; values are clamped to 0..100 when evaluating an opinion.
+	 * Legacy standalone experiments deliberately ignore this adapter-only weighting.
+	 */
+	public void setOpinionSelfishnessProvider(ToIntFunction<Person> provider) {
+		opinionSelfishnessProvider = Objects.requireNonNull(provider, "provider");
 	}
 
 	/**
@@ -199,7 +211,7 @@ public final class NormSystem {
 
 	public enum ProposalFactorKind {
 		NEIGHBOR_REQUESTS, PERSONAL_HUNGER, HOUSEHOLD_HUNGER, GRIEVANCE, PROPOSER_TRUST,
-		HOUSEHOLD_SURPLUS, LARGE_ALLOCATION
+		HOUSEHOLD_SURPLUS, LARGE_ALLOCATION, COMMUNITY_RESERVE, SELFISHNESS
 	}
 
 	public record ProposalFactor(ProposalFactorKind kind, double contribution) {}
@@ -924,6 +936,61 @@ public final class NormSystem {
 	}
 
 	private ProposalOpinion proposalOpinion(Person person, NormProposal proposal) {
+		return defaultBaseAllowance == null ? legacyProposalOpinion(person, proposal) : directionalProposalOpinion(person, proposal);
+	}
+
+	private ProposalOpinion directionalProposalOpinion(Person person, NormProposal proposal) {
+		List<ProposalFactor> factors = new ArrayList<>();
+		boolean care = Norm.CARE_FIRST_COMMON_STORE.equals(proposal.normId());
+		int current = world.norm(proposal.campId(), proposal.normId()).filter(Norm::isActive)
+			.map(Norm::allocationUnitCap).orElse(care ? 0 : defaultBaseAllowance);
+		int direction = Integer.compare(proposal.allocationUnitCap(), current);
+		List<Person> household = world.peopleInHousehold(person.householdId()).stream()
+			.filter(Person::isAlive).filter(member -> member.campId().equals(proposal.campId())).toList();
+		List<Person> camp = world.people().stream().filter(Person::isAlive)
+			.filter(member -> member.campId().equals(proposal.campId())).toList();
+		boolean householdAffected = household.stream().anyMatch(member -> !care || member.needsCare());
+		boolean campAffected = camp.stream().anyMatch(member -> !care || member.needsCare());
+		if (direction != 0 && person.knowsNorm(NEIGHBOR_REQUESTS) && camp.stream()
+			.anyMatch(member -> (!care || member.needsCare()) && member.hunger() > config.foodAccessThreshold())) {
+			factors.add(new ProposalFactor(ProposalFactorKind.NEIGHBOR_REQUESTS, 15 * direction));
+		}
+		double personalBenefit = direction != 0 && (!care || person.needsCare())
+			&& person.hunger() > config.foodAccessThreshold() ? 15 * direction : 0;
+		double householdBenefit = direction != 0 && household.stream()
+			.anyMatch(member -> (!care || member.needsCare()) && member.hunger() > config.foodAccessThreshold())
+			? 10 * direction : 0;
+		if (personalBenefit != 0) factors.add(new ProposalFactor(ProposalFactorKind.PERSONAL_HUNGER, personalBenefit));
+		if (householdBenefit != 0) factors.add(new ProposalFactor(ProposalFactorKind.HOUSEHOLD_HUNGER, householdBenefit));
+		// Approximation: existing grievance weights a relevant household allowance preference;
+		// this does not infer the grievance's cause or invent an unrelated benefit.
+		factors.add(new ProposalFactor(ProposalFactorKind.GRIEVANCE,
+			householdAffected ? Math.min(15, person.grievance() * 2) * direction : 0));
+		factors.add(new ProposalFactor(ProposalFactorKind.PROPOSER_TRUST, person.trustIn(proposal.proposerId()) * 0.15));
+		long stock = world.availableNutrition(StorageOwner.household(person.householdId()));
+		long reserve = household.size() * (long) config.dailyHunger() * 3;
+		if (direction != 0 && householdAffected && stock > reserve) {
+			factors.add(new ProposalFactor(ProposalFactorKind.HOUSEHOLD_SURPLUS, -20 * direction));
+		}
+		// A cap is a ceiling, not guaranteed consumption. Reserve pressure is deliberately modest.
+		long communityReserve = camp.size() * (long) config.dailyHunger() * 3;
+		if (direction != 0 && campAffected && world.availableNutrition(StorageOwner.camp(proposal.campId())) < communityReserve) {
+			factors.add(new ProposalFactor(ProposalFactorKind.COMMUNITY_RESERVE, -10 * direction));
+		}
+		double relevantBenefit = personalBenefit + householdBenefit;
+		if (relevantBenefit != 0) {
+			int selfishness = Math.max(0, Math.min(100, opinionSelfishnessProvider.applyAsInt(person)));
+			double adjustment = Math.max(-5, Math.min(5, (selfishness - 50) / 250.0 * relevantBenefit));
+			if (adjustment != 0) factors.add(new ProposalFactor(ProposalFactorKind.SELFISHNESS, adjustment));
+		}
+		double score = 35;
+		for (ProposalFactor factor : factors) score += factor.contribution();
+		NormProposal.Position position = score >= 55 ? NormProposal.Position.SUPPORT
+			: score < 40 ? NormProposal.Position.OPPOSE : NormProposal.Position.UNDECIDED;
+		return new ProposalOpinion(position, score, factors);
+	}
+
+	private ProposalOpinion legacyProposalOpinion(Person person, NormProposal proposal) {
 		List<ProposalFactor> factors = new ArrayList<>();
 		// Preserve every original double addition and its order, including both hunger terms.
 		double score = 35;

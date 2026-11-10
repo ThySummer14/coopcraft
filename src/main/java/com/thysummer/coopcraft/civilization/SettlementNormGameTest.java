@@ -197,6 +197,12 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		state.world().person(firstPerson).setHunger(100);
 		state.world().person(secondPerson).setHunger(100);
 		state.world().person(childPerson).setHunger(100);
+		// This fixture starts with established mutual aid and trust between the child's parents.
+		// Adult hunger alone is not a reason to support a child-only allowance.
+		state.world().person(firstPerson).observeNorm("neighbor-requests");
+		state.world().person(secondPerson).observeNorm("neighbor-requests");
+		state.world().person(firstPerson).setTrust(secondPerson, 60);
+		state.world().person(secondPerson).setTrust(firstPerson, 60);
 
 		helper.assertValueEqual(60, SettlementSimulationService.eat(data, settlement, first.getUUID()),
 			"The adult must receive the ordinary three-fish allowance");

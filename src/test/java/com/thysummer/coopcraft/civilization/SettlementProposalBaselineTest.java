@@ -64,7 +64,7 @@ class SettlementProposalBaselineTest {
 		f.state.world().assertConservation();
 	}
 
-	@Test void legacyOpenCapTwoSurvivesTwoRoundTripsAndIsStillAdoptable() {
+	@Test void legacyOpenCapTwoSurvivesTwoRoundTripsButHungryResidentsRejectTheCut() {
 		Fixture f = fixture();
 		assertEquals(60, f.eat(A)); assertEquals(0, f.eat(A));
 		long origin = f.refusals(0).getFirst().eventId();
@@ -86,10 +86,22 @@ class SettlementProposalBaselineTest {
 			assertEquals(2, f.state.world().proposal("legacy").orElseThrow().allocationUnitCap());
 			assertEquals(origin, f.state.world().proposal("legacy").orElseThrow().originEventId());
 		}
-		f.close(1); assertTrue(f.hold().held());
-		f.close(2); assertTrue(f.hold().held());
-		assertEquals(NormProposal.Status.ADOPTED, f.state.world().proposal("legacy").orElseThrow().status());
-		assertEquals(2, f.state.dailyFoodUnitCap(f.person(A).id()));
+		for (int day = 1; day <= 5; day++) {
+			f.close(day);
+			NormProposal restored = f.state.world().proposal("legacy").orElseThrow();
+			var positionsBeforeQuery = restored.positions();
+			var beforeQuery = f.data.save(new CompoundTag(), null);
+			var people = List.of(f.person(A), f.person(B));
+			assertEquals("ready", f.state.norms().inspectCommonStoreMeeting(people, people, f.camp()).status());
+			assertEquals(positionsBeforeQuery, restored.positions());
+			assertEquals(beforeQuery, f.data.save(new CompoundTag(), null));
+			assertTrue(f.hold().held());
+			assertEquals(NormProposal.Position.OPPOSE, restored.positions().get(f.person(A).id()));
+			assertEquals(NormProposal.Position.OPPOSE, restored.positions().get(f.person(B).id()));
+			assertEquals(3, f.state.dailyFoodUnitCap(f.person(A).id()));
+		}
+		assertEquals(NormProposal.Status.REJECTED, f.state.world().proposal("legacy").orElseThrow().status());
+		assertTrue(f.state.world().normsForCamp(f.camp()).isEmpty());
 		f.state.world().assertConservation();
 	}
 

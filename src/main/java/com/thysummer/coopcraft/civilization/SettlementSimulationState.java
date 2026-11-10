@@ -2,12 +2,14 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ToIntFunction;
 
 import com.thysummer.coopcraft.civilization.simulation.Camp;
 import com.thysummer.coopcraft.civilization.simulation.EventType;
@@ -40,6 +42,8 @@ public final class SettlementSimulationState {
 	static final int DAILY_FOOD_UNIT_CAP = 3;
 
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
+	// Derived identity index only; personality stays exclusively on the saved member.
+	private final Map<Person, UUID> residentUuids = new IdentityHashMap<>();
 	private final Map<String, Integer> foodAllocations = new LinkedHashMap<>();
 	private final Map<String, Long> craftLessonDays = new LinkedHashMap<>();
 	private Tag invalidCraftLessons;
@@ -88,6 +92,15 @@ public final class SettlementSimulationState {
 
 	public NormSystem norms() {
 		return norms;
+	}
+
+	/** Bind only from the owning SavedData; standalone simulations retain neutral opinions. */
+	void bindOpinionSelfishness(ToIntFunction<UUID> memberSelfishness) {
+		norms.setOpinionSelfishnessProvider(person -> {
+			UUID resident = residentUuids.get(person);
+			return resident != null && person.id().equals(residentIds.get(resident))
+				? memberSelfishness.applyAsInt(resident) : 50;
+		});
 	}
 
 	public StorageOwner campOwner() {
@@ -277,6 +290,7 @@ public final class SettlementSimulationState {
 		);
 		world.registerPerson(person);
 		residentIds.put(villagerId, personId);
+		residentUuids.put(person, villagerId);
 		return true;
 	}
 
@@ -453,6 +467,7 @@ public final class SettlementSimulationState {
 			loadFoodDayHistory(person, resident, tag.getLong("Day"), state.lastSurvivalDay);
 			state.world.registerPerson(person);
 			state.residentIds.put(resident.getUUID("VillagerId"), person.id());
+			state.residentUuids.put(person, resident.getUUID("VillagerId"));
 			if (resident.contains("Parents")) {
 				parentage.put(person.id(), loadStrings(resident.getList("Parents", ListTag.TAG_STRING)));
 			}

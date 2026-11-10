@@ -229,10 +229,10 @@ class SettlementReviewedMeetingTest {
 		Map<String, NormProposal.Position> personPositions = new LinkedHashMap<>();
 		positions.forEach((resident, position) -> personPositions.put(f.person(resident).id(), position));
 		NormProposal proposal = NormProposal.restore(id, f.camp(), Norm.NEED_FIRST_COMMON_STORE, f.person(1).id(),
-			f.state.world().day(), origin, 2, 0, rounds, NormProposal.Status.OPEN, personPositions);
+			f.state.world().day(), origin, 4, 0, rounds, NormProposal.Status.OPEN, personPositions);
 		f.state.world().registerProposal(proposal);
 		long proposalEvent = MeetingTestEvents.record(f.state.world(), EventType.NORM_PROPOSED, List.of(f.person(1).id()),
-			Map.of("proposalId", id, "normId", proposal.normId(), "cap", "2", "revision", "0"), List.of(origin));
+			Map.of("proposalId", id, "normId", proposal.normId(), "cap", "4", "revision", "0"), List.of(origin));
 		if (attachInformation) f.person(1).learnInformation(new SocialInformation("proposal-info:" + id, SocialInformation.Kind.NORM_PROPOSAL,
 			f.person(1).id(), id, proposalEvent, f.state.world().day(), null, 1.0));
 		return proposal;
