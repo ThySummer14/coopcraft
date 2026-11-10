@@ -24,7 +24,7 @@ class SettlementToolDistributionGoalWiringTest {
 		String choose = m.get("chooseAction");
 		assertBefore(choose, "prepareShearsLoan(false)", "preparePublicPickaxeCollection()");
 		assertTrue(choose.contains("if(preparePublicPickaxeCollection())returnAction.COLLECT_STONE_PICKAXE;"));
-		for (String later : List.of("prepareStarterCrafting()", "prepareFirstPickaxeCrafting()", "canCraftSticks()", "chooseMaterialRecipe()"))
+		for (String later : List.of("prepareStarterCrafting()", "prepareFirstPickaxeCrafting()", "prepareToolStickCrafting()", "chooseMaterialRecipe()"))
 			assertBefore(choose, "preparePublicPickaxeCollection()", later);
 		assertTrue(choose.contains("if(prepareFirstPickaxeCrafting())returnAction.COLLECT_PICKAXE_MATERIALS;"));
 		assertFalse(choose.contains("SettlementToolDistribution.finish"));

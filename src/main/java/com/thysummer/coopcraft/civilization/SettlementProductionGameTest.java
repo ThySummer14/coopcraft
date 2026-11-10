@@ -199,17 +199,11 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertValueEqual(0, chest.countItem(Items.COBBLESTONE), "Imported stone must leave the real stockpile");
 
 		VillagerWorkGoal goal = new VillagerWorkGoal(villager);
-		helper.assertTrue(goal.canUse(), "Abstract wood must allow the villager to choose stick crafting");
-		goal.start();
-		for (int tick = 0; tick < 240
-			&& villager.getInventory().countItem(Items.STICK) < 8
-			&& goal.canContinueToUse(); tick++) {
-			goal.tick();
-		}
+		runStickWorkbenchAction(helper, goal, villager);
 
 		helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK), "One exported log must craft eight real sticks");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
-			"Personal crafting must not import a new abstract stick batch");
+			"Physical workbench crafting must not import a new abstract stick batch");
 		deliverCargoAtStore(helper, data, settlement, villager, chest, 8);
 		helper.assertValueEqual(8, chest.countItem(Items.STICK), "All crafted sticks must arrive in the real store");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.OAK_LOG), "The crafting input must be consumed");
@@ -217,7 +211,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.OAK_LOG),
 			"The abstract log must be consumed exactly once"
 		);
-		SimulationEvent sticksWithdrawal = craftingEvent(state, "sticks");
+		SimulationEvent sticksWithdrawal = craftingEvent(state, "material_sticks");
 		helper.assertValueEqual(List.of(personId), sticksWithdrawal.actors(), "The real crafter must be recorded");
 		helper.assertValueEqual(woodBatchId, sticksWithdrawal.context().get("batchId"), "The stick recipe must use the wood batch");
 		helper.assertTrue(
@@ -225,14 +219,14 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 				.anyMatch(event -> event.eventId() == woodOriginEventId),
 			"The stick material withdrawal must retain its import origin"
 		);
-		SimulationEvent sticksCompleted = craftingCompletion(state, "sticks");
+		SimulationEvent sticksCompleted = craftingCompletion(state, "material_sticks");
 		helper.assertValueEqual(
 			List.of(sticksWithdrawal.eventId()), sticksCompleted.causalLinks(),
 			"The completed craft must link to its actual material withdrawal"
 		);
 		helper.assertTrue(state.world().ledger().traceOrigins(sticksCompleted.eventId()).stream()
 			.anyMatch(event -> event.eventId() == woodOriginEventId), "The completed stick craft retains its actual wood export ancestry");
-		SimulationEvent sticksPractice = craftingPractice(state, "sticks");
+		SimulationEvent sticksPractice = craftingPractice(state, "material_sticks");
 		helper.assertValueEqual("CRAFT", sticksPractice.context().get("workType"), "Stick making must practice crafting");
 		helper.assertValueEqual("1.0", sticksPractice.context().get("skillBefore"), "Crafting must start at skill one");
 		helper.assertValueEqual("1.01", sticksPractice.context().get("skillAfter"), "The first craft must practice the core skill");
@@ -452,7 +446,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		}
 
 		// No recipe or tool is injected: the same Goal must select stick making while already holding its pickaxe.
-		runWorkshopAction(helper, goal, "craft", CRAFTING_TABLE);
+		runStickWorkbenchAction(helper, goal, villager);
 		helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK)
 			+ (int) SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
 			"An exhausted pickaxe crafter must autonomously turn one log into eight upgrade sticks");
@@ -490,7 +484,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 
 		List<SimulationEvent> completions = state.world().ledger().events().stream()
 			.filter(event -> event.type() == EventType.CRAFT_COMPLETED).toList();
-		helper.assertValueEqual(List.of("stone_pickaxe", "sticks", "polished_stone_pickaxe"),
+		helper.assertValueEqual(List.of("stone_pickaxe", "material_sticks", "polished_stone_pickaxe"),
 			completions.stream().map(event -> event.context().get("recipe")).toList(),
 			"Exactly one initial tool, one replacement stick batch and one upgrade must complete, in order");
 		for (SimulationEvent completed : completions) {
@@ -515,7 +509,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertValueEqual(3L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.SWEET_BERRIES),
 				"The food reserve must remain untouched throughout the tool upgrade");
 			var upgradeOrigins = state.world().ledger().traceOrigins(craftingCompletion(state, "polished_stone_pickaxe").eventId());
-			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == craftingCompletion(state, "sticks").eventId()),
+			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == craftingCompletion(state, "material_sticks").eventId()),
 				"Delivered real sticks do not acquire synthetic abstract ancestry");
 			helper.assertFalse(upgradeOrigins.stream().anyMatch(event -> event.eventId() == completions.getFirst().eventId()),
 				"Polishing must not borrow completion evidence from the earlier carried pickaxe");
@@ -585,6 +579,33 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
 			helper.assertFalse(goal.canContinueToUse(), "The arrived workbench batch must finish in its work budget");
 			helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Equip the one completed actual tool");
+		} finally {
+			goal.stop();
+			villager.setNoAi(noAi);
+			villager.setPos(original.x, original.y, original.z);
+		}
+	}
+
+	/** Explicit arrivals verify custody stages; this fixture does not exercise navigation. */
+	private static void runStickWorkbenchAction(GameTestHelper helper, VillagerWorkGoal goal, Villager villager) {
+		var original = villager.position();
+		boolean noAi = villager.isNoAi();
+		try {
+			villager.setNoAi(false);
+			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(CRAFTING_TABLE);
+			villager.setPos(store.getX() + 0.5, store.getY() + 1, store.getZ() + 0.5);
+			helper.assertTrue(goal.canUse(), "Stick demand must select public warehouse pickup");
+			helper.assertValueEqual("collect_stick_inputs", goal.status().action(), "Select stick inputs");
+			helper.assertValueEqual(store, goal.status().target(), "Collect at the real warehouse");
+			goal.start();
+			helper.assertValueEqual("craft_sticks_at_workbench", goal.status().action(), "Carry inputs to the table");
+			helper.assertValueEqual(station, goal.status().target(), "Use the bound table");
+			helper.assertValueEqual(1, villager.getInventory().countItem(Items.OAK_LOG), "Carry the one real log");
+			helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK), "Pickup cannot manufacture sticks");
+			villager.setPos(station.getX() + 0.5, station.getY() + 1, station.getZ() + 0.5);
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			helper.assertFalse(goal.canContinueToUse(), "Finish one arrived stick batch within the work budget");
+			helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK), "One log produces eight real sticks");
 		} finally {
 			goal.stop();
 			villager.setNoAi(noAi);

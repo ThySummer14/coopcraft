@@ -31,7 +31,7 @@ public final class SettlementWorkbenchCargo {
 		return custom != null && custom.copyTag().contains(KEY);
 	}
 
-	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
+	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.STICKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
 		|| recipe == Recipe.STONE_PICKAXE || recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL; }
 
 	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
@@ -91,6 +91,7 @@ public final class SettlementWorkbenchCargo {
 			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)) return null;
 			recipe = switch (tag.getString("Recipe")) {
 				case "STONE_PICKAXE" -> Recipe.STONE_PICKAXE;
+				case "STICKS" -> Recipe.STICKS;
 				case "PLANKS" -> Recipe.PLANKS;
 				case "DOOR" -> Recipe.DOOR;
 				case "BED" -> Recipe.BED;

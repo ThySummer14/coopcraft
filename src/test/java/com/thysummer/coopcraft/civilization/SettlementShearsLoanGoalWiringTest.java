@@ -22,7 +22,7 @@ class SettlementShearsLoanGoalWiringTest {
 	@Test void borrowingIsSelectedBeforePickaxeEquipOrCraftAndRequiresSafeRecoveryAndNoCargo() throws Exception {
 		var methods = methods("VillagerWorkGoal"); String choose = named(methods, "chooseAction").toString();
 		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("prepareFirstPickaxeCrafting()"));
-		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("canCraftSticks()"));
+		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("prepareToolStickCrafting()"));
 		String prepare = named(methods, "prepareShearsLoan").toString();
 		assertTrue(prepare.contains("!returning")); assertTrue(prepare.contains("SettlementCargoRecovery.get(level).available()"));
 		assertTrue(prepare.contains("hasReturnCargo()")); assertTrue(prepare.contains("ConstructionSupply.hasAny(villager.getInventory())"));
@@ -107,7 +107,7 @@ class SettlementShearsLoanGoalWiringTest {
 
 	@Test void loanMarkersAreExcludedFromLegacyCraftingAndAutomaticPickaxeEquip() throws Exception {
 		var methods = methods("VillagerWorkGoal");
-		for (String name : List.of("craftSticks", "canCraftSticks", "canGrindSmoothStone", "grindSmoothStone", "withdrawOneLog",
+		for (String name : List.of("canGrindSmoothStone", "grindSmoothStone",
 			"isPolishedPickaxe", "hasStonePickaxe", "countCraftingItems", "transferCraftingItems", "removeItems")) {
 			assertFalse(calls(named(methods, name), "SettlementShearsLoan.isMarked").isEmpty(), name);
 		}

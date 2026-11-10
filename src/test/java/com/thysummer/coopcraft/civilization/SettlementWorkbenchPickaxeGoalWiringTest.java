@@ -24,7 +24,7 @@ class SettlementWorkbenchPickaxeGoalWiringTest {
 		String choose = methods.get("chooseAction");
 		assertTrue(choose.contains("if(prepareFirstPickaxeCrafting())returnAction.COLLECT_PICKAXE_MATERIALS;"));
 		assertBefore(choose, "prepareShearsLoan(false)", "prepareFirstPickaxeCrafting()");
-		assertBefore(choose, "prepareFirstPickaxeCrafting()", "canCraftSticks()");
+		assertBefore(choose, "prepareFirstPickaxeCrafting()", "prepareToolStickCrafting()");
 		String prepare = methods.get("prepareFirstPickaxeCrafting");
 		assertTrue(prepare.contains("hasReturnCargo()||hasTeachingCustody()"));
 		assertTrue(prepare.contains("SettlementMaterialCrafting.availablePlain(store,state,Items.COBBLESTONE)<3"));

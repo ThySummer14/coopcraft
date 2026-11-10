@@ -73,8 +73,7 @@ class SettlementWorkbenchGoalWiringTest {
 		assertTrue(methods.get("tickWorkbenchCrafting").contains("shouldEat()||meetingTicket!=null||emergencyForage()"));
 		assertTrue(methods.get("hasReturnCargo").contains("SettlementWorkbenchCargo.hasReturnable(villager.getInventory(),camp.id())"));
 		for (String method : List.of("canCraftSticks", "craftSticks", "withdrawOneLog"))
-			assertTrue(methods.get(method).contains("!SettlementWorkbenchCargo.isMarked(stack)"));
-		assertTrue(methods.get("withdrawOneLog").contains("SettlementWorkbenchCargo.isMarked(stockpile.getItem(slot))"));
+			assertFalse(methods.containsKey(method), "Legacy remote stick crafting must be removed");
 	}
 
 	@Test

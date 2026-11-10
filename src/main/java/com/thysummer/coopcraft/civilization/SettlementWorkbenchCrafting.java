@@ -83,13 +83,17 @@ final class SettlementWorkbenchCrafting {
 		if (t == null || t.used || !currentIdentity(t, data, camp, actor, inventory)) return false;
 		if (t.collected && !hasExactInputs(t, inventory)) return false;
 		if (!t.demand.getAsBoolean()) return false;
-		return t.recipe != Recipe.STONE_PICKAXE || (!t.used && identityMatches(t, data, camp, actor, inventory)
+		return !strictCallbacks(t) || (!t.used && identityMatches(t, data, camp, actor, inventory)
 			&& (!t.collected || hasExactInputs(t, inventory)));
+	}
+
+	private static boolean strictCallbacks(Ticket t) {
+		return t.recipe == Recipe.STONE_PICKAXE || t.recipe == Recipe.STICKS;
 	}
 
 	private static boolean currentIdentity(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
 		return identityMatches(t, data, camp, actor, inventory) && t.worldValid.getAsBoolean()
-			&& (t.recipe != Recipe.STONE_PICKAXE || identityMatches(t, data, camp, actor, inventory));
+			&& (!strictCallbacks(t) || identityMatches(t, data, camp, actor, inventory));
 	}
 
 	private static boolean identityMatches(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
@@ -134,7 +138,7 @@ final class SettlementWorkbenchCrafting {
 				if (batch.resourceType() != type) continue;
 				if (!valid(t, data, camp, actor, inventory) || !atStore.getAsBoolean()
 					|| !canExport(t, deficit.getKey())) return fail(t);
-				if (t.recipe == Recipe.STONE_PICKAXE && !valid(t, data, camp, actor, inventory)) return fail(t);
+				if (strictCallbacks(t) && !valid(t, data, camp, actor, inventory)) return fail(t);
 				int exported = MinecraftStockpileAdapter.exportToContainer(t.state.world(), t.state.campOwner(),
 					batch.batchId(), missing, stockpile, t.state.residentId(actor).map(List::of).orElse(List.of()),
 					Map.of("source", "minecraft_material_crafting", "activity", "craft", "recipe", t.recipe.id(),
@@ -145,7 +149,7 @@ final class SettlementWorkbenchCrafting {
 			if (missing != 0) return fail(t); // Previously exported items stay real and public.
 		}
 		if (!valid(t, data, camp, actor, inventory) || !atStore.getAsBoolean()) return fail(t);
-		if (t.recipe == Recipe.STONE_PICKAXE && !valid(t, data, camp, actor, inventory)) return fail(t);
+		if (strictCallbacks(t) && !valid(t, data, camp, actor, inventory)) return fail(t);
 		// Standard non-reentrant containers only. Preview both complete results before changing either.
 		bag = pickupPreview(t, inventory, inputs);
 		if (bag == null) return fail(t);
@@ -172,7 +176,7 @@ final class SettlementWorkbenchCrafting {
 		if (!valid(t, data, camp, actor, inventory) || !t.collected || atStation == null
 			|| !atStation.getAsBoolean()) return fail(t);
 		// Arrival callbacks may observe changed hand/demand or binding authority.
-		if (t.recipe == Recipe.STONE_PICKAXE && !valid(t, data, camp, actor, inventory)) return fail(t);
+		if (strictCallbacks(t) && !valid(t, data, camp, actor, inventory)) return fail(t);
 		t.used = true;
 		SimpleContainer result = craftPreview(t, inventory);
 		if (result == null) return false;
@@ -204,7 +208,7 @@ final class SettlementWorkbenchCrafting {
 
 	private static boolean canExport(Ticket t, Item item) {
 		if (t.state == null || !t.state.survivalEnabled() || !t.state.productionEnabled()) return false;
-		return (t.recipe == Recipe.PLANKS && item == Items.OAK_LOG)
+		return ((t.recipe == Recipe.PLANKS || t.recipe == Recipe.STICKS) && item == Items.OAK_LOG)
 			|| ((t.recipe == Recipe.TORCH_COAL || t.recipe == Recipe.TORCH_CHARCOAL) && item == Items.STICK)
 			|| (t.recipe == Recipe.STONE_PICKAXE && (item == Items.COBBLESTONE || item == Items.STICK));
 	}
