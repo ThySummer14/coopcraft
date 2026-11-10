@@ -49,6 +49,54 @@ class SettlementFoodDeliveryTransactionTest {
 		}
 	}
 
+	@Test void requestGatePrefersCurrentFoodAndRequiresHungryMemberWithRoom() {
+		for (String scenario : List.of("empty", "no_store", "own_food", "public_food", "fed", "full", "survival", "other_camp", "nonmember")) {
+			var f = new SettlementFoodSharingTest.Fixture();
+			var store = scenario.equals("no_store") ? null : new net.minecraft.world.SimpleContainer(8);
+			Settlement camp = f.camp;
+			switch (scenario) {
+				case "own_food" -> f.other.setItem(0, new ItemStack(Items.BREAD));
+				case "public_food" -> store.setItem(0, new ItemStack(Items.BREAD));
+				case "fed" -> f.data.setSatiety(camp, f.recipient, SettlementNeeds.HUNGRY_AT + 1);
+				case "full" -> { for (int slot = 0; slot < f.other.getContainerSize(); slot++) f.other.setItem(slot, new ItemStack(Items.STICK)); }
+				case "survival" -> f.data.getOrCreateSimulation(camp).setSurvivalEnabled(true, 0);
+				case "other_camp" -> camp = f.data.getOrCreate(new net.minecraft.core.BlockPos(1000, 64, 0), "Other", 0);
+				case "nonmember" -> f.data.removeMember(f.recipient);
+			}
+			f.data.setDirty(false);
+			assertEquals(scenario.equals("empty") || scenario.equals("no_store"),
+				SettlementFoodDeliveryScene.requestEligible(f.data, camp, f.recipient, f.other, store), scenario);
+			assertFalse(f.data.isDirty(), scenario);
+			if (!scenario.equals("survival")) assertTrue(f.data.simulationOf(camp).isEmpty(), scenario);
+		}
+	}
+
+	@Test void requestingRecipientUsesSameEndpointsAndCompletesOneFactAfterFreshJointTicks() {
+		var f = new SettlementFoodSharingTest.Fixture(); var route = new Route(f);
+		assertSame(route.lease, route.reservations.find(f.recipient, 0));
+		assertNull(route.reservations.reserve(UUID.randomUUID(), f.recipient, 0, f.prepare()));
+		assertNull(route.reservations.reserve(f.giver, UUID.randomUUID(), 0, f.prepare()));
+		assertTrue(route.arrive(60)); var pair = route.sessions.find(f.recipient, 60);
+		assertTrue(route.sessions.join(pair, f.recipient, 60));
+		assertTrue(route.sessions.join(pair, f.giver, 60));
+		assertFalse(route.sessions.pulse(pair, f.recipient, 60, true));
+		assertFalse(route.sessions.pulse(pair, f.giver, 60, true));
+		for (int tick = 61; tick <= 100; tick++) {
+			assertFalse(route.sessions.pulse(pair, f.recipient, tick, SettlementFoodSharing.valid(pair.value)));
+			boolean completed = route.sessions.pulse(pair, f.giver, tick, SettlementFoodSharing.valid(pair.value));
+			assertEquals(tick == 100, completed);
+			if (completed) {
+				var proof = SettlementFoodSharing.finish(pair.value, pair::completed, tick, "Original giver", "Hungry requester");
+				assertNotNull(proof); assertTrue(f.data.rememberFoodSharing(f.camp, proof));
+				assertFalse(f.data.rememberFoodSharing(f.camp, proof));
+			}
+		}
+		assertEquals(15, f.bag.countItem(Items.BREAD)); assertEquals(1, f.other.countItem(Items.BREAD));
+		var history = f.data.foodSharingMemoriesOf(f.camp, f.recipient);
+		assertEquals(1, history.size()); assertEquals(f.giver, history.getFirst().giver());
+		assertEquals(f.recipient, history.getFirst().recipient());
+	}
+
 	@Test void surplusPointsMustCoverOneWholeAvailableRation() {
 		int checked = 0;
 		int points = SettlementFood.points(Items.BREAD);

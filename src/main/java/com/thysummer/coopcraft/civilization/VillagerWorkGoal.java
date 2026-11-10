@@ -128,7 +128,7 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.EAT && preparePersonalMeal()) return true;
 			// Selection is a boundary, never a licence to interrupt a valid current job.
 			if (action != null && isTargetValid()) {
-				if (!isFoodSharingAction() && action != Action.DELIVER_FOOD) SettlementFoodSharingScene.cancelOnUnload(villager);
+				if (!isFoodSharingAction() && !isFoodDeliveryAction()) SettlementFoodSharingScene.cancelOnUnload(villager);
 				return true;
 			}
 			cancelPersonalMeal();
@@ -276,7 +276,7 @@ public class VillagerWorkGoal extends Goal {
 				if (personalMealValid()) return true;
 				cancelPersonalMeal(); return false;
 			}
-			if (action == Action.DELIVER_FOOD) {
+			if (isFoodDeliveryAction()) {
 				if (foodDeliveryValid()) return true;
 				cancelFoodSharing(); return false;
 			}
@@ -322,7 +322,7 @@ public class VillagerWorkGoal extends Goal {
 			progress = 0;
 			travelTicks = 0;
 			if (action == Action.EAT_PERSONAL) { villager.getNavigation().stop(); tickPersonalMeal(); }
-			else if (action == Action.DELIVER_FOOD) { tickFoodDelivery(); }
+			else if (isFoodDeliveryAction()) { tickFoodDelivery(); }
 			else if (isFoodSharingAction()) { villager.getNavigation().stop(); tickFoodSharing(); }
 			else if (action == Action.SCOUT_MATERIAL_AREA) { villager.getNavigation().stop(); tickScouting(); }
 			else if (isProposalConversationAction()) { villager.getNavigation().stop(); tickProposalConversation(); }
@@ -374,13 +374,15 @@ public class VillagerWorkGoal extends Goal {
 		villager.getNavigation().stop();
 	}
 
+	private boolean isFoodDeliveryAction() { return action == Action.DELIVER_FOOD || action == Action.REQUEST_FOOD; }
+
 	private boolean isFoodSharingAction() { return action == Action.SHARE_FOOD || action == Action.RECEIVE_FOOD; }
 
 	/** Read-only: a reservation cannot commandeer another Goal's valid task or custody. */
 	static boolean readyForFoodSharing(Villager resident) {
 		VillagerWorkGoal goal = goalOf(resident);
 		if (goal == null || !(resident.level() instanceof ServerLevel level)
-			|| (goal.action != null && !goal.isFoodSharingAction() && goal.action != Action.DELIVER_FOOD) || goal.personalMealTicket != null
+			|| (goal.action != null && !goal.isFoodSharingAction() && !goal.isFoodDeliveryAction()) || goal.personalMealTicket != null
 			|| goal.foodTicket != null || goal.meetingTicket != null || goal.cargoTicket != null
 			|| goal.teachingSession != null || goal.autonomousMeetingSession != null || goal.proposalConversationSession != null
 			|| goal.childCareTicket != null || goal.childCareLease != null || goal.sowingTicket != null
@@ -410,9 +412,10 @@ public class VillagerWorkGoal extends Goal {
 		if (session == null && foodSharingCooldown.attempt(level.getGameTime())) {
 			session = SettlementFoodSharingScene.poll(villager, data, camp);
 			if (session == null) {
-				foodDelivery = SettlementFoodDeliveryScene.poll(villager, data, camp);
+				foodDelivery = SettlementFoodDeliveryScene.pollRequest(villager, data, camp);
+				if (foodDelivery == null) foodDelivery = SettlementFoodDeliveryScene.poll(villager, data, camp);
 				if (foodDelivery != null) {
-					settlement = camp; action = Action.DELIVER_FOOD; target = foodDelivery.nodes.getLast(); progress = 0;
+					settlement = camp; action = foodDelivery.mover == foodDelivery.recipient ? Action.REQUEST_FOOD : Action.DELIVER_FOOD; target = foodDelivery.nodes.getLast(); progress = 0;
 					return true;
 				}
 			}
@@ -439,19 +442,19 @@ public class VillagerWorkGoal extends Goal {
 	}
 	private boolean foodDeliveryValid() {
 		refreshMeetingInvitation();
-		return action == Action.DELIVER_FOOD && foodDelivery != null && target != null
+		return isFoodDeliveryAction() && foodDelivery != null && target != null
 			&& target.equals(foodDelivery.nodes.getLast()) && SettlementFoodDeliveryScene.valid(foodDelivery);
 	}
 	private void tickFoodDelivery() {
 		if (!foodDeliveryValid()) { stop(); return; }
 		var delivery = foodDelivery;
-		villager.getLookControl().setLookAt(delivery.recipient, 30, 30);
+		villager.getLookControl().setLookAt(delivery.stationary, 30, 30);
 		if (villager.blockPosition().equals(target)) {
 			if (!SettlementFoodDeliveryScene.settled(delivery)) return;
 			var session = SettlementFoodDeliveryScene.arrive(delivery);
 			if (session == null) { stop(); return; }
 			foodDelivery = null; foodSharingSession = session;
-			action = Action.SHARE_FOOD; target = villager.blockPosition().immutable(); progress = 0;
+			action = session.giver == villager ? Action.SHARE_FOOD : Action.RECEIVE_FOOD; target = villager.blockPosition().immutable(); progress = 0;
 			if (!SettlementFoodSharingScene.join(session, villager)) { stop(); return; }
 			tickFoodSharing(); return;
 		}
@@ -464,7 +467,7 @@ public class VillagerWorkGoal extends Goal {
 		SettlementFoodSharingScene.cancelOnUnload(villager);
 		SettlementFoodSharingScene.cancel(foodSharingSession); foodSharingSession = null;
 		SettlementFoodDeliveryScene.cancel(foodDelivery); foodDelivery = null;
-		if (action == Action.DELIVER_FOOD) { action = null; target = null; }
+		if (isFoodDeliveryAction()) { action = null; target = null; }
 		if (isFoodSharingAction()) { action = null; target = null; }
 	}
 
@@ -1282,7 +1285,7 @@ public class VillagerWorkGoal extends Goal {
 	public void tick() {
 		try {
 			if (action == Action.EAT_PERSONAL) { tickPersonalMeal(); return; }
-			if (action == Action.DELIVER_FOOD) { tickFoodDelivery(); return; }
+			if (isFoodDeliveryAction()) { tickFoodDelivery(); return; }
 			if (isFoodSharingAction()) { tickFoodSharing(); return; }
 			refreshMeetingInvitation();
 			if (action == Action.SCOUT_MATERIAL_AREA) { tickScouting(); return; }
@@ -2234,7 +2237,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean isTargetValid() {
 		if (action == Action.EAT_PERSONAL) return personalMealValid();
-		if (action == Action.DELIVER_FOOD) return foodDeliveryValid();
+		if (isFoodDeliveryAction()) return foodDeliveryValid();
 		if (isFoodSharingAction()) return foodSharingValid();
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
@@ -3063,6 +3066,7 @@ public class VillagerWorkGoal extends Goal {
 		SOW_POTATO("sow_potato"),
 		FEED_CHILD("feed_child"),
 		DELIVER_FOOD("deliver_food"),
+		REQUEST_FOOD("request_food"),
 		SHARE_FOOD("share_food"),
 		RECEIVE_FOOD("receive_food"),
 		BORROW_SHEARS("borrow_shears"),

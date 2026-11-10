@@ -86,6 +86,7 @@
 	"coopcraft.interaction.action.gather": "Gathering marked resources",
 	"coopcraft.interaction.action.forage": "Foraging sweet berries",
 	"coopcraft.interaction.action.build": "Building",
+	"coopcraft.interaction.action.request_food": "Asking a companion for food",
 	"coopcraft.interaction.action.deliver_food": "Bringing spare food to a companion",
 	"coopcraft.interaction.action.share_food": "Sharing spare food",
 	"coopcraft.interaction.action.receive_food": "Receiving shared food",

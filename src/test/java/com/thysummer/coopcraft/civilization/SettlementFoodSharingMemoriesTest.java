@@ -41,6 +41,53 @@ class SettlementFoodSharingMemoriesTest {
 		CompoundTag root = new CompoundTag(); root.putInt("Version", 1); root.put("Deliveries", entries); return root;
 	}
 
+	@Test void rememberedDonorsAreRecentReceivedOnlyDistinctAndReadOnly() {
+		var f = new SettlementFoodSharingTest.Fixture();
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(f.data, f.camp, f.recipient).isEmpty());
+		assertTrue(f.data.rememberFoodSharing(f.camp, complete(f, 10)));
+		f.other.clearContent(); assertTrue(f.data.rememberFoodSharing(f.camp, complete(f, 11)));
+		f.data.setDirty(false);
+		assertEquals(List.of(f.giver), SettlementFoodSharingMemories.rememberedGivers(f.data, f.camp, f.recipient));
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(f.data, f.camp, f.giver).isEmpty());
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(f.data, f.camp, UUID.randomUUID()).isEmpty());
+		assertFalse(f.data.isDirty()); assertTrue(f.data.simulationOf(f.camp).isEmpty());
+		assertEquals("Giver", f.data.foodSharingMemoriesOf(f.camp, f.recipient).getFirst().giverName());
+	}
+	@Test void rememberedDonorsNeverLookPastThreePersonalFactsAndUnknownHistoryIsEmpty() {
+		var f = new SettlementFoodSharingTest.Fixture();
+		ListTag entries = new ListTag(); UUID older = UUID.randomUUID();
+		for (int i = 0; i < 6; i++) {
+			CompoundTag entry = oneEntry(); entry.putUUID("Id", UUID.randomUUID()); entry.putUUID("Camp", f.camp.id());
+			entry.putUUID("Giver", i == 0 ? older : UUID.randomUUID()); entry.putUUID("Recipient", f.recipient);
+			entries.add(entry);
+		}
+		CompoundTag saved = save(f.data); saved.put("FoodSharingMemories", root(entries));
+		var data = SettlementSavedData.load(saved, registries()); var camp = data.findSettlementForVillager(f.recipient).orElseThrow();
+		var donors = SettlementFoodSharingMemories.rememberedGivers(data, camp, f.recipient);
+		assertEquals(3, donors.size()); assertFalse(donors.contains(older));
+		assertEquals(entries.getCompound(5).getUUID("Giver"), donors.getFirst());
+		CompoundTag unknown = root(entries); unknown.putInt("Version", 999); saved.put("FoodSharingMemories", unknown);
+		data = SettlementSavedData.load(saved, registries()); camp = data.findSettlementForVillager(f.recipient).orElseThrow();
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(data, camp, f.recipient).isEmpty());
+	}
+
+	@Test void recentOutgoingFactsConsumeTheWindowAndNewCampCannotBorrowOldDonors() {
+		var f = new SettlementFoodSharingTest.Fixture(); ListTag entries = new ListTag();
+		for (int i = 0; i < 4; i++) {
+			CompoundTag entry = oneEntry(); entry.putUUID("Id", UUID.randomUUID()); entry.putUUID("Camp", f.camp.id());
+			entry.putUUID("Giver", i == 0 ? f.giver : f.recipient);
+			entry.putUUID("Recipient", i == 0 ? f.recipient : UUID.randomUUID()); entries.add(entry);
+		}
+		CompoundTag saved = save(f.data); saved.put("FoodSharingMemories", root(entries));
+		var data = SettlementSavedData.load(saved, registries()); var camp = data.findSettlementForVillager(f.recipient).orElseThrow();
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(data, camp, f.recipient).isEmpty());
+		var next = data.getOrCreate(new BlockPos(1000, 64, 0), "Next", 0);
+		data.removeMember(f.recipient); data.registerMember(next, f.recipient, 0); data.setDirty(false);
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(data, camp, f.recipient).isEmpty());
+		assertTrue(SettlementFoodSharingMemories.rememberedGivers(data, next, f.recipient).isEmpty());
+		assertFalse(data.isDirty());
+	}
+
 	@Test void successRecordsOnePhysicalRationWithoutPersonNeedsOrAbstractInventoryChanges() {
 		var f = new SettlementFoodSharingTest.Fixture(); f.data.setDirty(false);
 		var completion = complete(f, 123456); assertNotNull(completion);

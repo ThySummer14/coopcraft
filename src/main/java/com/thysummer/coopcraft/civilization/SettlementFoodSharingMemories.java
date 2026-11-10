@@ -50,6 +50,13 @@ final class SettlementFoodSharingMemories {
 		return List.copyOf(result);
 	}
 
+	static List<UUID> rememberedGivers(SettlementSavedData data, Settlement camp, UUID recipient) {
+		if (data.foodSharingMemoriesBlocked()) return List.of();
+		return data.foodSharingMemoriesOf(camp, recipient).stream()
+			.filter(entry -> entry.recipient().equals(recipient))
+			.map(Delivery::giver).distinct().limit(MAX_VISIBLE).toList();
+	}
+
 	static List<Component> inspect(SettlementSavedData data, Settlement camp, UUID resident) {
 		return data.foodSharingMemoriesOf(camp, resident).stream().map(entry -> (Component) Component.translatable(
 			"coopcraft.interaction.food_sharing.memory", entry.gameTime(), Component.literal(entry.giverName()),

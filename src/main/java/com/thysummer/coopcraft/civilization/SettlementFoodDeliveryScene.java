@@ -8,15 +8,15 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 
-/** An optional approach only. The recipient never acquires a movement goal from this reservation. */
+/** An optional approach only. Only the initiating mover acquires a movement goal; food direction never changes. */
 final class SettlementFoodDeliveryScene {
 	private SettlementFoodDeliveryScene() { }
 	static final class Delivery {
 		final ServerLevel level;
 		final SettlementSavedData data;
 		final Settlement camp;
-		final Villager giver, recipient;
-		final BlockPos origin, recipientCell;
+		final Villager giver, recipient, mover, stationary;
+		final BlockPos origin, stationaryCell;
 		final List<BlockPos> nodes;
 		final Path path;
 		final SettlementFoodSharing.Ticket ticket;
@@ -25,9 +25,10 @@ final class SettlementFoodDeliveryScene {
 		net.minecraft.world.phys.Vec3 settledPosition;
 		long settledSince;
 		Delivery(ServerLevel level, SettlementSavedData data, Settlement camp, Villager giver, Villager recipient,
-			List<BlockPos> nodes, SettlementFoodSharing.Ticket ticket) {
+			Villager mover, Villager stationary, List<BlockPos> nodes, SettlementFoodSharing.Ticket ticket) {
 			this.level = level; this.data = data; this.camp = camp; this.giver = giver; this.recipient = recipient;
-			this.origin = giver.blockPosition().immutable(); this.recipientCell = recipient.blockPosition().immutable();
+			this.mover = mover; this.stationary = stationary;
+			this.origin = mover.blockPosition().immutable(); this.stationaryCell = stationary.blockPosition().immutable();
 			this.nodes = List.copyOf(nodes); this.ticket = ticket;
 			this.path = new Path(new java.util.ArrayList<>(nodes.stream().map(p -> new Node(p.getX(), p.getY(), p.getZ())).toList()), nodes.getLast(), true);
 		}
@@ -54,21 +55,55 @@ final class SettlementFoodDeliveryScene {
 				|| giver.blockPosition().getY() != recipient.blockPosition().getY() || giver.distanceToSqr(recipient) > 64
 				|| !SettlementFoodSharingScene.bodyReady(level, data, camp, recipient)
 				|| !visible(level, giver, recipient)) continue;
-			var fromBag = giver.getInventory(); var toBag = recipient.getInventory(); var to = recipient.position();
-			// Snapshot copies are read-only evidence; no food is split, debited or placed during travel.
-			var ticket = SettlementFoodSharing.prepare(data, camp, giver.getUUID(), fromBag, recipient.getUUID(), toBag,
-				() -> giver.getInventory() == fromBag && recipient.getInventory() == toBag && recipient.position().equals(to)
-					&& movingBodyReady(level, data, camp, giver) && SettlementFoodSharingScene.bodyReady(level, data, camp, recipient)
-					&& visible(level, giver, recipient));
-			if (ticket == null) continue;
-			var nodes = SettlementFoodDeliveryRoute.find(giver.blockPosition(), recipient.blockPosition(), probe(level, data, camp));
-			if (nodes.isEmpty()) { SettlementFoodSharing.cancel(ticket); continue; }
-			Delivery delivery = new Delivery(level, data, camp, giver, recipient, nodes, ticket);
-			delivery.lease = registry.reserve(giver.getUUID(), recipient.getUUID(), now, delivery);
-			if (delivery.lease != null) return delivery;
-			SettlementFoodSharing.cancel(ticket);
+			Delivery delivery = prepare(level, data, camp, giver, recipient, giver, recipient);
+			if (delivery != null) return delivery;
 		}
 		return null;
+	}
+	/** Only remembered, personally experienced donors are considered, never a village-wide search. */
+	static Delivery pollRequest(Villager recipient, SettlementSavedData data, Settlement camp) {
+		if (!(recipient.level() instanceof ServerLevel level) || !requestReady(level, data, camp, recipient)
+			|| !SettlementFoodSharingScene.bodyReady(level, data, camp, recipient)) return null;
+		long now = level.getGameTime(); var registry = data.foodDeliveryReservations();
+		if (!registry.attempt(recipient.getUUID(), now) || data.foodSharingSessions().find(recipient.getUUID(), now) != null) return null;
+		for (var id : SettlementFoodSharingMemories.rememberedGivers(data, camp, recipient.getUUID())) {
+			if (!(level.getEntity(id) instanceof Villager giver) || !registry.attempt(id, now)
+				|| data.foodSharingSessions().find(id, now) != null || !hasSurplus(data, camp, giver)
+				|| !SettlementFoodSharingScene.bodyReady(level, data, camp, giver) || !visible(level, giver, recipient)) continue;
+			Delivery delivery = prepare(level, data, camp, giver, recipient, recipient, giver);
+			if (delivery != null) return delivery;
+		}
+		return null;
+	}
+	static boolean requestReady(ServerLevel level, SettlementSavedData data, Settlement camp, Villager recipient) {
+		return requestEligible(data, camp, recipient.getUUID(), recipient.getInventory(), SettlementStockpile.getStockpile(level, data, camp));
+	}
+	/** Pure selection gate; explicit camp and current containers, no world or goal state. */
+	static boolean requestEligible(SettlementSavedData data, Settlement camp, java.util.UUID recipient,
+		net.minecraft.world.SimpleContainer bag, net.minecraft.world.Container stockpile) {
+		if (!data.isMember(camp, recipient) || SettlementSimulationService.isSurvivalEnabled(data, camp)
+			|| data.needsOf(camp, recipient).satiety() > SettlementNeeds.HUNGRY_AT
+			|| SettlementFoodSharing.ordinaryFoodPoints(bag) != 0
+			|| SettlementNeeds.hasFood(bag, stockpile)) return false;
+		for (int slot = 0; slot < bag.getContainerSize(); slot++)
+			if (bag.getItem(slot).isEmpty()) return true;
+		return false;
+	}
+	private static Delivery prepare(ServerLevel level, SettlementSavedData data, Settlement camp,
+		Villager giver, Villager recipient, Villager mover, Villager stationary) {
+		var fromBag = giver.getInventory(); var toBag = recipient.getInventory(); var fixed = stationary.position();
+		// The original real-food ticket pins both inventories throughout either direction of approach.
+		var ticket = SettlementFoodSharing.prepare(data, camp, giver.getUUID(), fromBag, recipient.getUUID(), toBag,
+			() -> giver.getInventory() == fromBag && recipient.getInventory() == toBag && stationary.position().equals(fixed)
+				&& movingBodyReady(level, data, camp, mover) && SettlementFoodSharingScene.bodyReady(level, data, camp, stationary)
+				&& (mover == giver || requestReady(level, data, camp, recipient)) && visible(level, giver, recipient));
+		if (ticket == null) return null;
+		var nodes = SettlementFoodDeliveryRoute.find(mover.blockPosition(), stationary.blockPosition(), probe(level, data, camp));
+		if (nodes.isEmpty()) { SettlementFoodSharing.cancel(ticket); return null; }
+		Delivery delivery = new Delivery(level, data, camp, giver, recipient, mover, stationary, nodes, ticket);
+		delivery.lease = data.foodDeliveryReservations().reserve(giver.getUUID(), recipient.getUUID(), level.getGameTime(), delivery);
+		if (delivery.lease != null) return delivery;
+		SettlementFoodSharing.cancel(ticket); return null;
 	}
 	private static boolean movingBodyReady(ServerLevel level, SettlementSavedData data, Settlement camp, Villager giver) {
 		return !giver.isBaby() && !giver.isVehicle() && SettlementPersonalMeal.bodyReady(level, data, camp, giver)
@@ -96,10 +131,10 @@ final class SettlementFoodDeliveryScene {
 		if (d == null) return false;
 		boolean valid = d.data.foodDeliveryReservations().active(d.lease, d.level.getGameTime())
 			&& SettlementFoodSharing.valid(d.ticket)
-			&& d.giver.blockPosition().getY() == d.origin.getY() && d.nodes.contains(d.giver.blockPosition())
-			&& SettlementFoodDeliveryRoute.valid(d.nodes, d.origin, d.recipientCell, probe(d.level, d.data, d.camp))
-			&& pathUnchanged(d) && (d.settling ? d.giver.getNavigation().isDone()
-				: !d.started || d.giver.getNavigation().getPath() == d.path);
+			&& d.mover.blockPosition().getY() == d.origin.getY() && d.nodes.contains(d.mover.blockPosition())
+			&& SettlementFoodDeliveryRoute.valid(d.nodes, d.origin, d.stationaryCell, probe(d.level, d.data, d.camp))
+			&& pathUnchanged(d) && (d.settling ? d.mover.getNavigation().isDone()
+				: !d.started || d.mover.getNavigation().getPath() == d.path);
 		if (!valid) cancel(d);
 		return valid;
 	}
@@ -111,23 +146,23 @@ final class SettlementFoodDeliveryScene {
 
 	/** Stop first and let residual movement settle before pinning the stationary exchange ticket. */
 	static boolean settled(Delivery d) {
-		if (!valid(d) || !d.giver.blockPosition().equals(d.nodes.getLast())) return false;
+		if (!valid(d) || !d.mover.blockPosition().equals(d.nodes.getLast())) return false;
 		long now = d.level.getGameTime();
 		if (!d.settling) {
-			d.giver.getNavigation().stop(); d.settling = true;
-			d.settledPosition = d.giver.position(); d.settledSince = now; return false;
+			d.mover.getNavigation().stop(); d.settling = true;
+			d.settledPosition = d.mover.position(); d.settledSince = now; return false;
 		}
-		if (!d.giver.position().equals(d.settledPosition)) {
-			d.settledPosition = d.giver.position(); d.settledSince = now; return false;
+		if (!d.mover.position().equals(d.settledPosition)) {
+			d.settledPosition = d.mover.position(); d.settledSince = now; return false;
 		}
 		return now > d.settledSince;
 	}
 
 	/** Returns the exact new sharing session; neither endpoint is ever offered to a global poll. */
 	static SettlementFoodSharingScene.Session arrive(Delivery d) {
-		if (!valid(d) || !d.settling || !d.giver.position().equals(d.settledPosition)
-			|| d.level.getGameTime() <= d.settledSince || !d.giver.blockPosition().equals(d.nodes.getLast()) || !SettlementFoodSharingScene.contact(d.level, d.giver, d.recipient)) return null;
-		d.giver.getNavigation().stop();
+		if (!valid(d) || !d.settling || !d.mover.position().equals(d.settledPosition)
+			|| d.level.getGameTime() <= d.settledSince || !d.mover.blockPosition().equals(d.nodes.getLast()) || !SettlementFoodSharingScene.contact(d.level, d.giver, d.recipient)) return null;
+		d.mover.getNavigation().stop();
 		final SettlementFoodSharingScene.Session[] result = new SettlementFoodSharingScene.Session[1];
 		try {
 			boolean transferred = d.data.foodDeliveryReservations().transfer(d.lease, d.level.getGameTime(), () -> {
@@ -144,12 +179,12 @@ final class SettlementFoodDeliveryScene {
 	static boolean start(Delivery d) {
 		if (!valid(d)) return false;
 		d.started = true;
-		return d.giver.getNavigation().moveTo(d.path, d.data.personalityOf(d.camp, d.giver.getUUID()).movementSpeed()) && valid(d);
+		return d.mover.getNavigation().moveTo(d.path, d.data.personalityOf(d.camp, d.mover.getUUID()).movementSpeed()) && valid(d);
 	}
 	static void cancel(Delivery d) {
 		if (d == null) return;
 		d.data.foodDeliveryReservations().cancel(d.lease); SettlementFoodSharing.cancel(d.ticket);
-		if (d.started && d.giver.getNavigation().getPath() == d.path) d.giver.getNavigation().stop();
+		if (d.started && d.mover.getNavigation().getPath() == d.path) d.mover.getNavigation().stop();
 	}
 	static void cancelResident(Villager resident) {
 		if (!(resident.level() instanceof ServerLevel level)) return;

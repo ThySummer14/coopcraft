@@ -28,14 +28,15 @@ class SettlementFoodDeliveryGoalWiringTest {
 		assertTrue(named(methods, "isTargetValid").toString().contains("foodDeliveryValid()"));
 		String prepare = named(methods, "prepareFoodSharing").toString();
 		assertTrue(prepare.indexOf("foodSharingCooldown.attempt") < prepare.indexOf("SettlementFoodDeliveryScene.poll"));
-		assertTrue(prepare.contains("action = Action.DELIVER_FOOD"));
+		assertTrue(prepare.contains("Action.REQUEST_FOOD : Action.DELIVER_FOOD"));
+		assertTrue(named(methods, "isFoodDeliveryAction").toString().contains("Action.REQUEST_FOOD"));
 		assertTrue(named(methods, "cancelFoodSharing").toString().contains("SettlementFoodDeliveryScene.cancel(foodDelivery)"));
 	}
 	@Test void recipientDoesNotJoinOrFreezeDuringTravelAndPromotionUsesExactPair() throws Exception {
 		var methods = methods("SettlementFoodDeliveryScene");
 		String poll = named(methods, "poll").toString();
 		assertTrue(poll.indexOf("hasSurplus") < poll.indexOf("getEntitiesOfClass"));
-		for (String token : List.of("++checked > 16", "registry.attempt", "recipient.position().equals(to)", "giver.getInventory() == fromBag", "recipient.getInventory() == toBag", "SettlementFoodSharing.prepare", "registry.reserve"))
+		for (String token : List.of("++checked > 16", "registry.attempt", "prepare(level, data, camp, giver, recipient, giver, recipient)"))
 			assertTrue(poll.contains(token), token);
 		assertFalse(poll.contains(".join("));
 		String arrive = named(methods, "arrive").toString();
@@ -47,7 +48,7 @@ class SettlementFoodDeliveryGoalWiringTest {
 		String settle = named(methods, "settled").toString();
 		assertTrue(settle.contains("getNavigation().stop()"));
 		assertTrue(settle.contains("now > d.settledSince"));
-		assertTrue(settle.contains("d.giver.position().equals(d.settledPosition)"));
+		assertTrue(settle.contains("d.mover.position().equals(d.settledPosition)"));
 		String claimed = named(methods("SettlementFoodSharingScene"), "claimed").toString();
 		assertFalse(claimed.contains("foodDelivery"));
 	}
@@ -56,10 +57,32 @@ class SettlementFoodDeliveryGoalWiringTest {
 		String valid = named(methods, "valid").toString();
 		for (String token : List.of(".active(", "SettlementFoodSharing.valid", "SettlementFoodDeliveryRoute.valid", "getPath() == d.path", "pathUnchanged")) assertTrue(valid.contains(token), token);
 		String all = java.nio.file.Files.readString(Path.of("src/main/java/com/thysummer/coopcraft/civilization/SettlementFoodDeliveryScene.java"));
-		for (String token : List.of("createPath(", ".shrink(", ".setItem(", ".setItemInHand(", ".finish(", "getStockpile", "recordPractice")) assertFalse(all.contains(token), token);
+		for (String token : List.of("createPath(", ".shrink(", ".setItem(", ".setItemInHand(", ".finish(", "recordPractice")) assertFalse(all.contains(token), token);
 		assertTrue(named(methods, "visible").toString().indexOf("SettlementTeachingScene.available") < named(methods, "visible").toString().indexOf("hasLineOfSight"));
 		assertTrue(named(methods("SettlementFoodSharingScene"), "cancelOnUnload").toString().contains("SettlementFoodDeliveryScene.cancelResident"));
 		assertTrue(named(methods("SettlementSavedData"), "removeMember").toString().contains("foodDeliveryReservations.cancelResident"));
+	}
+	@Test void requestUsesRememberedDonorsAndExplicitCampMealsBeforeAnyRoute() throws Exception {
+		var methods = methods("SettlementFoodDeliveryScene");
+		String request = named(methods, "pollRequest").toString();
+		assertTrue(request.indexOf("requestReady") < request.indexOf("rememberedGivers"));
+		for (String token : List.of("level.getEntity(id)", "registry.attempt", "foodSharingSessions().find", "hasSurplus",
+			"bodyReady", "visible", "prepare(level, data, camp, giver, recipient, recipient, giver)")) assertTrue(request.contains(token), token);
+		assertFalse(request.contains("getEntitiesOfClass")); assertFalse(request.contains(".join("));
+		String wrapper = named(methods, "requestReady").toString();
+		assertTrue(wrapper.contains("requestEligible(data, camp, recipient.getUUID(), recipient.getInventory(), SettlementStockpile.getStockpile(level, data, camp))"));
+		String ready = named(methods, "requestEligible").toString();
+		for (String token : List.of("isMember", "isSurvivalEnabled", "HUNGRY_AT", "ordinaryFoodPoints",
+			"SettlementNeeds.hasFood(bag, stockpile)", "getItem(slot).isEmpty()")) assertTrue(ready.contains(token), token);
+		String prepare = named(methods, "prepare").toString();
+		for (String token : List.of("stationary.position().equals(fixed)", "giver.getInventory() == fromBag", "recipient.getInventory() == toBag",
+			"movingBodyReady(level, data, camp, mover)", "bodyReady(level, data, camp, stationary)", "requestReady(level, data, camp, recipient)",
+			"find(mover.blockPosition(), stationary.blockPosition()", "reserve(giver.getUUID(), recipient.getUUID()")) assertTrue(prepare.contains(token), token);
+		String goal = named(methods("VillagerWorkGoal"), "tickFoodDelivery").toString();
+		assertTrue(goal.contains("delivery.stationary"));
+		assertTrue(goal.contains("session.giver == villager ? Action.SHARE_FOOD : Action.RECEIVE_FOOD"));
+		assertTrue(named(methods, "start").toString().contains("d.mover.getNavigation().moveTo"));
+		assertTrue(named(methods, "cancel").toString().contains("d.mover.getNavigation().stop()"));
 	}
 	private static MethodTree named(List<MethodTree> methods, String name) {
 		return methods.stream().filter(method -> method.getName().contentEquals(name)).findFirst().orElseThrow();

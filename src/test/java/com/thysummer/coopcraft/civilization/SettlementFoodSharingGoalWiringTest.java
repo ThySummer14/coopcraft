@@ -30,6 +30,8 @@ class SettlementFoodSharingGoalWiringTest {
 		assertTrue(prepare.indexOf("SettlementFoodSharingScene.current") < prepare.indexOf("foodSharingCooldown.attempt"));
 		assertFalse(prepare.contains("getStockpile"));
 		assertFalse(prepare.contains("findWorkSettlement"));
+		assertTrue(prepare.contains("SettlementFoodDeliveryScene.pollRequest(villager, data, camp)"));
+		assertTrue(named(methods, "isFoodDeliveryAction").toString().contains("Action.DELIVER_FOOD || action == Action.REQUEST_FOOD"));
 	}
 	@Test void allLifecyclePathsDispatchSharingBeforeWarehouseOrNavigation() throws Exception {
 		var methods = methods("VillagerWorkGoal");
@@ -50,7 +52,7 @@ class SettlementFoodSharingGoalWiringTest {
 	@Test void readinessBlocksCustodyAndCompetingWorkButNotOrdinarySurplus() throws Exception {
 		var methods = methods("VillagerWorkGoal");
 		String ready = named(methods, "readyForFoodSharing").toString();
-		for (String token : List.of("goal.action != null", "personalMealTicket", "meetingTicket", "childCareLease", "materialLease",
+		for (String token : List.of("goal.action != null", "!goal.isFoodDeliveryAction()", "personalMealTicket", "meetingTicket", "childCareLease", "materialLease",
 			"forageLease", "hasAnyShearsLoan", "hasTeachingCustody", "ConstructionSupply.hasAny", "SettlementCargo.hasCargo",
 			"SettlementFoodAge.isMarked", "SettlementWorkbenchCargo.isMarked", "getMainHandItem", "getOffhandItem", "teachingSessions", "councilSessions", "childCareClaims"))
 			assertTrue(ready.contains(token), token);
