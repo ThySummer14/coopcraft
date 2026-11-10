@@ -129,6 +129,8 @@
 | Java | 21 |
 | 映射 | Mojang 官方映射 |
 
+固定代码检查点、jar获取与备份副本实测步骤见 [2026-11-10 开发交接](docs/handoff-2026-11-10.md)。
+
 ## 本地开发
 
 构建需要 JDK 25（当前 Fabric Loom 要求），模组本身按 Java 21 编译、在 Java 21 上运行。推荐 IntelliJ IDEA，并把它设置成用 JDK 25 跑 Gradle。
