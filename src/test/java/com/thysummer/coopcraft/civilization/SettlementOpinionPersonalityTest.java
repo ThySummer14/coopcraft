@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -74,11 +75,10 @@ class SettlementOpinionPersonalityTest {
 
 	@Test
 	void unmappedPeopleDoNotInheritMemberPersonality() {
-		Fixture fixture = fixture();
+		Fixture fixture = fixture(Map.of("unmapped", NormProposal.Position.SUPPORT));
 		Person resident = person(fixture.state);
 		Person unmapped = new Person("unmapped", resident.campId(), resident.householdId(), Person.AgeBand.ADULT, 100, 50);
 		fixture.state.world().registerPerson(unmapped);
-		fixture.state.world().proposal(PROPOSAL).orElseThrow().learn(unmapped.id(), NormProposal.Position.SUPPORT);
 		assertEquals(0, selfishness(fixture.state.norms().inspectProposal(unmapped, PROPOSAL).orElseThrow().opinion().orElseThrow()), 1e-9);
 	}
 
@@ -109,6 +109,10 @@ class SettlementOpinionPersonalityTest {
 	}
 
 	private static Fixture fixture() {
+		return fixture(Map.of());
+	}
+
+	private static Fixture fixture(Map<String, NormProposal.Position> additionalKnownPositions) {
 		SettlementSavedData original = new SettlementSavedData();
 		Settlement settlement = original.getOrCreate(BlockPos.ZERO, "Personality", 0);
 		original.registerMember(settlement, RESIDENT, 0);
@@ -118,17 +122,23 @@ class SettlementOpinionPersonalityTest {
 		SettlementSavedData data = SettlementSavedData.load(tag, null);
 		settlement = data.find(BlockPos.ZERO).orElseThrow();
 		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		seed(state);
+		seed(state, additionalKnownPositions);
 		return new Fixture(data, settlement, state);
 	}
 
 	private static void seed(SettlementSimulationState state) {
+		seed(state, Map.of());
+	}
+
+	private static void seed(SettlementSimulationState state, Map<String, NormProposal.Position> additionalKnownPositions) {
 		state.mapResident(RESIDENT, false, 0);
 		Person resident = person(state);
 		long request = state.world().recordShareRequest(resident.id(), resident.campId(), 40);
 		long refusal = state.world().recordShareRefusal(request, resident.id(), resident.campId(), 20);
+		Map<String, NormProposal.Position> positions = new LinkedHashMap<>(additionalKnownPositions);
+		positions.put(resident.id(), NormProposal.Position.SUPPORT);
 		state.world().registerProposal(NormProposal.restore(PROPOSAL, resident.campId(), Norm.NEED_FIRST_COMMON_STORE,
-			resident.id(), 0, refusal, 2, 0, 0, NormProposal.Status.OPEN, Map.of(resident.id(), NormProposal.Position.SUPPORT)));
+			resident.id(), 0, refusal, 2, 0, 0, NormProposal.Status.OPEN, positions));
 	}
 
 	private static Person person(SettlementSimulationState state) {
