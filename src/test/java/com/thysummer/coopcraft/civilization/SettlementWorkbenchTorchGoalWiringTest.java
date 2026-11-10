@@ -91,7 +91,7 @@ class SettlementWorkbenchTorchGoalWiringTest {
 		for (String method : List.of("canUse", "start", "tick", "stop", "canContinueToUse"))
 			assertTrue(methods.get(method).contains("cancelWorkbenchCrafting()"));
 		assertTrue(methods.get("canContinueToUse").contains("!isWorkbenchAction()&&settlement!=null&&hasReturnCargo()"));
-		assertTrue(methods.get("tickStoreTravel").contains("(isWorkbenchAction()||isShearsLoanAction())&&!workbenchPathInBounds(level)"));
+		assertTrue(methods.get("tickStoreTravel").contains("(isWorkbenchAction()||isShearsLoanAction()||action==Action.COLLECT_STONE_PICKAXE)&&!workbenchPathInBounds(level)"));
 		assertTrue(methods.get("tickStoreTravel").contains("this::navigationSearchRegionLoaded"));
 	}
 

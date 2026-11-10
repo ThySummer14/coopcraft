@@ -831,5 +831,6 @@
 	"coopcraft.simulation.detail.conversation_cost": "社会工时：%s",
 	"coopcraft.simulation.conversation_cost.next_settled_day": "双方各1小时社会工时，在下次日结体现劳动代价",
 	"coopcraft.interaction.action.collect_pickaxe_materials": "前往公仓领取首把石镐的圆石与木棍",
-	"coopcraft.interaction.action.workbench_pickaxe": "在工作台用携带材料制作首把石镐"
+	"coopcraft.interaction.action.workbench_pickaxe": "在工作台用携带材料制作首把石镐",
+	"coopcraft.interaction.action.collect_stone_pickaxe": "前往公仓领取已有的普通石镐"
 }

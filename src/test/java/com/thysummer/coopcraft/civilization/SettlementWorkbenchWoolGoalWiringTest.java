@@ -72,7 +72,7 @@ class SettlementWorkbenchWoolGoalWiringTest {
 		assertTrue(methods.get("start").contains("tickWorkbenchCrafting()"));
 		assertTrue(methods.get("tick").contains("if(isWorkbenchAction()){tickWorkbenchCrafting();return;}"));
 		assertTrue(methods.get("hasReturnCargo").contains("SettlementWorkbenchCargo.hasReturnable(villager.getInventory(),camp.id())"));
-		assertTrue(methods.get("tickStoreTravel").contains("(isWorkbenchAction()||isShearsLoanAction())&&!workbenchPathInBounds(level)"));
+		assertTrue(methods.get("tickStoreTravel").contains("(isWorkbenchAction()||isShearsLoanAction()||action==Action.COLLECT_STONE_PICKAXE)&&!workbenchPathInBounds(level)"));
 		assertTrue(methods.get("tickStoreTravel").contains("this::navigationSearchRegionLoaded"));
 	}
 
