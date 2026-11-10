@@ -41,6 +41,8 @@ public final class SettlementSimulationState {
 
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
 	private final Map<String, Integer> foodAllocations = new LinkedHashMap<>();
+	private final Map<String, Long> craftLessonDays = new LinkedHashMap<>();
+	private Tag invalidCraftLessons;
 	private boolean survivalEnabled;
 	private boolean productionEnabled;
 	private boolean growthEnabled;
@@ -123,6 +125,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setSkillsEnabled(boolean enabled) {
+		if (skillsEnabled != enabled) foodRequestModeVersion++;
 		skillsEnabled = enabled;
 	}
 
@@ -245,6 +248,46 @@ public final class SettlementSimulationState {
 		return world.ledger().recentEvents(limit);
 	}
 
+	boolean craftLessonsAvailable() { return invalidCraftLessons == null; }
+
+	boolean craftLessonUsed(String personId) {
+		long day = world.day();
+		return day < 0 || craftLessonDays.values().stream().anyMatch(previous -> previous > day)
+			|| craftLessonDays.getOrDefault(personId, Long.MIN_VALUE) >= day;
+	}
+
+	void recordCraftLesson(String teacher, String learner) {
+		craftLessonDays.put(teacher, world.day());
+		craftLessonDays.put(learner, world.day());
+	}
+
+	private Tag saveCraftLessons() {
+		if (invalidCraftLessons != null) return invalidCraftLessons.copy();
+		CompoundTag result = new CompoundTag();
+		result.putInt("Version", 1);
+		CompoundTag days = new CompoundTag();
+		craftLessonDays.forEach(days::putLong);
+		result.put("LastDays", days);
+		return result;
+	}
+
+	private void loadCraftLessons(Tag raw) {
+		if (raw == null) return; // Legacy worlds have no invented attendance history.
+		if (raw instanceof CompoundTag root && root.getAllKeys().equals(Set.of("Version", "LastDays"))
+			&& root.contains("Version", Tag.TAG_INT) && root.getInt("Version") == 1
+			&& root.contains("LastDays", Tag.TAG_COMPOUND)) {
+			CompoundTag days = root.getCompound("LastDays");
+			boolean valid = days.getAllKeys().stream().allMatch(id -> !id.isBlank()
+				&& days.contains(id, Tag.TAG_LONG) && days.getLong(id) >= 0);
+			if (valid) {
+				for (String id : days.getAllKeys()) craftLessonDays.put(id, days.getLong(id));
+				return;
+			}
+		}
+		// Unknown versions and malformed optional data only disable this feature, losslessly.
+		invalidCraftLessons = raw.copy();
+	}
+
 	CompoundTag save() {
 		CompoundTag tag = new CompoundTag();
 		if (foodClockId != null) {
@@ -254,6 +297,7 @@ public final class SettlementSimulationState {
 			tag.put("FoodClockId", invalidFoodClockTag.copy());
 		}
 		tag.putLong("Day", world.day());
+		tag.put("CraftLessons", saveCraftLessons());
 		tag.putLong("NextBatchId", world.nextBatchId());
 		tag.putBoolean("SurvivalEnabled", survivalEnabled);
 		tag.putBoolean("ProductionEnabled", productionEnabled);
@@ -423,6 +467,7 @@ public final class SettlementSimulationState {
 		}
 		state.norms.restoreLastMeetingDay(state.campOwner().id(), lastMeetingDay);
 		state.norms.restoreChargedSupervision();
+		state.loadCraftLessons(tag.get("CraftLessons"));
 		return state;
 	}
 

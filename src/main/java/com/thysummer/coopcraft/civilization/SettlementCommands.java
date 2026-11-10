@@ -57,6 +57,17 @@ public final class SettlementCommands {
 		for (String action : List.of("status", "materials", "rations")) {
 			settlement.then(LiteralArgumentBuilder.<S>literal(action).executes(ctx -> handler.run(ctx, action, "")));
 		}
+		var teaching = LiteralArgumentBuilder.<S>literal("teaching")
+			.executes(ctx -> handler.run(ctx, "teaching", ""));
+		for (String operation : List.of("inspect", "hold")) {
+			var branch = LiteralArgumentBuilder.<S>literal(operation);
+			if (operation.equals("hold")) branch.requires(admin);
+			branch.then(RequiredArgumentBuilder.<S, String>argument("teacher_uuid", StringArgumentType.word())
+				.then(RequiredArgumentBuilder.<S, String>argument("learner_uuid", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "teaching", operation))));
+			teaching.then(branch);
+		}
+		settlement.then(teaching);
 		var observations = LiteralArgumentBuilder.<S>literal("observations")
 			.executes(ctx -> handler.run(ctx, "observations", ""));
 		for (String operation : List.of("suppress", "resume")) {
@@ -173,6 +184,7 @@ public final class SettlementCommands {
 			return SettlementShearsReclaimCommands.execute(context, option);
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
+		if (action.equals("teaching")) return SettlementTeachingCommands.execute(context, option);
 		if (action.equals("shearing")) return SettlementShearingCommands.execute(context, option);
 		if (action.equals("foraging")) return SettlementForagingCommands.execute(context, option);
 		if (action.equals("gathering")) return SettlementGatheringCommands.execute(context, option);

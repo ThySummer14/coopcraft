@@ -862,3 +862,11 @@ status和materials会同时显示保存的施工步骤数、蓝图ID、下一位
 `/coop settlement cargo shears <记录UUID>`只读列出可清算营地和工具数量；OP2在原死亡点3格内执行`/coop settlement cargo reclaim-shears <记录UUID> <营地UUID>`，将有死亡营地证据的合法剪刀实际取入自身主背包并解除借据。玩家须自行携回公仓，不远程返仓，不改已取入玩家包的旧借据。
 
 仅新死亡保管Version3记录具备可验证营地证据；旧V1/V2和缺证据V3仍可原样recover，但不会猜补或自动清算。身份、权限、加载、边界和到场位置在交接时复验，未知或异属标记保留。详细步骤与非死亡转换边界见[死者剪刀清算](dead-shears-reclaim.md)。
+
+## 工作台旁工艺指导
+
+`/coop settlement teaching` 列出玩家附近已登记工作台旁最多16名当前可参与居民及UUID。
+`/coop settlement teaching inspect <师傅UUID> <学徒UUID>` 只读查看当前预计收益及累计社会工时。
+`/coop settlement teaching hold <师傅UUID> <学徒UUID>` 由实际到场OP2玩家组织一次指导；不自动替换任何参与者。
+
+须启用survival、skills、norms，玩家、师徒及两人之间都满足4格范围和现场门禁；师傅CRAFT至少1.1且领先0.1。双方每核心日各只能参与一次，重载、切换角色或伙伴不重置。无自动邀约或新对话按钮；详见[现场教学](field-craft-teaching.md)。
