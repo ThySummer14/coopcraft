@@ -5,6 +5,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /** Passive, bounded resident observation. Does not navigate, harvest, assign work or load chunks. */
@@ -85,15 +86,25 @@ final class SettlementResourceDiscovery {
 			BlockPos pos = position(origin, cursor++);
 			// Check distance/build/world bounds before any chunk or block-state query for the target.
 			if (!near(observed.position(), pos) || camp.center().distSqr(pos) > CAMP_RADIUS_SQUARED
-				|| !probe.inBounds(pos) || data.resourceObservationSuppressed(camp, pos)
+				|| data.isResidentModificationBlocked(pos) || !probe.inBounds(pos) || data.resourceObservationSuppressed(camp, pos)
 				|| !probe.loaded(pos) || !probe.entityTicking(pos)) continue;
 			BlockState block = probe.blockState(pos);
 			// Defensive recheck after the read, also preventing stale member callbacks from recording.
 			Observer current = probe.observer(actor.villagerId());
 			if (!eligible(data, camp, actor, current, probe, claims) || !near(current.position(), pos)) { actor = null; return; }
-			data.recordResourceObservation(camp, pos, SettlementForaging.isRipe(block));
+			if (data.isResidentModificationBlocked(pos)) continue;
+			data.recordResourceObservation(camp, pos, classify(block));
 		}
 		if (cursor >= VOLUME) actor = null;
+	}
+
+	/** Appearance is a candidate only: placed blocks and natural blocks are indistinguishable. */
+	static SettlementResourceObservations.Kind classify(BlockState block) {
+		if (block == null) return null;
+		if (SettlementForaging.isRipe(block)) return SettlementResourceObservations.Kind.SWEET_BERRY;
+		if (block.is(Blocks.OAK_LOG)) return SettlementResourceObservations.Kind.OAK_LOG;
+		if (block.is(Blocks.STONE) || block.is(Blocks.COBBLESTONE)) return SettlementResourceObservations.Kind.STONE;
+		return null;
 	}
 
 	private static boolean eligible(SettlementSavedData data, Settlement camp, SettlementMember actor,

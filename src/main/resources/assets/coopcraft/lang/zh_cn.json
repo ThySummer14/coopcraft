@@ -572,12 +572,12 @@
 	"coopcraft.construction_supply.reserved": "居民施工预留物品：数量以这个物品堆为准",
 	"coopcraft.construction_supply.recovered": "回收后保留原用途；公仓不会将它当作新工程的普通材料",
 	"coopcraft.command.settlement.observations_header": "%s：曾观察候选 %s，已抑制 %s（共用上限 %s）。",
-	"coopcraft.command.settlement.observations_scope": "仅记录曾看到的成熟甜浆果，来源 UNKNOWN；未确认当前位置仍成熟，不授予采集权。",
-	"coopcraft.command.settlement.observations_row": "%s | %s | 甜浆果，来源 UNKNOWN，%s",
+	"coopcraft.command.settlement.observations_scope": "仅保存成熟甜浆果、橡木原木、石头与圆石的历史观察；来源 UNKNOWN，可能是玩家放置的方块。未核实当前是否仍存在；观察记录不授予采集权限。",
+	"coopcraft.command.settlement.observations_row": "%s | %s | %s，来源 UNKNOWN，%s | %s",
 	"coopcraft.command.settlement.observations_candidate": "曾观察候选",
 	"coopcraft.command.settlement.observations_suppressed": "已抑制自动记录",
-	"coopcraft.command.settlement.observations_help": "OP：observations suppress <ID> 抑制重扫；resume <ID> 解除抑制并释放记录，需重新观察。采收由本营甜浆果许可区与玩家保护区决定。",
-	"coopcraft.command.settlement.observations_status": "曾观察浆果候选：%s（来源未知；/coop settlement observations 查看）。",
+	"coopcraft.command.settlement.observations_help": "OP：observations suppress <ID> 抑制该坐标的观察，材料变化也不解除；resume <ID> 移除抑制，等待重新观察。木石仍须人工标记；浆果另需本营许可区，保护区始终优先。",
+	"coopcraft.command.settlement.observations_status": "曾观察资源候选：%s（来源未知；/coop settlement observations 查看种类与保护状态）。",
 	"coopcraft.command.settlement.observation_changed": "观察记录已更新；没有授予或撤销任何采收权限。",
 	"coopcraft.command.settlement.observation_unchanged": "该观察已被抑制，未作改动。",
 	"coopcraft.command.settlement.observation_not_found": "当前聚落没有这个观察记录ID。",
@@ -652,5 +652,10 @@
 	"coopcraft.command.settlement.foraging_invalid_saved_range": "已保存的许可区超出当前营中心水平 64 格限制，自动浆果觅食已暂停；请撤销，或重新预览并确认有效范围。",
 	"coopcraft.command.settlement.foraging_summary_none": "浆果：未配置许可区，自动觅食已暂停。须由 OP 预览并确认范围；查看 /coop settlement foraging。",
 	"coopcraft.command.settlement.foraging_summary_configured": "浆果：已配置许可区，玩家保护区仍优先。详情：/coop settlement foraging。",
-	"coopcraft.command.settlement.foraging_summary_unavailable": "浆果：许可或保护数据不可用，自动觅食已暂停。详情：/coop settlement foraging。"
+	"coopcraft.command.settlement.foraging_summary_unavailable": "浆果：许可或保护数据不可用，自动觅食已暂停。详情：/coop settlement foraging。",
+	"coopcraft.command.settlement.observations_kind_sweet_berry": "甜浆果",
+	"coopcraft.command.settlement.observations_kind_oak_log": "橡木原木",
+	"coopcraft.command.settlement.observations_kind_stone": "石头 / 圆石",
+	"coopcraft.command.settlement.observations_protected": "玩家保护已否决（或保护数据不可用）",
+	"coopcraft.command.settlement.observations_no_protection": "无玩家保护否决；不代表允许采集"
 }

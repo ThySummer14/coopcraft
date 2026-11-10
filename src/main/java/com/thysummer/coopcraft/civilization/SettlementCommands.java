@@ -434,7 +434,9 @@ public final class SettlementCommands {
 			SettlementResourceObservations.MAX_PER_SETTLEMENT));
 		lines.add(message("observations_scope"));
 		for (var record : records) lines.add(message("observations_row", record.id(), record.position().toShortString(),
-			message("observations_" + record.state().name().toLowerCase(Locale.ROOT))));
+			message("observations_kind_" + record.kind().name().toLowerCase(Locale.ROOT)),
+			message("observations_" + record.state().name().toLowerCase(Locale.ROOT)),
+			message(data.isResidentModificationBlocked(record.position()) ? "observations_protected" : "observations_no_protection")));
 		lines.add(message("observations_help"));
 		return List.copyOf(lines);
 	}

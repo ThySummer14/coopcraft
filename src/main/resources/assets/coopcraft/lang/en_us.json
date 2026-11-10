@@ -572,12 +572,12 @@
 	"coopcraft.construction_supply.reserved": "Resident construction supply: this stack is the physical item",
 	"coopcraft.construction_supply.recovered": "Recovered items retain their original assignment; the store will not treat them as ordinary materials for a new job",
 	"coopcraft.command.settlement.observations_header": "%s: %s historical candidates, %s suppressed (shared limit %s).",
-	"coopcraft.command.settlement.observations_scope": "Records only previously observed ripe sweet berries, source UNKNOWN. Current ripeness is unverified; no gathering permission is granted.",
-	"coopcraft.command.settlement.observations_row": "%s | %s | sweet berries, source UNKNOWN, %s",
+	"coopcraft.command.settlement.observations_scope": "Historical observations of ripe sweet berries, oak logs, stone and cobblestone only; source UNKNOWN, including potentially player-placed blocks. Current presence is unverified; observations grant no gathering permission.",
+	"coopcraft.command.settlement.observations_row": "%s | %s | %s, source UNKNOWN, %s | %s",
 	"coopcraft.command.settlement.observations_candidate": "historical candidate",
 	"coopcraft.command.settlement.observations_suppressed": "automatic observation suppressed",
-	"coopcraft.command.settlement.observations_help": "OP: observations suppress <ID> prevents rediscovery; resume <ID> removes the observation veto until observed again. Harvesting is controlled separately by this settlement's berry permission area and player protection.",
-	"coopcraft.command.settlement.observations_status": "Historical berry candidates: %s (unknown source; /coop settlement observations for details).",
+	"coopcraft.command.settlement.observations_help": "OP: observations suppress <ID> suppresses that coordinate across material changes; resume <ID> removes suppression until observed again. Wood/stone still need manual marks; berries separately need this settlement’s permission area. Player protection always takes priority.",
+	"coopcraft.command.settlement.observations_status": "Historical resource candidates: %s (unknown source; /coop settlement observations shows kinds and protection status).",
 	"coopcraft.command.settlement.observation_changed": "Observation record updated; no harvesting permissions were granted or revoked.",
 	"coopcraft.command.settlement.observation_unchanged": "That observation is already suppressed; nothing changed.",
 	"coopcraft.command.settlement.observation_not_found": "No observation with that ID exists in this settlement.",
@@ -652,5 +652,10 @@
 	"coopcraft.command.settlement.foraging_invalid_saved_range": "The saved area no longer fits this settlement's 64-block horizontal limit. Automatic berry foraging is paused; revoke it or preview and confirm a valid replacement.",
 	"coopcraft.command.settlement.foraging_summary_none": "Berries: no permission area, automatic foraging paused. An operator must preview and confirm an area; see /coop settlement foraging.",
 	"coopcraft.command.settlement.foraging_summary_configured": "Berries: permission area configured; player protection still takes priority. Details: /coop settlement foraging.",
-	"coopcraft.command.settlement.foraging_summary_unavailable": "Berries: permission or protection data is unusable, automatic foraging paused. Details: /coop settlement foraging."
+	"coopcraft.command.settlement.foraging_summary_unavailable": "Berries: permission or protection data is unusable, automatic foraging paused. Details: /coop settlement foraging.",
+	"coopcraft.command.settlement.observations_kind_sweet_berry": "sweet berries",
+	"coopcraft.command.settlement.observations_kind_oak_log": "oak log",
+	"coopcraft.command.settlement.observations_kind_stone": "stone / cobblestone",
+	"coopcraft.command.settlement.observations_protected": "player protection veto (or protection data unavailable)",
+	"coopcraft.command.settlement.observations_no_protection": "no player protection veto; not harvesting permission"
 }

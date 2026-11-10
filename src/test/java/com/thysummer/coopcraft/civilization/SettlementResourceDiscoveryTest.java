@@ -34,15 +34,19 @@ class SettlementResourceDiscoveryTest {
 	}
 
 	private static final class Fixture implements SettlementResourceDiscovery.Probe {
-		final SettlementSavedData data = new SettlementSavedData();
-		final Settlement camp = data.getOrCreate(CENTER, "Observation", 0);
+		final SettlementSavedData data;
+		final Settlement camp;
 		final Map<BlockPos, BlockState> blocks = new HashMap<>();
 		final Map<UUID, SettlementResourceDiscovery.Observer> observers = new HashMap<>();
 		boolean bounds = true, loaded = true, ticking = true, allRipe;
 		int reads, selections;
 		long time;
 		Runnable onRead = () -> {};
-		Fixture() { data.registerMember(camp, ACTOR, 0); observers.put(ACTOR, adult(CENTER)); }
+		Fixture() { this(new SettlementSavedData()); }
+		Fixture(SettlementSavedData data) {
+			this.data = data; camp = data.getOrCreate(CENTER, "Observation", 0);
+			data.registerMember(camp, ACTOR, 0); observers.put(ACTOR, adult(CENTER));
+		}
 		@Override public SettlementObservationClaims membership() { return claims(data); }
 		@Override public SettlementResourceDiscovery.Observer observer(UUID id) { selections++; return observers.get(id); }
 		@Override public boolean inBounds(BlockPos pos) { return bounds; }
@@ -80,6 +84,73 @@ class SettlementResourceDiscoveryTest {
 		f.data.setDirty(false); CompoundTag saved = f.data.save(new CompoundTag(), null);
 		f.sweep();
 		assertFalse(f.data.isDirty()); assertEquals(saved, f.data.save(new CompoundTag(), null));
+	}
+
+	@Test void mixedMaterialsShareOneBudgetAndNeverInferPlayerBuiltProvenance() {
+		Fixture f = new Fixture();
+		var materials = java.util.List.of(ripe(), Blocks.OAK_LOG.defaultBlockState(),
+			Blocks.STONE.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState());
+		for (int i = 0; i < 4; i++) f.blocks.put(CENTER.east(i), materials.get(i));
+		for (int i = 0; i < SWEEP_TICKS + 2; i++) {
+			int reads = f.reads; f.tick();
+			assertTrue(f.reads - reads <= SettlementResourceDiscovery.POSITION_BUDGET);
+			int after = f.reads;
+			f.data.resourceDiscovery().tick(f.data, f.time - 1, f);
+			assertEquals(after, f.reads);
+		}
+		assertEquals(4, f.records().size());
+		for (var record : f.records()) {
+			assertEquals(SettlementResourceDiscovery.classify(f.blocks.get(record.position())), record.kind());
+			assertEquals(SettlementResourceObservations.Source.UNKNOWN, record.source());
+			assertFalse(f.data.canHarvestBerries(f.camp, record.position()));
+		}
+		assertTrue(f.data.resourcesOf(f.camp).isEmpty());
+	}
+
+	@Test void classificationRejectsOtherLogsStrippedWoodPlanksAndOtherStone() {
+		assertEquals(SettlementResourceObservations.Kind.OAK_LOG, SettlementResourceDiscovery.classify(Blocks.OAK_LOG.defaultBlockState()));
+		assertEquals(SettlementResourceObservations.Kind.STONE, SettlementResourceDiscovery.classify(Blocks.STONE.defaultBlockState()));
+		assertEquals(SettlementResourceObservations.Kind.STONE, SettlementResourceDiscovery.classify(Blocks.COBBLESTONE.defaultBlockState()));
+		for (var block : java.util.List.of(Blocks.BIRCH_LOG, Blocks.SPRUCE_LOG, Blocks.STRIPPED_OAK_LOG,
+			Blocks.OAK_WOOD, Blocks.OAK_PLANKS, Blocks.MOSSY_COBBLESTONE, Blocks.STONE_BRICKS,
+			Blocks.DEEPSLATE, Blocks.GRANITE, Blocks.POTATOES, Blocks.AIR)) {
+			assertNull(SettlementResourceDiscovery.classify(block.defaultBlockState()));
+		}
+		assertNull(SettlementResourceDiscovery.classify(Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 1)));
+		assertNull(SettlementResourceDiscovery.classify(null));
+	}
+
+	@Test void protectionPreventsAllTargetReadsAndPreservesHistoricalCandidatesAndSuppressions() {
+		Fixture f = new Fixture(); f.blocks.put(CENTER, ripe()); f.blocks.put(CENTER.east(), Blocks.OAK_LOG.defaultBlockState());
+		f.blocks.put(CENTER.east(2), Blocks.STONE.defaultBlockState());
+		f.blocks.put(CENTER.east(3), Blocks.COBBLESTONE.defaultBlockState());
+		f.sweep(); f.data.changeResourceObservation(f.camp, f.records().getFirst().id(), true);
+		var before = f.records();
+		assertEquals(PlayerProtectedAreas.Status.ADDED, f.data.addProtectedArea(ACTOR, "Keep", -8, -8, 8, 8).status());
+		f.data.setDirty(false); int reads = f.reads;
+		f.sweep(); assertEquals(reads, f.reads); assertEquals(before, f.records()); assertFalse(f.data.isDirty());
+	}
+
+	@Test void protectionAddedDuringReadVetoesEveryKindWithoutErasingOldCandidate() {
+		for (var state : java.util.List.of(ripe(), Blocks.OAK_LOG.defaultBlockState(),
+			Blocks.STONE.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState(), Blocks.AIR.defaultBlockState())) {
+			Fixture f = new Fixture();
+			// The first in-range coordinate appears after the intentionally budgeted corner skips.
+			BlockPos first = CENTER.offset(-8, -2, 0);
+			f.data.recordResourceObservation(f.camp, first, true);
+			var before = f.records(); f.blocks.put(first, state);
+			f.onRead = () -> f.data.addProtectedArea(ACTOR, "During read", -8, -8, 8, 8);
+			f.sweep(); assertEquals(1, f.reads); assertEquals(before, f.records());
+			assertFalse(f.data.canHarvestBerries(f.camp, first));
+		}
+	}
+
+	@Test void malformedProtectionPreventsTargetReadsWithinTheExistingAttemptBudget() {
+		Fixture seed = new Fixture(); CompoundTag tag = seed.data.save(new CompoundTag(), null);
+		tag.putString("PlayerProtectedAreas", "unknown protection");
+		Fixture f = new Fixture(SettlementSavedData.load(tag, null)); f.allRipe = true;
+		f.sweep(); assertEquals(0, f.reads); assertTrue(f.records().isEmpty());
+		assertTrue(f.selections <= (SWEEP_TICKS + 2) * (SettlementResourceDiscovery.POSITION_BUDGET + 1));
 	}
 
 	@Test void perDimensionBudgetCountsSkippedPositionsAndCannotBeSpentTwiceInOneTick() {
@@ -192,14 +263,23 @@ class SettlementResourceDiscoveryTest {
 			f.records().stream().map(SettlementResourceObservations.Observation::position).collect(java.util.stream.Collectors.toSet()));
 	}
 
-	@Test void typeReplacementRemovesOnlyCandidateAndNeverAuthorizesWoodStoneOrPotatoes() {
+	@Test void typeReplacementUpdatesOrRemovesOnlyCandidateAndNeverAuthorizesGathering() {
 		for (var replacement : java.util.List.of(Blocks.OAK_LOG, Blocks.STONE, Blocks.COBBLESTONE, Blocks.POTATOES)) {
 			Fixture f = new Fixture(); f.blocks.put(CENTER, ripe()); f.sweep(); assertEquals(1, f.records().size());
 			f.blocks.put(CENTER, replacement.defaultBlockState());
 			assertFalse(SettlementGathering.validTarget(f.data, f.camp, ACTOR, CENTER,
 				() -> true, () -> true, () -> true, () -> { fail("Candidate is not authority to inspect a gathering target"); return ripe(); }));
 			f.sweep();
-			assertTrue(f.records().isEmpty()); assertTrue(f.data.resourcesOf(f.camp).isEmpty());
+			if (replacement == Blocks.POTATOES) assertTrue(f.records().isEmpty());
+			else {
+				assertEquals(1, f.records().size());
+				assertEquals(SettlementResourceDiscovery.classify(replacement.defaultBlockState()), f.records().getFirst().kind());
+				assertEquals(SettlementResourceObservations.Source.UNKNOWN, f.records().getFirst().source());
+			}
+			assertTrue(f.data.resourcesOf(f.camp).isEmpty());
+			assertFalse(f.data.canHarvestBerries(f.camp, CENTER));
+			assertFalse(SettlementGathering.validTarget(f.data, f.camp, ACTOR, CENTER,
+				() -> true, () -> true, () -> true, () -> { fail("Updated candidate still grants no gathering authority"); return ripe(); }));
 		}
 	}
 
@@ -207,7 +287,10 @@ class SettlementResourceDiscoveryTest {
 		Fixture f = new Fixture(); f.blocks.put(CENTER, ripe()); f.sweep();
 		String id = f.records().getFirst().id();
 		assertEquals(SettlementResourceObservations.Change.CHANGED, f.data.changeResourceObservation(f.camp, id, true));
+		f.blocks.put(CENTER, Blocks.OAK_LOG.defaultBlockState());
 		f.sweep(); assertEquals(SettlementResourceObservations.State.SUPPRESSED, f.records().getFirst().state());
+		assertEquals(id, f.records().getFirst().id());
+		assertEquals(SettlementResourceObservations.Kind.SWEET_BERRY, f.records().getFirst().kind());
 		assertEquals(SettlementResourceObservations.Change.CHANGED, f.data.changeResourceObservation(f.camp, id, false));
 		assertTrue(f.records().isEmpty()); assertTrue(f.data.resourcesOf(f.camp).isEmpty());
 		f.sweep(); assertEquals(SettlementResourceObservations.State.CANDIDATE, f.records().getFirst().state());
@@ -215,6 +298,8 @@ class SettlementResourceDiscoveryTest {
 
 	@Test void observationsDoNotChangePhysicalContainersBlocksOrSimulationBatches() {
 		Fixture f = new Fixture(); f.blocks.put(CENTER, ripe());
+		f.blocks.put(CENTER.east(2), Blocks.OAK_LOG.defaultBlockState());
+		f.blocks.put(CENTER.west(2), Blocks.COBBLESTONE.defaultBlockState());
 		SimpleContainer bag = new SimpleContainer(new ItemStack(Items.SWEET_BERRIES, 3));
 		SimpleContainer stockpile = new SimpleContainer(new ItemStack(Items.OAK_LOG, 7));
 		ItemStack bagBefore = bag.getItem(0).copy(), stockBefore = stockpile.getItem(0).copy();

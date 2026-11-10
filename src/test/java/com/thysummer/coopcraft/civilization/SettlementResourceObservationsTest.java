@@ -122,11 +122,28 @@ class SettlementResourceObservationsTest {
 			CompoundTag entry = entries.getCompound(0).copy(); entry.putLong("Position", new BlockPos(i, 0, 0).asLong()); entries.add(entry);
 		}
 		bad.add(oversized);
+		CompoundTag mixedDuplicate = valid.copy(); ListTag mixedRecords = mixedDuplicate.getList("Records", Tag.TAG_COMPOUND);
+		CompoundTag mixedRecord = mixedRecords.getCompound(0).copy(); mixedRecord.putString("Kind", "STONE"); mixedRecords.add(mixedRecord); bad.add(mixedDuplicate);
+		for (Tag raw : List.copyOf(bad)) {
+			if (raw instanceof CompoundTag malformed && malformed.getInt("Version") == 2) {
+				CompoundTag legacy = malformed.copy(); legacy.putInt("Version", 1); bad.add(legacy);
+			}
+		}
+		for (String kind : List.of("OAK_LOG", "STONE", "FUTURE_KIND")) {
+			CompoundTag legacyKind = valid.copy(); legacyKind.putInt("Version", 1);
+			legacyKind.getList("Records", Tag.TAG_COMPOUND).getCompound(0).putString("Kind", kind); bad.add(legacyKind);
+		}
+		for (String field : List.of("SettlementId", "Position", "Kind", "Source", "State")) {
+			CompoundTag wrongType = valid.copy(); wrongType.getList("Records", Tag.TAG_COMPOUND).getCompound(0).putInt(field, 1); bad.add(wrongType);
+		}
 		for (Tag raw : bad) {
 			CompoundTag saved = f.save(); saved.put("ResourceObservations", raw.copy());
 			var loaded = SettlementSavedData.load(saved, null); var camp = loaded.find(BlockPos.ZERO).orElseThrow();
 			assertTrue(loaded.resourceObservationsBlocked()); assertTrue(loaded.resourceObservationsOf(camp).isEmpty());
 			assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, true));
+			assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+			assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+			assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, null));
 			assertEquals(SettlementResourceObservations.Change.PRESERVED_UNSUPPORTED, loaded.changeResourceObservation(camp, "berry-0", true));
 			assertEquals(SettlementResourceObservations.Change.PRESERVED_UNSUPPORTED, loaded.changeResourceObservation(camp, "berry-0", false));
 			loaded.resourceDiscovery().tick(loaded, 1, new SettlementResourceDiscovery.Probe() {
@@ -140,6 +157,96 @@ class SettlementResourceObservationsTest {
 			assertFalse(loaded.isDirty()); assertEquals(raw, loaded.save(new CompoundTag(), null).get("ResourceObservations"));
 			assertEquals(f.data.resourcesOf(f.camp), loaded.resourcesOf(camp));
 		}
+	}
+
+	@Test void versionOneMigratesOnlyBerrySchemaAndKeepsStableIdsAndCoordinateVeto() {
+		Fixture f = new Fixture(); f.add(2);
+		String veto = f.records().getFirst().id();
+		f.data.changeResourceObservation(f.camp, veto, true);
+		CompoundTag old = f.save(); old.getCompound("ResourceObservations").putInt("Version", 1);
+		var loaded = SettlementSavedData.load(old, null); var camp = loaded.find(BlockPos.ZERO).orElseThrow();
+		assertEquals(f.records(), loaded.resourceObservationsOf(camp));
+		assertEquals("berry-0", veto);
+		assertFalse(loaded.isDirty());
+		assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, null));
+		CompoundTag migrated = loaded.save(new CompoundTag(), null);
+		assertEquals(2, migrated.getCompound("ResourceObservations").getInt("Version"));
+		assertEquals(22, migrated.getInt("DataVersion"));
+		var reloaded = SettlementSavedData.load(migrated, null); var recamp = reloaded.find(BlockPos.ZERO).orElseThrow();
+		assertFalse(reloaded.recordResourceObservation(recamp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertEquals(SettlementResourceObservations.Change.CHANGED, reloaded.changeResourceObservation(recamp, veto, false));
+		assertTrue(reloaded.resourceObservationsOf(recamp).stream().noneMatch(record -> record.position().equals(BlockPos.ZERO)));
+		assertTrue(reloaded.recordResourceObservation(recamp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+	}
+
+	@Test void typedRoundTripChangesOnlyObservationSubtreeNotAuthorityOrInventoryState() {
+		Fixture f = new Fixture();
+		f.data.toggleResource(f.camp, new BlockPos(9, 0, 0));
+		f.data.setStockpile(f.camp, new BlockPos(10, 0, 0));
+		CompoundTag before = f.save();
+		for (var kind : SettlementResourceObservations.Kind.values()) {
+			assertTrue(f.data.recordResourceObservation(f.camp, new BlockPos(kind.ordinal(), 0, 0), kind));
+		}
+		assertEquals(List.of("berry-", "oak-", "stone-"), f.records().stream()
+			.map(record -> record.id().substring(0, record.id().indexOf('-') + 1)).toList());
+		String oakId = f.records().get(1).id(); f.data.changeResourceObservation(f.camp, oakId, true);
+		CompoundTag after = f.save();
+		var loaded = SettlementSavedData.load(after, null); var camp = loaded.find(BlockPos.ZERO).orElseThrow();
+		assertEquals(f.records(), loaded.resourceObservationsOf(camp));
+		assertTrue(loaded.resourceObservationsOf(camp).stream().allMatch(record -> record.source() == SettlementResourceObservations.Source.UNKNOWN));
+		assertFalse(loaded.recordResourceObservation(camp, new BlockPos(1, 0, 0), SettlementResourceObservations.Kind.STONE));
+		assertFalse(loaded.recordResourceObservation(camp, new BlockPos(1, 0, 0), null));
+		assertEquals(f.data.resourcesOf(f.camp), loaded.resourcesOf(camp));
+		before.remove("ResourceObservations"); after.remove("ResourceObservations");
+		assertEquals(before, after, "Discovery must not change any inventory, authority, job or other saved subtree");
+		assertFalse(loaded.isDirty());
+	}
+
+	@Test void typedReplacementAtFullSharedCapsRejectsStaleIdsAndNeverEvictsSuppression() {
+		var observations = new SettlementResourceObservations();
+		UUID first = new UUID(500, 0);
+		for (int c = 0; c < SettlementResourceObservations.MAX_PER_DIMENSION / SettlementResourceObservations.MAX_PER_SETTLEMENT; c++) {
+			UUID camp = new UUID(500, c);
+			for (int i = 0; i < SettlementResourceObservations.MAX_PER_SETTLEMENT; i++) {
+				assertTrue(observations.observe(camp, new BlockPos(i, 0, 0), SettlementResourceObservations.Kind.values()[i % 3]));
+			}
+			assertFalse(observations.observe(camp, new BlockPos(100, 0, 0), SettlementResourceObservations.Kind.STONE));
+		}
+		UUID extra = new UUID(501, 0);
+		assertFalse(observations.observe(extra, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		String oldId = observations.of(first).getFirst().id();
+		assertTrue(observations.observe(first, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertEquals("stone-0", observations.of(first).getFirst().id());
+		assertEquals(SettlementResourceObservations.Change.NOT_FOUND, observations.suppress(first, oldId));
+		assertEquals(SettlementResourceObservations.Change.NOT_FOUND, observations.resume(first, oldId));
+		assertFalse(observations.observe(first, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertEquals(SettlementResourceObservations.Change.CHANGED, observations.suppress(first, "stone-0"));
+		assertFalse(observations.observe(first, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		assertFalse(observations.observe(first, BlockPos.ZERO, null));
+		var loaded = SettlementResourceObservations.load(observations.save());
+		assertEquals(observations.of(first), loaded.of(first));
+		assertFalse(loaded.observe(first, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		assertEquals(SettlementResourceObservations.Change.CHANGED, loaded.resume(first, "stone-0"));
+		assertTrue(loaded.observe(extra, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		assertFalse(loaded.observe(first, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+	}
+
+	@Test void ordinaryCandidatesCanBeRemovedAndBooleanCompatibilityStillMeansRipeBerry() {
+		Fixture f = new Fixture();
+		assertTrue(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, SettlementResourceObservations.Kind.OAK_LOG));
+		assertTrue(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, true));
+		assertEquals(SettlementResourceObservations.Kind.SWEET_BERRY, f.records().getFirst().kind());
+		assertTrue(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, false));
+		assertTrue(f.records().isEmpty());
+		assertTrue(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertTrue(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, null));
+		f.data.setDirty(false);
+		assertFalse(f.data.recordResourceObservation(f.camp, BlockPos.ZERO, null));
+		var copiedCamp = new Settlement(f.camp.id(), f.camp.center(), f.camp.name(), f.camp.foundedDay());
+		assertFalse(f.data.recordResourceObservation(copiedCamp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
+		assertFalse(f.data.isDirty());
 	}
 
 	@Test void snapshotsAndPreservedSaveTagsCannotMutateSavedDataThroughAliases() {

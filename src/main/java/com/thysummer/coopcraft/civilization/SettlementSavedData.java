@@ -440,8 +440,12 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	boolean recordResourceObservation(Settlement settlement, BlockPos position, boolean ripeBerry) {
+		return recordResourceObservation(settlement, position, ripeBerry ? SettlementResourceObservations.Kind.SWEET_BERRY : null);
+	}
+
+	boolean recordResourceObservation(Settlement settlement, BlockPos position, SettlementResourceObservations.Kind kind) {
 		if (!canonicalSettlement(settlement)) return false;
-		boolean changed = resourceObservations.observe(settlement.id(), position, ripeBerry);
+		boolean changed = resourceObservations.observe(settlement.id(), position, kind);
 		if (changed) setDirty();
 		return changed;
 	}

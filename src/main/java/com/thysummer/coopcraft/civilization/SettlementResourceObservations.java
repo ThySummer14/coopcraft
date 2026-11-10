@@ -15,18 +15,22 @@ import net.minecraft.nbt.Tag;
 final class SettlementResourceObservations {
 	static final int MAX_PER_SETTLEMENT = 64;
 	static final int MAX_PER_DIMENSION = 1024;
-	private static final int VERSION = 1;
+	private static final int VERSION = 2;
 	private static final Set<String> ROOT_KEYS = Set.of("Version", "Records");
 	private static final Set<String> RECORD_KEYS = Set.of("SettlementId", "Position", "Kind", "Source", "State");
 
-	enum Kind { SWEET_BERRY }
+	enum Kind {
+		SWEET_BERRY("berry-"), OAK_LOG("oak-"), STONE("stone-");
+		private final String idPrefix;
+		Kind(String idPrefix) { this.idPrefix = idPrefix; }
+	}
 	enum Source { UNKNOWN }
 	enum State { CANDIDATE, SUPPRESSED }
 	enum Change { CHANGED, UNCHANGED, NOT_FOUND, NOT_SUPPRESSED, PRESERVED_UNSUPPORTED }
 
 	record Observation(BlockPos position, Kind kind, Source source, State state) {
 		Observation { position = position.immutable(); }
-		String id() { return "berry-" + Long.toUnsignedString(position.asLong(), 16); }
+		String id() { return kind.idPrefix + Long.toUnsignedString(position.asLong(), 16); }
 	}
 
 	private final Map<UUID, LinkedHashMap<BlockPos, Observation>> records = new LinkedHashMap<>();
@@ -47,18 +51,28 @@ final class SettlementResourceObservations {
 
 	/** Only an observation can be added. No natural-source inference and no authorization API. */
 	boolean observe(UUID settlement, BlockPos position, boolean ripeBerry) {
+		return observe(settlement, position, ripeBerry ? Kind.SWEET_BERRY : null);
+	}
+
+	/** Null removes an ordinary candidate. Suppression belongs to the coordinate, across kinds. */
+	boolean observe(UUID settlement, BlockPos position, Kind kind) {
 		if (blocked() || suppressed(settlement, position)) return false;
 		var found = records.get(settlement);
-		if (!ripeBerry) {
+		if (kind == null) {
 			if (found == null || found.remove(position) == null) return false;
 			size--;
 			if (found.isEmpty()) records.remove(settlement);
 			return true;
 		}
-		if (found != null && found.containsKey(position)) return false;
+		if (found != null && found.containsKey(position)) {
+			if (found.get(position).kind() == kind) return false;
+			// Replace in place before checking either shared cap; stale kind IDs no longer match.
+			found.put(position.immutable(), new Observation(position, kind, Source.UNKNOWN, State.CANDIDATE));
+			return true;
+		}
 		if (size >= MAX_PER_DIMENSION || found != null && found.size() >= MAX_PER_SETTLEMENT) return false;
 		records.computeIfAbsent(settlement, ignored -> new LinkedHashMap<>()).put(position.immutable(),
-			new Observation(position, Kind.SWEET_BERRY, Source.UNKNOWN, State.CANDIDATE));
+			new Observation(position, kind, Source.UNKNOWN, State.CANDIDATE));
 		size++;
 		return true;
 	}
@@ -108,11 +122,17 @@ final class SettlementResourceObservations {
 		return tag;
 	}
 
+	private static boolean validKind(String name, int version) {
+		// Version 1 is the strictly berry-only schema, not an alias for future kind names.
+		if (name.equals(Kind.SWEET_BERRY.name())) return true;
+		return version == VERSION && (name.equals(Kind.OAK_LOG.name()) || name.equals(Kind.STONE.name()));
+	}
+
 	static SettlementResourceObservations load(Tag raw) {
 		var result = new SettlementResourceObservations();
 		if (raw == null) return result; // Legacy worlds start with no observations.
 		if (raw instanceof CompoundTag tag && tag.getAllKeys().equals(ROOT_KEYS)
-			&& tag.contains("Version", Tag.TAG_INT) && tag.getInt("Version") == VERSION
+			&& tag.contains("Version", Tag.TAG_INT) && (tag.getInt("Version") == 1 || tag.getInt("Version") == VERSION)
 			&& tag.get("Records") instanceof ListTag list
 			&& (list.isEmpty() || list.getElementType() == Tag.TAG_COMPOUND)
 			&& list.size() <= MAX_PER_DIMENSION) {
@@ -121,7 +141,7 @@ final class SettlementResourceObservations {
 				CompoundTag entry = list.getCompound(i);
 				if (!entry.getAllKeys().equals(RECORD_KEYS) || !entry.hasUUID("SettlementId")
 					|| !entry.contains("Position", Tag.TAG_LONG)
-					|| !entry.contains("Kind", Tag.TAG_STRING) || !entry.getString("Kind").equals(Kind.SWEET_BERRY.name())
+					|| !entry.contains("Kind", Tag.TAG_STRING) || !validKind(entry.getString("Kind"), tag.getInt("Version"))
 					|| !entry.contains("Source", Tag.TAG_STRING) || !entry.getString("Source").equals(Source.UNKNOWN.name())
 					|| !entry.contains("State", Tag.TAG_STRING)
 					|| !(entry.getString("State").equals(State.CANDIDATE.name()) || entry.getString("State").equals(State.SUPPRESSED.name()))) {
@@ -131,7 +151,7 @@ final class SettlementResourceObservations {
 				BlockPos pos = BlockPos.of(entry.getLong("Position"));
 				var entries = result.records.computeIfAbsent(camp, ignored -> new LinkedHashMap<>());
 				if (entries.size() >= MAX_PER_SETTLEMENT || entries.containsKey(pos)) { valid = false; break; }
-				entries.put(pos, new Observation(pos, Kind.SWEET_BERRY, Source.UNKNOWN, State.valueOf(entry.getString("State"))));
+				entries.put(pos, new Observation(pos, Kind.valueOf(entry.getString("Kind")), Source.UNKNOWN, State.valueOf(entry.getString("State"))));
 				result.size++;
 			}
 			if (valid) return result;
