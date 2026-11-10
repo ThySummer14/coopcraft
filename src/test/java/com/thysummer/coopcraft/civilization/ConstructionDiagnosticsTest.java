@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ConstructionDiagnosticsTest {
 	private static final List<String> REASONS = List.of("ready", "target_not_ticking", "target_occupied",
-		"entity_obstructed", "stockpile_unavailable", "stockpile_full", "missing_material", "plan_unavailable", "invalid_index", "plan_unverified", "plan_changed", "invalid_job_id");
+		"entity_obstructed", "stockpile_unavailable", "stockpile_full", "missing_material", "plan_unavailable", "invalid_index", "plan_unverified", "plan_changed", "invalid_job_id", "protected_area");
 	private static final ResourceLocation BLUEPRINT = ResourceLocation.fromNamespaceAndPath("coopcraft", "stone_cottage");
 
 	@BeforeAll

@@ -70,7 +70,7 @@ class SettlementFoodRestockTest {
 		var expected = snapshot(f);
 		for (int i = 0; i < 3; i++) {
 			var before = save(f); f = reload(f); f.data.setDirty(false);
-			assertEquals(before, save(f)); assertEquals(20, before.getInt("DataVersion"));
+			assertEquals(before, save(f)); assertEquals(21, before.getInt("DataVersion"));
 			for (int n = 0; n < 5; n++) { assertEquals(expected, snapshot(f)); assertTrue(decision(f)); }
 			assertEquals(before, save(f)); assertFalse(f.data.isDirty());
 			f.state.world().assertConservation();

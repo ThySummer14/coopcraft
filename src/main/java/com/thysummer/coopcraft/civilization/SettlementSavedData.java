@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.npc.Villager;
@@ -24,7 +25,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 20;
+	private static final int DATA_VERSION = 21;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
 		SettlementSavedData::new,
@@ -38,6 +39,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Set<UUID> ambiguousSettlementIds = new LinkedHashSet<>();
 	private long membershipRevision;
 	private SettlementResourceObservations resourceObservations = new SettlementResourceObservations();
+	private PlayerProtectedAreas protectedAreas = new PlayerProtectedAreas();
 	private final SettlementResourceDiscovery resourceDiscovery = new SettlementResourceDiscovery();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
 	// Transient round-robin order; unrelated membership changes must not restart active sweeps.
@@ -66,6 +68,37 @@ public final class SettlementSavedData extends SavedData {
 
 	public static SettlementSavedData get(ServerLevel level) {
 		return level.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+	}
+
+	/** Immutable query view. Protection is shared by every settlement in this dimension. */
+	public PlayerProtectedAreas protectedAreas() { return protectedAreas; }
+
+	/** A veto only; false never grants permission to harvest or build. */
+	public boolean isResidentModificationBlocked(BlockPos position) {
+		return protectedAreas.contains(position);
+	}
+
+	/** Inclusive planar intersection; Y is intentionally unrestricted. */
+	public boolean isResidentModificationBlocked(int minX, int minZ, int maxX, int maxZ) {
+		return protectedAreas.intersects(minX, minZ, maxX, maxZ);
+	}
+
+	public PlayerProtectedAreas.AddResult addProtectedArea(UUID ownerId, String name, int x1, int z1, int x2, int z2) {
+		PlayerProtectedAreas.Update update = protectedAreas.add(ownerId, name, x1, z1, x2, z2);
+		if (update.status() == PlayerProtectedAreas.Status.ADDED) {
+			protectedAreas = update.value();
+			setDirty();
+		}
+		return new PlayerProtectedAreas.AddResult(update.status(), update.area());
+	}
+
+	public PlayerProtectedAreas.Status removeProtectedArea(UUID id, UUID requesterId, boolean operator) {
+		PlayerProtectedAreas.Update update = protectedAreas.remove(id, requesterId, operator);
+		if (update.status() == PlayerProtectedAreas.Status.REMOVED) {
+			protectedAreas = update.value();
+			setDirty();
+		}
+		return update.status();
 	}
 
 	public Optional<Settlement> find(BlockPos center) {
@@ -592,6 +625,9 @@ public final class SettlementSavedData extends SavedData {
 		}
 		tag.put("ResourceSites", resourceList);
 		tag.put("ResourceObservations", resourceObservations.save());
+		Tag protectionTag = protectedAreas.save();
+		if (protectionTag == null) tag.remove("PlayerProtectedAreas");
+		else tag.put("PlayerProtectedAreas", protectionTag);
 
 		ListTag stationList = new ListTag();
 		for (Map.Entry<UUID, BlockPos> entry : craftingStations.entrySet()) {
@@ -643,6 +679,7 @@ public final class SettlementSavedData extends SavedData {
 	static SettlementSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		SettlementSavedData data = new SettlementSavedData();
 		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
+		data.protectedAreas = PlayerProtectedAreas.load(tag.get("PlayerProtectedAreas"), tag.get("DataVersion"));
 
 		ListTag settlementList = tag.getList("Settlements", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < settlementList.size(); i++) {

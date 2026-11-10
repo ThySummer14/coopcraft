@@ -23,7 +23,17 @@ final class ConstructionPairReadiness {
 		boolean ready() { return blocker.equals("ready"); }
 	}
 
+	/** Pure shape/coordinate check. Never consults world, entities, inventory or protection. */
+	static Result inspectPlan(ConstructionJob job, ConstructionPlan plan) {
+		return inspect(job, plan, null, false, true);
+	}
+
 	static Result inspect(ConstructionJob job, ConstructionPlan plan, Probe probe, boolean checkEntities) {
+		return inspect(job, plan, probe, checkEntities, false);
+	}
+
+	private static Result inspect(ConstructionJob job, ConstructionPlan plan, Probe probe, boolean checkEntities,
+		boolean planOnly) {
 		String compatibility = job.compatibilityBlocker(plan);
 		if (!compatibility.equals("ready")) return new Result(null, compatibility);
 		var instruction = plan.instructions().get(job.nextIndex());
@@ -67,6 +77,7 @@ final class ConstructionPairReadiness {
 		} catch (ArithmeticException exception) {
 			return new Result(null, "target_out_of_bounds");
 		}
+		if (planOnly) return new Result(position, "ready");
 		// Preflight the entire two-cell envelope before ANY block/entity reads.
 		if (!probe.inBounds(position)) return new Result(position, "target_out_of_bounds");
 		if (companionPosition != null && !probe.inBounds(companionPosition))

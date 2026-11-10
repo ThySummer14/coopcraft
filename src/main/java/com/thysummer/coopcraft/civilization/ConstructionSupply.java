@@ -164,7 +164,7 @@ public final class ConstructionSupply {
 			ItemStack reserved = bag.removeItem(slot, 1);
 			boolean placed = false;
 			try {
-				placed = placement.getAsBoolean();
+				placed = authorized.getAsBoolean() && placement.getAsBoolean();
 				return placed;
 			} finally {
 				if (!placed) bag.setItem(slot, reserved);

@@ -25,6 +25,7 @@ public final class SettlementGathering {
 	static boolean authorized(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
 		BooleanSupplier activeAdult) {
 		if (settlement == null || pos == null || actor == null
+			|| data.isResidentModificationBlocked(pos)
 			|| data.all().stream().noneMatch(candidate -> candidate == settlement)
 			|| !data.isMember(settlement, actor) || !activeAdult.getAsBoolean()
 			|| !data.resourcesOf(settlement).contains(pos)
@@ -49,14 +50,17 @@ public final class SettlementGathering {
 
 	static boolean validTarget(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
 		BooleanSupplier activeAdult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block) {
-		return accessible(data, settlement, actor, pos, activeAdult, loaded, ticking) && gatherable(block.get());
+		return accessible(data, settlement, actor, pos, activeAdult, loaded, ticking) && gatherable(block.get())
+			&& !data.isResidentModificationBlocked(pos);
 	}
 
+	/** Supplied business state may be restored, but the real dimension keeps an independent veto. */
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement,
 		Villager villager, BlockPos pos) {
 		return validTarget(data, settlement, villager.getUUID(), pos,
 			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
-			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
 	}
 
 	/** Shared execution seam: real inventory and production, lazy world adapters for server-free tests.
@@ -72,13 +76,15 @@ public final class SettlementGathering {
 			if (!planned.is(Blocks.POTATOES) && !planned.is(Blocks.FARMLAND) && belowLoaded.getAsBoolean()
 				&& !below.get().is(Blocks.FARMLAND)
 				&& accessible(data, settlement, actor, pos, activeAdult, loaded, ticking)
-				&& planned.equals(block.get())) data.removeResource(settlement, pos);
+				&& planned.equals(block.get()) && !data.isResidentModificationBlocked(pos)) data.removeResource(settlement, pos);
 			return 0;
 		}
 		List<ItemStack> drops = loot.apply(planned).stream().map(ItemStack::copy).toList();
+		if (data.isResidentModificationBlocked(pos)) return 0;
 		for (ItemStack drop : drops) if (!inventory.canAddItem(drop)) return 0;
 		if (!validTarget(data, settlement, actor, pos, activeAdult, loaded, ticking, block)
-			|| !planned.equals(block.get()) || !destroy.test(planned)) return 0;
+			|| !planned.equals(block.get()) || data.isResidentModificationBlocked(pos)
+			|| !destroy.test(planned)) return 0;
 		int harvested = 0;
 		for (ItemStack drop : drops) {
 			int produced = drop.getCount();
@@ -96,9 +102,11 @@ public final class SettlementGathering {
 	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos) {
 		return harvest(data, settlement, villager.getUUID(), pos, villager.getInventory(),
 			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
-			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
 			() -> level.isLoaded(pos.below()), () -> level.getBlockState(pos.below()),
 			state -> Block.getDrops(state, level, pos, level.getBlockEntity(pos)),
-			state -> level.destroyBlock(pos, false, villager), stack -> villager.spawnAtLocation(stack));
+			state -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos)
+				&& level.destroyBlock(pos, false, villager), stack -> villager.spawnAtLocation(stack));
 	}
 }

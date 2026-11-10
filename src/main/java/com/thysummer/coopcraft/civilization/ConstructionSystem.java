@@ -47,7 +47,7 @@ public final class ConstructionSystem {
 		}
 
 		ConstructionInstruction instruction = plan.instructions().get(job.nextIndex());
-		var readiness = ConstructionStepReadiness.inspect(job, plan, stepProbe(level), false);
+		var readiness = ConstructionStepReadiness.inspect(job, plan, stepProbe(level, data), false);
 		if (!readiness.ready()) return Optional.empty();
 		BlockPos position = readiness.position();
 		return materialReady(job, instruction, level.dimension().location(), settlement.id(),
@@ -80,7 +80,8 @@ public final class ConstructionSystem {
 				continue;
 			}
 			BlockPos origin = findOrigin.apply(candidate);
-			if (origin != null) return ConstructionJob.start(candidate, origin);
+			if (origin != null && !ConstructionProtection.isBlocked(candidate, origin, data::isResidentModificationBlocked))
+				return ConstructionJob.start(candidate, origin);
 		}
 		return null;
 	}
@@ -89,6 +90,11 @@ public final class ConstructionSystem {
 	public static Optional<ConstructionReadiness> inspect(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		return data.getConstructionJob(settlement).map(job -> ConstructionReadiness.inspect(
 			job, BlueprintManager.get(job.blueprintId()), new ConstructionReadiness.Probe() {
+				@Override
+				public boolean modificationBlocked(int minX, int minZ, int maxX, int maxZ) {
+					return ConstructionSystem.modificationBlocked(level, data, minX, minZ, maxX, maxZ);
+				}
+
 				@Override
 				public SettlementHousing.BedCheck inspectBed(BlockPos position) {
 					return SettlementHousing.inspectBed(level, position);
@@ -145,10 +151,14 @@ public final class ConstructionSystem {
 			return false;
 		}
 		ConstructionInstruction instruction = target.instruction();
+		java.util.function.BooleanSupplier modificationAllowed =
+			() -> !ConstructionProtection.isBlocked(plan, current.origin(),
+				(minX, minZ, maxX, maxZ) -> modificationBlocked(level, data, minX, minZ, maxX, maxZ));
+		if (!modificationAllowed.getAsBoolean()) return false;
 		if (instruction.consume() && ConstructionSupply.supported(instruction.item())
 			&& !supplyWorkerReady(level, data, settlement, villager)) return false;
 		// Re-read pair and completion-bed state even when the work claim was valid earlier.
-		if (!placeIfReady(current, plan, stepProbe(level), () -> {
+		if (!placeIfReady(current, plan, stepProbe(level, data), () -> {
 			boolean firstPart = instruction.consume()
 				&& (instruction.state().getBlock() instanceof DoorBlock || instruction.state().getBlock() instanceof BedBlock);
 			if (instruction.consume() && ConstructionSupply.supported(instruction.item())) {
@@ -159,13 +169,15 @@ public final class ConstructionSystem {
 						&& current.compatibilityBlocker(BlueprintManager.get(current.blueprintId())).equals("ready")
 						&& villager.distanceToSqr(target.position().getCenter()) <= ConstructionApproach.REACH_SQUARED
 						&& !villager.getBoundingBox().intersects(new AABB(target.position()))
-						&& ConstructionStepReadiness.inspect(current, plan, stepProbe(level), true).ready(),
-					() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
+						&& ConstructionStepReadiness.inspect(current, plan, stepProbe(level, data), true).ready(),
+					() -> modificationAllowed.getAsBoolean()
+						&& level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
 			}
 			Container stockpile = instruction.consume() ? loadedStockpile(level, data, settlement) : null;
 			return ConstructionMaterials.place(stockpile, instruction.consume() ? data.simulationOf(settlement).orElse(null) : null,
-				instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty,
-				() -> level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
+				instruction.item(), instruction.consume(), current, villager.getUUID(), data::setDirty, modificationAllowed,
+				() -> modificationAllowed.getAsBoolean()
+						&& level.setBlock(target.position(), instruction.state(), firstPart ? Block.UPDATE_CLIENTS : Block.UPDATE_ALL));
 		})) return false;
 		if (current.nextIndex() + 1 >= plan.instructions().size()) {
 			ConstructionWorkshop.registerCompleted(data, settlement, plan, current.origin(), siteProbe(level));
@@ -188,6 +200,19 @@ public final class ConstructionSystem {
 			data.advanceConstruction(settlement);
 		}
 		return true;
+	}
+
+	/** A paused job keeps its identity, but its already-carried unit may use the normal return route. */
+	public static ConstructionJob returnSupplyJob(SettlementSavedData data, ConstructionJob job, ConstructionPlan plan) {
+		return job != null && job.compatibilityBlocker(plan).equals("ready")
+			&& !ConstructionProtection.isBlocked(plan, job.origin(), data::isResidentModificationBlocked) ? job : null;
+	}
+
+	/** A restored business snapshot cannot weaken the actual dimension's current protection. */
+	private static boolean modificationBlocked(ServerLevel level, SettlementSavedData data,
+		int minX, int minZ, int maxX, int maxZ) {
+		return data.isResidentModificationBlocked(minX, minZ, maxX, maxZ)
+			|| SettlementSavedData.get(level).isResidentModificationBlocked(minX, minZ, maxX, maxZ);
 	}
 
 	private static boolean supplyWorkerReady(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager worker) {
@@ -228,8 +253,11 @@ public final class ConstructionSystem {
 		return ConstructionStepReadiness.inspect(job, plan, probe, true).ready() && placement.getAsBoolean();
 	}
 
-	private static ConstructionStepReadiness.Probe stepProbe(ServerLevel level) {
+	private static ConstructionStepReadiness.Probe stepProbe(ServerLevel level, SettlementSavedData data) {
 		return new ConstructionStepReadiness.Probe() {
+			public boolean modificationBlocked(int minX, int minZ, int maxX, int maxZ) {
+				return ConstructionSystem.modificationBlocked(level, data, minX, minZ, maxX, maxZ);
+			}
 			public SettlementHousing.BedCheck inspectBed(BlockPos position) {
 				return SettlementHousing.inspectBed(level, position);
 			}
@@ -276,7 +304,7 @@ public final class ConstructionSystem {
 			return chooseGuardedOrigin(data, settlement, plan, level.getGameTime(), siteProbe(level));
 		}
 		for (BlockPos origin : ConstructionSite.candidates(settlement.center())) {
-			if (canPlace(level, plan, origin)) return origin;
+			if (canPlace(data, plan, origin, siteProbe(level))) return origin;
 		}
 		return null;
 	}
@@ -286,21 +314,29 @@ public final class ConstructionSystem {
 		long gameTime, ConstructionSite.Probe probe) {
 		ConstructionSiteRetries retries = data.constructionSiteRetries();
 		if (retries.shouldWait(settlement, plan, gameTime)) return null;
-		BlockPos origin = ConstructionSite.firstReady(plan, settlement.center(), probe)
+		BlockPos origin = ConstructionSite.firstReady(plan, settlement.center(), protectedSiteProbe(data, probe))
 			.map(ConstructionSite.Result::origin).orElse(null);
 		if (origin == null) retries.failed(settlement, plan, gameTime);
 		else retries.succeeded(settlement, plan);
 		return origin;
 	}
 
-	private static boolean canPlace(ServerLevel level, ConstructionPlan plan, BlockPos origin) {
+	/** Nonresidential selection, including the independent hearth route, keeps its target-only world checks. */
+	static boolean canPlace(SettlementSavedData data, ConstructionPlan plan, BlockPos origin, ConstructionSite.Probe probe) {
+		ConstructionSite.Probe guarded = protectedSiteProbe(data, probe);
+		if (ConstructionProtection.isBlocked(plan, origin, guarded::modificationBlocked)) return false;
 		for (ConstructionInstruction instruction : plan.instructions()) {
-			BlockPos position = origin.offset(instruction.offset());
-			if (!level.isLoaded(position) || !level.isPositionEntityTicking(position) || !level.getBlockState(position).isAir()) {
+			BlockPos position;
+			try {
+				position = new BlockPos(Math.addExact(origin.getX(), instruction.offset().getX()),
+					Math.addExact(origin.getY(), instruction.offset().getY()),
+					Math.addExact(origin.getZ(), instruction.offset().getZ()));
+			} catch (ArithmeticException overflow) {
 				return false;
 			}
+			if (!probe.inBounds(position) || !probe.ticking(position) || !probe.state(position).isAir()) return false;
 		}
-		return true;
+		return !ConstructionProtection.isBlocked(plan, origin, guarded::modificationBlocked);
 	}
 
 	/** Current housing and starter workshop projects only; no material checks, job creation or persistent writes. */
@@ -331,11 +367,26 @@ public final class ConstructionSystem {
 	static List<ConstructionSite.Result> inspectSites(SettlementSavedData data, Settlement settlement,
 		ConstructionPlan plan, ConstructionSite.Probe probe) {
 		if (data.getConstructionJob(settlement).isPresent()) return List.of();
-		return ConstructionSite.inspectCandidates(plan, settlement.center(), probe);
+		return ConstructionSite.inspectCandidates(plan, settlement.center(), protectedSiteProbe(data, probe));
+	}
+
+	private static ConstructionSite.Probe protectedSiteProbe(SettlementSavedData data, ConstructionSite.Probe probe) {
+		return new ConstructionSite.Probe() {
+			public boolean modificationBlocked(int minX, int minZ, int maxX, int maxZ) {
+				return data.isResidentModificationBlocked(minX, minZ, maxX, maxZ)
+					|| probe.modificationBlocked(minX, minZ, maxX, maxZ);
+			}
+			public boolean inBounds(BlockPos position) { return probe.inBounds(position); }
+			public boolean ticking(BlockPos position) { return probe.ticking(position); }
+			public net.minecraft.world.level.block.state.BlockState state(BlockPos position) { return probe.state(position); }
+		};
 	}
 
 	private static ConstructionSite.Probe siteProbe(ServerLevel level) {
 		return new ConstructionSite.Probe() {
+			public boolean modificationBlocked(int minX, int minZ, int maxX, int maxZ) {
+				return SettlementSavedData.get(level).isResidentModificationBlocked(minX, minZ, maxX, maxZ);
+			}
 			public boolean inBounds(BlockPos position) {
 				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
 			}

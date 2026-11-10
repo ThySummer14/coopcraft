@@ -208,7 +208,7 @@ class ConstructionCompletionReadinessTest {
 			assertEquals("completion_beds_out_of_bounds", ConstructionReadiness.inspect(job, plan, world).blocker());
 			assertFalse(ConstructionSystem.placeIfReady(job, plan, world, () -> fail("No transaction after overflow")));
 			assertEquals(0, world.bedChecks); assertEquals(0, world.inventoryReads);
-			assertEquals(Set.of(job.origin()), world.reads);
+			assertTrue(world.reads.isEmpty(), "Pure coordinate failure precedes protection and world access");
 		}
 		var plan = plan(false); var world = prefix(plan);
 		world.outside.add(ORIGIN);

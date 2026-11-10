@@ -55,9 +55,18 @@ public final class ConstructionMaterials {
 		Container stockpile, SettlementSimulationState state, Item item, boolean consume,
 		ConstructionJob job, UUID villagerId, Runnable markDirty, BooleanSupplier placement
 	) {
+		return place(stockpile, state, item, consume, job, villagerId, markDirty, () -> true, placement);
+	}
+
+	/** Recheck the live veto before exporting material and immediately before world placement. */
+	static boolean place(
+		Container stockpile, SettlementSimulationState state, Item item, boolean consume,
+		ConstructionJob job, UUID villagerId, Runnable markDirty, BooleanSupplier authorized, BooleanSupplier placement
+	) {
+		if (authorized == null || placement == null || !authorized.getAsBoolean()) return false;
 		// The paired first half has already paid; readiness is checked by the caller.
 		if (!consume) {
-			return placement.getAsBoolean();
+			return authorized.getAsBoolean() && placement.getAsBoolean();
 		}
 		if (stockpile == null) {
 			return false;
@@ -75,6 +84,7 @@ public final class ConstructionMaterials {
 				return false;
 			}
 			List<String> actors = state.residentId(villagerId).map(List::of).orElse(List.of());
+			if (!authorized.getAsBoolean()) return false;
 			int exported = MinecraftStockpileAdapter.exportToContainer(
 				state.world(), state.campOwner(), batch.batchId(), 1, stockpile, actors,
 				Map.of("activity", "build", "blueprint", job.blueprintId().toString(),
@@ -89,7 +99,7 @@ public final class ConstructionMaterials {
 			source = firstUsableSlot(stockpile, item);
 		}
 		// A marked lookalike must never authorize an unpaid placement or be the item charged afterward.
-		if (source < 0 || !placement.getAsBoolean()) {
+		if (source < 0 || !authorized.getAsBoolean() || !placement.getAsBoolean()) {
 			return false;
 		}
 		stockpile.removeItem(source, 1);

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -32,25 +33,37 @@ public final class SettlementCropHarvest {
 		return !stack.isEmpty() && stack.is(Items.POTATO) && stack.getComponentsPatch().isEmpty();
 	}
 
+	/** Keep the caller's marked-plot authority and the real dimension's independent protection veto. */
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos pos) {
-		return validTarget(data, settlement, pos, () -> level.isLoaded(pos),
+		return validTarget(data, settlement, pos,
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
 			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
 	}
 
 	/** Lazy world reads let the loaded/authority gates be tested without starting a server. */
 	static boolean validTarget(SettlementSavedData data, Settlement settlement, BlockPos pos,
 		BooleanSupplier loaded, BooleanSupplier entityTicking, Supplier<BlockState> block) {
-		return data.resourcesOf(settlement).contains(pos)
+		return pos != null && !data.isResidentModificationBlocked(pos)
+			&& data.resourcesOf(settlement).contains(pos)
 			&& data.find(pos).filter(settlement::equals).isPresent()
 			&& SettlementForaging.canForage(data, settlement)
-			&& loaded.getAsBoolean() && entityTicking.getAsBoolean() && isRipe(block.get());
+			&& loaded.getAsBoolean() && entityTicking.getAsBoolean() && isRipe(block.get())
+			&& !data.isResidentModificationBlocked(pos);
 	}
 
 	static Optional<BlockPos> findRipe(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos origin) {
+		return findRipe(data, settlement, origin,
+			pos -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			level::isPositionEntityTicking, level::getBlockState);
+	}
+
+	static Optional<BlockPos> findRipe(SettlementSavedData data, Settlement settlement, BlockPos origin,
+		Predicate<BlockPos> loaded, Predicate<BlockPos> ticking, Function<BlockPos, BlockState> block) {
 		return data.resourcesOf(settlement).stream()
 			.filter(pos -> Math.abs(pos.getY() - origin.getY()) <= 4)
 			.filter(pos -> { long dx = pos.getX() - origin.getX(), dz = pos.getZ() - origin.getZ(); return dx * dx + dz * dz <= 144; })
-			.filter(pos -> validTarget(level, data, settlement, pos))
+			.filter(pos -> validTarget(data, settlement, pos, () -> loaded.test(pos),
+				() -> ticking.test(pos), () -> block.apply(pos)))
 			.min(java.util.Comparator.comparingDouble(origin::distSqr));
 	}
 
@@ -78,14 +91,15 @@ public final class SettlementCropHarvest {
 			|| !validTarget(data, settlement, pos, loaded, ticking, block)) return 0;
 		BlockState mature = block.get();
 		var reserved = outputAfterSeed(loot.get());
-		if (reserved.isEmpty() || !attempt.valid(data, settlement, actor, adult)) return 0;
+		if (reserved.isEmpty() || data.isResidentModificationBlocked(pos)
+			|| !attempt.valid(data, settlement, actor, adult)) return 0;
 		int potatoes = reserved.get().stream().filter(SettlementCropHarvest::ordinaryPotato)
 			.mapToInt(ItemStack::getCount).sum();
 		List<ItemStack> output = reserved.get().stream().map(attempt::potatoOutputCopy).toList();
 		if (!SettlementHarvestCommit.commit(inventory, output,
 			() -> validTarget(data, settlement, pos, loaded, ticking, block)
 				&& block.get().equals(mature) && attempt.valid(data, settlement, actor, adult)
-				&& replant.test(mature))) return 0;
+				&& !data.isResidentModificationBlocked(pos) && replant.test(mature))) return 0;
 		if (potatoes > 0) SettlementSimulationService.recordCarriedProduction(
 			data, settlement, actor, inventory, Items.POTATO, potatoes, "harvest_crop");
 		return potatoes;
@@ -94,10 +108,12 @@ public final class SettlementCropHarvest {
 	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos) {
 		int potatoes = harvest(data, settlement, villager.getUUID(), pos, villager.getInventory(),
 			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
-			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
 			() -> Block.getDrops(level.getBlockState(pos), level, pos, level.getBlockEntity(pos)),
 			mature -> {
-				if (!level.setBlock(pos, ((CropBlock) Blocks.POTATOES).getStateForAge(0), Block.UPDATE_ALL)) return false;
+				if (SettlementSavedData.get(level).isResidentModificationBlocked(pos)
+					|| !level.setBlock(pos, ((CropBlock) Blocks.POTATOES).getStateForAge(0), Block.UPDATE_ALL)) return false;
 				villager.swing(InteractionHand.MAIN_HAND);
 				return true;
 			});

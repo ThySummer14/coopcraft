@@ -36,7 +36,7 @@ class SettlementFoodClockTest {
 		Fixture original = fixture();
 		UUID clock = original.state.foodClockId().orElseThrow();
 		CompoundTag saved = original.save();
-		assertEquals(20, saved.getInt("DataVersion"));
+		assertEquals(21, saved.getInt("DataVersion"));
 		assertTrue(simulation(saved).hasUUID("FoodClockId"));
 		for (int i = 0; i < 3; i++) {
 			Fixture restored = load(saved);
@@ -54,7 +54,7 @@ class SettlementFoodClockTest {
 		UUID clock = migrated.state.foodClockId().orElseThrow();
 		assertNotEquals(clock, load(legacy).state.foodClockId().orElseThrow());
 		CompoundTag saved = migrated.save();
-		assertEquals(20, saved.getInt("DataVersion"));
+		assertEquals(21, saved.getInt("DataVersion"));
 		assertEquals(clock, simulation(saved).getUUID("FoodClockId"));
 		CompoundTag withoutClock = saved.copy(); simulation(withoutClock).remove("FoodClockId");
 		assertEquals(legacy, withoutClock);

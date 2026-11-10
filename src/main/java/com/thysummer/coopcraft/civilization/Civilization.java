@@ -50,6 +50,7 @@ public final class Civilization {
 
 	public static void register() {
 		SettlementCommands.register();
+		PlayerProtectionCommands.register();
 		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new BlueprintManager());
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
@@ -68,6 +69,8 @@ public final class Civilization {
 	}
 
 	private static InteractionResult onUseBlock(Player player, Level level, InteractionHand hand, BlockHitResult hit) {
+		InteractionResult selection = PlayerProtectionCommands.interceptUseBlock(player, level, hand, hit);
+		if (selection != InteractionResult.PASS) return selection;
 		if (!level.isLoaded(hit.getBlockPos())) {
 			return InteractionResult.PASS;
 		}
@@ -116,7 +119,12 @@ public final class Civilization {
 		if (settlement.isEmpty()) return InteractionResult.PASS;
 		// Farmland only cancels an existing mark; new plots need an actual planted potato.
 		if (farmland && !data.resourcesOf(settlement.get()).contains(plot)) return InteractionResult.PASS;
-		boolean added = data.toggleResource(settlement.get(), plot);
+		ResourceMarkChange mark = changeResourceMark(data, settlement.get(), plot);
+		if (mark == ResourceMarkChange.BLOCKED) {
+			player.displayClientMessage(Component.translatable("coopcraft.protect.mark_blocked"), true);
+			return InteractionResult.SUCCESS;
+		}
+		boolean added = mark == ResourceMarkChange.ADDED;
 		player.displayClientMessage(Component.translatable("coopcraft.settlement.crop_" + (added ? "marked" : "unmarked"), settlement.get().name()), true);
 		return InteractionResult.SUCCESS;
 	}
@@ -319,9 +327,24 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 
-		boolean added = data.toggleResource(settlement.get(), hit.getBlockPos());
+		ResourceMarkChange mark = changeResourceMark(data, settlement.get(), hit.getBlockPos());
+		if (mark == ResourceMarkChange.BLOCKED) {
+			serverPlayer.displayClientMessage(Component.translatable("coopcraft.protect.mark_blocked"), true);
+			return InteractionResult.SUCCESS;
+		}
+		boolean added = mark == ResourceMarkChange.ADDED;
 		serverPlayer.displayClientMessage(Component.translatable(added ? "coopcraft.resource.marked" : "coopcraft.resource.unmarked"), true);
 		return InteractionResult.SUCCESS;
+	}
+
+	enum ResourceMarkChange { ADDED, REMOVED, BLOCKED }
+
+	/** Protection vetoes new marks, while an existing permission can always be withdrawn. */
+	static ResourceMarkChange changeResourceMark(SettlementSavedData data, Settlement settlement, BlockPos position) {
+		if (!data.resourcesOf(settlement).contains(position) && data.isResidentModificationBlocked(position)) {
+			return ResourceMarkChange.BLOCKED;
+		}
+		return data.toggleResource(settlement, position) ? ResourceMarkChange.ADDED : ResourceMarkChange.REMOVED;
 	}
 
 	private static void tick(MinecraftServer server) {

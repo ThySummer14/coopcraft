@@ -92,7 +92,7 @@ class ConstructionSupplyGoalWiringTest {
 
 		var negated = assertInstanceOf(UnaryTree.class, unwrapped(placementGate.getCondition()));
 		var readiness = assertInstanceOf(MethodInvocationTree.class, unwrapped(negated.getExpression()));
-		assertEquals(List.of("current", "plan", "stepProbe(level)"),
+		assertEquals(List.of("current", "plan", "stepProbe(level,data)"),
 			readiness.getArguments().subList(0, 3).stream().map(ConstructionSupplyGoalWiringTest::compact).toList());
 		var placement = assertInstanceOf(LambdaExpressionTree.class, readiness.getArguments().get(3));
 		var body = assertInstanceOf(BlockTree.class, placement.getBody());
@@ -116,12 +116,34 @@ class ConstructionSupplyGoalWiringTest {
 			+ "&&current.compatibilityBlocker(BlueprintManager.get(current.blueprintId())).equals(\"ready\")"
 			+ "&&villager.distanceToSqr(target.position().getCenter())<=ConstructionApproach.REACH_SQUARED"
 			+ "&&!villager.getBoundingBox().intersects(newAABB(target.position()))"
-			+ "&&ConstructionStepReadiness.inspect(current,plan,stepProbe(level),true).ready()", compact(authority.getBody()));
+			+ "&&ConstructionStepReadiness.inspect(current,plan,stepProbe(level,data),true).ready()", compact(authority.getBody()));
 		var worldPlacement = assertInstanceOf(LambdaExpressionTree.class, supply.getArguments().get(7));
-		assertTrue(compact(worldPlacement.getBody()).startsWith("level.setBlock(target.position(),instruction.state(),"));
+		assertTrue(compact(worldPlacement.getBody()).startsWith("modificationAllowed.getAsBoolean()&&level.setBlock(target.position(),instruction.state(),"));
 		assertFalse(compact(supplyBranch).contains("ConstructionMaterials.place"));
 		assertFalse(compact(supplyBranch).contains("loadedStockpile"));
 		assertBefore(compact(body), compact(supplyBranch), "ConstructionMaterials.place(");
+		assertTrue(source.contains("()->!ConstructionProtection.isBlocked(plan,current.origin(),"
+			+ "(minX,minZ,maxX,maxZ)->modificationBlocked(level,data,minX,minZ,maxX,maxZ))"));
+		assertBefore(source, "if(!modificationAllowed.getAsBoolean())returnfalse;", gate);
+		assertTrue(compact(body).contains("villager.getUUID(),data::setDirty,modificationAllowed,"));
+		assertEquals(2, compact(body).split("modificationAllowed.getAsBoolean\\(\\)&&level.setBlock", -1).length - 1);
+	}
+
+	@Test
+	void realWorldProtectionIsCombinedWithBusinessDataForEveryConstructionEntry() throws Exception {
+		var methods = methodTrees("ConstructionSystem");
+		assertEquals("{returndata.isResidentModificationBlocked(minX,minZ,maxX,maxZ)"
+			+ "||SettlementSavedData.get(level).isResidentModificationBlocked(minX,minZ,maxX,maxZ);}",
+			compact(methods.get("modificationBlocked").getBody()));
+		assertTrue(compact(methods.get("stepProbe").getBody()).contains("returnConstructionSystem.modificationBlocked(level,data,minX,minZ,maxX,maxZ);"));
+		assertTrue(compact(methods.get("inspect").getBody()).contains("returnConstructionSystem.modificationBlocked(level,data,minX,minZ,maxX,maxZ);"));
+		assertTrue(compact(methods.get("siteProbe").getBody()).contains(
+			"returnSettlementSavedData.get(level).isResidentModificationBlocked(minX,minZ,maxX,maxZ);"));
+		assertTrue(compact(methods.get("protectedSiteProbe").getBody()).contains(
+			"returndata.isResidentModificationBlocked(minX,minZ,maxX,maxZ)||probe.modificationBlocked(minX,minZ,maxX,maxZ);"));
+		assertTrue(compact(methods.get("canPlace").getBody()).contains("guarded=protectedSiteProbe(data,probe)"));
+		assertTrue(compact(methods.get("canPlace").getBody()).contains("guarded::modificationBlocked"));
+		assertTrue(compact(methods.get("chooseOrigin").getBody()).contains("canPlace(data,plan,origin,siteProbe(level))"));
 	}
 
 	@Test

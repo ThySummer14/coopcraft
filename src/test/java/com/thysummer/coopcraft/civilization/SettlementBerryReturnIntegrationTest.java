@@ -65,7 +65,7 @@ class SettlementBerryReturnIntegrationTest {
 
 		int harvest(int amount) {
 			bush = ripeBush();
-			return SettlementForaging.harvest(data, camp, ACTOR, bag, () -> true, () -> true, () -> true,
+			return SettlementForaging.harvest(data, camp, ACTOR, BlockPos.ZERO, bag, () -> true, () -> true, () -> true,
 				() -> bush, () -> List.of(new ItemStack(Items.SWEET_BERRIES, amount)), mature -> {
 					bush = mature.setValue(SweetBerryBushBlock.AGE, 1);
 					return true;

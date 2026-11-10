@@ -58,7 +58,7 @@ class SettlementBerryHarvestTest {
 			state.setSurvivalEnabled(true, 0); state.setProductionEnabled(true); state.setSkillsEnabled(true);
 		}
 		int run(ItemStack... drops) {
-			return SettlementForaging.harvest(data, settlement, actor, inventory, () -> adult,
+			return SettlementForaging.harvest(data, settlement, actor, BlockPos.ZERO, inventory, () -> adult,
 				() -> { loadedReads++; return loaded; }, () -> { tickingReads++; return ticking; },
 				() -> { blockReads++; return block; }, () -> { lootReads++; afterLoot.run(); return List.of(drops); },
 				mature -> { writes++; beforeWrite.run(); if (!writeSucceeds) return false;

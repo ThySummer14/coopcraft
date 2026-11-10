@@ -47,7 +47,7 @@ class SettlementFoodCargoTest {
 		Fixture f = new Fixture();
 		var ripe = Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3);
 		AtomicInteger regrowth = new AtomicInteger();
-		assertEquals(64, SettlementForaging.harvest(f.data, f.camp, f.actor, f.bag, () -> true, () -> true, () -> true,
+		assertEquals(64, SettlementForaging.harvest(f.data, f.camp, f.actor, BlockPos.ZERO, f.bag, () -> true, () -> true, () -> true,
 			() -> ripe, () -> List.of(new ItemStack(Items.SWEET_BERRIES, 64)), state -> { regrowth.incrementAndGet(); return true; }));
 		assertEquals(1, regrowth.get()); assertEquals(64, f.bag.countItem(Items.SWEET_BERRIES));
 		assertTrue(f.store.isEmpty()); assertTrue(f.data.simulationOf(f.camp).isEmpty()); assertTrue(f.surplus());
@@ -195,7 +195,7 @@ class SettlementFoodCargoTest {
 		Fixture f = new Fixture(); var state = f.data.getOrCreateSimulation(f.camp);
 		state.mapResident(f.actor, false, 0); state.setSurvivalEnabled(true, 0); state.setProductionEnabled(true);
 		var ripe = Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3);
-		assertEquals(4, SettlementForaging.harvest(f.data, f.camp, f.actor, f.bag, () -> true, () -> true, () -> true,
+		assertEquals(4, SettlementForaging.harvest(f.data, f.camp, f.actor, BlockPos.ZERO, f.bag, () -> true, () -> true, () -> true,
 			() -> ripe, () -> List.of(new ItemStack(Items.SWEET_BERRIES, 4)), block -> true));
 		long harvestDay = state.world().day();
 		assertEquals(4, f.bag.countItem(Items.SWEET_BERRIES));

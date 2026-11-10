@@ -28,6 +28,8 @@ public final class ConstructionSite {
 	private ConstructionSite() {}
 
 	public interface Probe {
+		/** Read-only, full-height protection veto; old worlds and unprotected test probes have none. */
+		default boolean modificationBlocked(int minX, int minZ, int maxX, int maxZ) { return false; }
 		/** Must not read blocks or load chunks. Includes build height and world border. */
 		boolean inBounds(BlockPos position);
 		/** Must not load chunks. Called only for an in-bounds position. */
@@ -95,6 +97,9 @@ public final class ConstructionSite {
 
 	public static Result inspect(ConstructionPlan plan, BlockPos origin, Probe probe) {
 		Result result = inspectSite(plan, origin, probe);
+		if (result.ready() && ConstructionProtection.isBlocked(plan, origin, probe::modificationBlocked)) {
+			result = fail(origin, "protected_area", origin);
+		}
 		return new Result(plan == null ? null : plan.id(), result.origin(), result.reason(), result.position());
 	}
 
@@ -112,6 +117,11 @@ public final class ConstructionSite {
 				return ConstructionWorkshop.inspect(plan, origin, probe);
 			}
 			if (!housing) {
+				// Preserve coordinate errors before the protection veto, without world access.
+				for (ConstructionInstruction part : plan.instructions()) offset(origin, part.offset());
+				if (ConstructionProtection.isBlocked(plan, origin, probe::modificationBlocked)) {
+					return fail(origin, "protected_area", origin);
+				}
 				// Other nonresidential plans retain target-only air checks; no new foundation/entrance rules.
 				for (ConstructionInstruction part : plan.instructions()) {
 					Result result = air(origin, offset(origin, part.offset()), probe, "target_occupied");
@@ -186,6 +196,16 @@ public final class ConstructionSite {
 			BlockPos floor = new BlockPos(minX + x, minY, minZ + z);
 			BlockState planned = layout.get(floor);
 			if (planned == null || !safeSupport(planned)) return fail(origin, "unsupported_layout", offset(origin, floor));
+		}
+		// Finish pure envelope arithmetic before the protection veto; never probe protected terrain.
+		offset(origin, new BlockPos(minX, Math.subtractExact(minY, 1), minZ));
+		offset(origin, new BlockPos(maxX, maxY, maxZ));
+		for (BlockPos feet : entrances) {
+			offset(feet, new BlockPos(0, -2, 0));
+			offset(feet, new BlockPos(0, 1, 0));
+		}
+		if (ConstructionProtection.isBlocked(plan, origin, probe::modificationBlocked)) {
+			return fail(origin, "protected_area", origin);
 		}
 		// Preflight the complete read envelope before reading any world block, including both
 		// possible entrance support levels. Unknown data is never interpreted as air or support.

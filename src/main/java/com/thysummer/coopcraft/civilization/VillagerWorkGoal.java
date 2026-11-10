@@ -996,7 +996,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private ConstructionJob returnSupplyJob() {
 		ConstructionJob job = settlementData().getConstructionJob(settlement).orElse(null);
-		return job != null && job.compatibilityBlocker(BlueprintManager.get(job.blueprintId())).equals("ready") ? job : null;
+		return ConstructionSystem.returnSupplyJob(settlementData(), job,
+			job == null ? null : BlueprintManager.get(job.blueprintId()));
 	}
 
 	private boolean currentSupplyTargetValid() {
@@ -1198,7 +1199,7 @@ public class VillagerWorkGoal extends Goal {
 			return null;
 		}
 		BlockPos origin = villager.blockPosition();
-		BlockPos berry = SettlementForaging.findRipeBush(level, origin).orElse(null);
+		BlockPos berry = SettlementForaging.findRipeBush(level, settlementData(), origin).orElse(null);
 		BlockPos crop = SettlementCropHarvest.findRipe(level, settlementData(), settlement, origin).orElse(null);
 		return crop != null && (berry == null || origin.distSqr(crop) < origin.distSqr(berry)) ? crop : berry;
 	}

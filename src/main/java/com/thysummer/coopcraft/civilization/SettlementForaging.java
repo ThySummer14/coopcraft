@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -52,7 +53,21 @@ public final class SettlementForaging {
 		return state.is(Blocks.SWEET_BERRY_BUSH) && state.getValue(SweetBerryBushBlock.AGE) >= RIPE_AGE;
 	}
 
+	/** Compatibility entry still resolves the current dimension's protection data. */
 	public static Optional<BlockPos> findRipeBush(ServerLevel level, BlockPos origin) {
+		return findRipeBush(level, SettlementSavedData.get(level), origin);
+	}
+
+	/** Combine caller protection with the live dimension; neither can authorize over the other. */
+	public static Optional<BlockPos> findRipeBush(ServerLevel level, SettlementSavedData data, BlockPos origin) {
+		return findRipeBush(data, origin,
+			pos -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			level::isPositionEntityTicking, level::getBlockState);
+	}
+
+	/** The live finder shared with server-free tests; protection never grants harvesting authority. */
+	static Optional<BlockPos> findRipeBush(SettlementSavedData data, BlockPos origin,
+		Predicate<BlockPos> loaded, Predicate<BlockPos> ticking, Function<BlockPos, BlockState> block) {
 		BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
 		BlockPos best = null;
 		double bestDistance = Double.MAX_VALUE;
@@ -63,10 +78,10 @@ public final class SettlementForaging {
 				}
 				for (int dy = -SEARCH_VERTICAL_RADIUS; dy <= SEARCH_VERTICAL_RADIUS; dy++) {
 					cursor.set(origin.getX() + dx, origin.getY() + dy, origin.getZ() + dz);
-					if (!level.isLoaded(cursor) || !level.isPositionEntityTicking(cursor)) {
+					if (data.isResidentModificationBlocked(cursor) || !loaded.test(cursor) || !ticking.test(cursor)) {
 						continue;
 					}
-					if (isRipe(level.getBlockState(cursor))) {
+					if (isRipe(block.apply(cursor)) && !data.isResidentModificationBlocked(cursor)) {
 						double distance = origin.distSqr(cursor);
 						if (distance < bestDistance) {
 							bestDistance = distance;
@@ -80,39 +95,42 @@ public final class SettlementForaging {
 	}
 
 	/** Same lazy eligibility boundary used by execution and Goal continuation. */
-	static boolean validTarget(SettlementSavedData data, Settlement settlement, UUID actor,
+	static boolean validTarget(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
 		BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block) {
-		return adult.getAsBoolean() && canForage(data, settlement)
+		return pos != null && !data.isResidentModificationBlocked(pos)
+			&& adult.getAsBoolean() && canForage(data, settlement)
 			&& (!SettlementSimulationService.isSurvivalEnabled(data, settlement)
 				|| data.simulationOf(settlement).flatMap(state -> state.residentId(actor)).isPresent())
-			&& loaded.getAsBoolean() && ticking.getAsBoolean() && isRipe(block.get());
+			&& loaded.getAsBoolean() && ticking.getAsBoolean() && isRipe(block.get())
+			&& !data.isResidentModificationBlocked(pos);
 	}
 
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement,
 		Villager villager, BlockPos pos) {
-		return validTarget(data, settlement, villager.getUUID(),
+		return validTarget(data, settlement, villager.getUUID(), pos,
 			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
-			() -> level.isLoaded(pos), () -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
+			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
 	}
 
 	/** Production entry shared by world harvesting and server-free regression tests.
 	 * Loot and world mutation stay lazy; every eligibility condition is rechecked after planning. */
-	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, SimpleContainer inventory,
+	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos, SimpleContainer inventory,
 		BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking, Supplier<BlockState> block,
 		Supplier<List<ItemStack>> loot, Predicate<BlockState> regrow) {
 		var attempt = SettlementBerryCargoHarvest.capture(data, settlement, actor);
 		if (!attempt.valid(data, settlement, actor, adult)
-			|| !validTarget(data, settlement, actor, adult, loaded, ticking, block)) return 0;
+			|| !validTarget(data, settlement, actor, pos, adult, loaded, ticking, block)) return 0;
 		BlockState mature = block.get();
 		List<ItemStack> drops = loot.get();
-		if (!attempt.valid(data, settlement, actor, adult)) return 0;
+		if (data.isResidentModificationBlocked(pos) || !attempt.valid(data, settlement, actor, adult)) return 0;
 		int berries = drops.stream().filter(SettlementBerryCargoHarvest::plainBerry).mapToInt(ItemStack::getCount).sum();
 		// Stamped output must participate in capacity planning, not be attached after a plain-stack merge.
 		List<ItemStack> output = drops.stream().map(attempt::outputCopy).toList();
 		if (!SettlementHarvestCommit.commit(inventory, output,
-			() -> validTarget(data, settlement, actor, adult, loaded, ticking, block)
+			() -> validTarget(data, settlement, actor, pos, adult, loaded, ticking, block)
 				&& block.get().equals(mature) && attempt.valid(data, settlement, actor, adult)
-				&& regrow.test(mature))) return 0;
+				&& !data.isResidentModificationBlocked(pos) && regrow.test(mature))) return 0;
 		if (berries > 0) SettlementSimulationService.recordCarriedProduction(
 			data, settlement, actor, inventory, Items.SWEET_BERRIES, berries, "forage");
 		return output.stream().mapToInt(ItemStack::getCount).sum();
@@ -120,11 +138,13 @@ public final class SettlementForaging {
 
 	public static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement,
 		Villager villager, BlockPos position) {
-		int harvested = harvest(data, settlement, villager.getUUID(), villager.getInventory(),
-			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(), () -> level.isLoaded(position),
+		int harvested = harvest(data, settlement, villager.getUUID(), position, villager.getInventory(),
+			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
+			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(position) && level.isLoaded(position),
 			() -> level.isPositionEntityTicking(position), () -> level.getBlockState(position),
 			() -> Block.getDrops(level.getBlockState(position), level, position, level.getBlockEntity(position)),
-			mature -> level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
+			mature -> !SettlementSavedData.get(level).isResidentModificationBlocked(position)
+				&& level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
 		if (harvested > 0) {
 			villager.swing(InteractionHand.MAIN_HAND);
 		}

@@ -36,6 +36,9 @@ public final class ConstructionWorkshop {
 		} catch (ArithmeticException exception) {
 			return result(plan, origin, "out_of_bounds", origin);
 		}
+		if (ConstructionProtection.isBlocked(plan, origin, probe::modificationBlocked)) {
+			return result(plan, origin, "protected_area", origin);
+		}
 		// Preflight the entire envelope before any state reads, including the furthest headroom cell.
 		for (BlockPos position : envelope) {
 			if (!probe.inBounds(position)) return result(plan, origin, "out_of_bounds", position);
@@ -50,7 +53,8 @@ public final class ConstructionWorkshop {
 				return result(plan, origin, "volume_occupied", position);
 			}
 		}
-		return result(plan, origin, "ready", null);
+		return ConstructionProtection.isBlocked(plan, origin, probe::modificationBlocked)
+			? result(plan, origin, "protected_area", origin) : result(plan, origin, "ready", null);
 	}
 
 	/** Called only after this job's final successful placement, never to discover or claim existing tables. */

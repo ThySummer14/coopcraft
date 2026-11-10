@@ -168,3 +168,7 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 ### 居民自主资源观察（只读候选）
 
 居民会分批记录附近已加载的成熟甜浆果位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选来源始终未知，不会自动增加木石/土豆采集授权，也不会改变旧自动浆果采收行为。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。
+
+### 玩家建筑保护区
+
+用 `/coop protect start "我的房子"` 后空手潜行右击两个地面角点，再 `/coop protect confirm`，即可圈定整高度建筑保护区。保护优先于本模组木石、浆果、土豆采收和施工，途中新增也会在实际改块前重验；原版农民、踩踏、机器和间接方块更新不在首版范围。权限、限额、旧档与完整边界见 [建筑保护区说明](docs/player-protection.md)。

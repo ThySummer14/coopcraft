@@ -66,7 +66,7 @@ class SettlementPotatoReturnIntegrationTest {
 		}
 		int berries(int amount) {
 			BlockState[] bush = { Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3) };
-			return SettlementForaging.harvest(data, camp, ACTOR, bag, () -> true, () -> true, () -> true,
+			return SettlementForaging.harvest(data, camp, ACTOR, BlockPos.ZERO, bag, () -> true, () -> true, () -> true,
 				() -> bush[0], () -> List.of(new ItemStack(Items.SWEET_BERRIES, amount)), mature -> {
 					bush[0] = mature.setValue(SweetBerryBushBlock.AGE, 1); return true;
 				});
