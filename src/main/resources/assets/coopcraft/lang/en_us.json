@@ -841,5 +841,6 @@
 	"coopcraft.interaction.action.collect_pickaxe_materials": "Collecting cobblestone and sticks for a first stone pickaxe",
 	"coopcraft.interaction.action.workbench_pickaxe": "Making a first stone pickaxe from carried materials at the workbench",
 	"coopcraft.interaction.action.collect_stone_pickaxe": "Collecting an existing plain stone pickaxe from the communal store",
-	"coopcraft.interaction.action.scout_material_area": "Scouting permitted material area"
+	"coopcraft.interaction.action.scout_material_area": "Scouting permitted material area",
+	"coopcraft.interaction.food_sharing.memory": "Witnessed handover (game tick %s): %s gave %s %s × %s."
 }

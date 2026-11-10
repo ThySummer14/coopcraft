@@ -83,6 +83,31 @@ class SettlementFoodSharingGoalWiringTest {
 			for (String forbidden : List.of("getStockpile", "setSatiety", "SettlementTeachingScene.person", "recordPractice", "navigateTo")) assertFalse(method.contains(forbidden), forbidden);
 		}
 	}
+	@Test void onlySuccessfulCompletionRecordsBeforeAnimationAndOptionalUiUsesSpareSlots() throws Exception {
+		String pulse = named(methods("SettlementFoodSharingScene"), "pulse").toString();
+		assertTrue(pulse.contains("s.level.getGameTime()"));
+		assertTrue(pulse.contains("VillagerInteraction.nameOf(s.giver).getString()"));
+		assertTrue(pulse.indexOf("if (completion != null)") < pulse.indexOf("s.data.rememberFoodSharing"));
+		assertTrue(pulse.indexOf("SettlementFoodSharing.finish") < pulse.indexOf("s.data.rememberFoodSharing"));
+		assertTrue(pulse.indexOf("s.data.rememberFoodSharing") < pulse.indexOf("s.giver.swing"));
+		assertEquals(1, calls(named(methods("SettlementFoodSharingScene"), "pulse"), "s.data.rememberFoodSharing").size());
+		String inspect = named(methods("VillagerInteraction"), "inspectLines").toString();
+		assertTrue(inspect.contains("SettlementFoodSharingMemories.inspect"));
+		assertFalse(named(methods("VillagerInteraction"), "inspectCoreLines").toString().contains("SettlementFoodSharingMemories"));
+		String prepare = named(methods("ResidentDialogService"), "prepare").toString();
+		assertTrue(prepare.contains("VillagerInteraction.inspectCoreLines"));
+		assertTrue(prepare.indexOf("ResidentMeetingView.rations") < prepare.indexOf("withOptionalMemories"));
+	}
+
+	@Test void historySentenceHasMatchingBilingualPlaceholders() throws Exception {
+		for (String language : List.of("zh_cn", "en_us")) {
+			String raw = java.nio.file.Files.readString(Path.of("src/main/resources/assets/coopcraft/lang", language + ".json"));
+			var root = com.google.gson.JsonParser.parseString(raw).getAsJsonObject();
+			String text = root.get("coopcraft.interaction.food_sharing.memory").getAsString();
+			assertEquals(5, text.split("%s", -1).length - 1);
+		}
+	}
+
 	private static MethodTree named(List<MethodTree> methods, String name) {
 		return methods.stream().filter(method -> method.getName().contentEquals(name)).findFirst().orElseThrow();
 	}

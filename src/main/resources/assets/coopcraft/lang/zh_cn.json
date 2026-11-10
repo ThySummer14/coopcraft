@@ -841,5 +841,6 @@
 	"coopcraft.interaction.action.collect_pickaxe_materials": "前往公仓领取首把石镐的圆石与木棍",
 	"coopcraft.interaction.action.workbench_pickaxe": "在工作台用携带材料制作首把石镐",
 	"coopcraft.interaction.action.collect_stone_pickaxe": "前往公仓领取已有的普通石镐",
-	"coopcraft.interaction.action.scout_material_area": "勘察许可材料区"
+	"coopcraft.interaction.action.scout_material_area": "勘察许可材料区",
+	"coopcraft.interaction.food_sharing.memory": "亲历送粮（游戏刻 %s）：%s 交给 %s %s 份%s。"
 }

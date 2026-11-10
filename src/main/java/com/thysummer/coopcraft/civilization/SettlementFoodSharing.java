@@ -2,6 +2,7 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 
@@ -34,6 +35,21 @@ final class SettlementFoodSharing {
 			giverSnapshots = copies(giverIdentities); recipientSnapshots = copies(recipientIdentities);
 		}
 	}
+	/** Only the completed transaction can mint this single-use, instance-bound proof. Never serialized. */
+	static final class Completion {
+		private final SettlementSavedData data;
+		private final Settlement camp;
+		private final SettlementFoodSharingMemories.Delivery delivery;
+		private boolean consumed;
+		private Completion(Ticket ticket, SettlementFoodSharingMemories.Delivery delivery) {
+			data = ticket.data; camp = ticket.camp; this.delivery = delivery;
+		}
+		SettlementFoodSharingMemories.Delivery consume(SettlementSavedData owner, Settlement settlement) {
+			if (consumed || owner != data || settlement != camp) return null;
+			consumed = true; return delivery;
+		}
+	}
+
 	private static ItemStack[] identities(SimpleContainer bag) {
 		ItemStack[] stacks = new ItemStack[bag.getContainerSize()];
 		for (int slot = 0; slot < stacks.length; slot++) stacks[slot] = bag.getItem(slot);
@@ -117,17 +133,24 @@ final class SettlementFoodSharing {
 	static void cancel(Ticket t) { if (t != null) t.used = true; }
 	/** All callbacks run before debit. No rollback copies, hunger changes, or abstract inventory writes. */
 	static boolean finish(Ticket t, BooleanSupplier arrival) {
-		if (t == null || t.checking) return false;
+		return finish(t, arrival, 0, "?", "?") != null;
+	}
+	static Completion finish(Ticket t, BooleanSupplier arrival, long gameTime, String giverName, String recipientName) {
+		if (t == null || t.checking) return null;
 		t.checking = true;
 		try {
-			if (arrival == null || !unchanged(t) || !t.presence.getAsBoolean() || !unchanged(t)
-				|| !arrival.getAsBoolean() || !unchanged(t) || !t.presence.getAsBoolean() || !unchanged(t)) return false;
+			if (gameTime < 0 || arrival == null || !unchanged(t) || !t.presence.getAsBoolean() || !unchanged(t)
+				|| !arrival.getAsBoolean() || !unchanged(t) || !t.presence.getAsBoolean() || !unchanged(t)) return null;
 			ItemStack gift = t.giverIdentities[t.source].copyWithCount(1);
+			// Prepare immutable text before touching either bag; it is not a completion credential.
+			var delivery = new SettlementFoodSharingMemories.Delivery(UUID.randomUUID(), t.camp.id(), t.giver, t.recipient,
+				gameTime, SettlementFoodSharingMemories.snapshotName(giverName), SettlementFoodSharingMemories.snapshotName(recipientName),
+				BuiltInRegistries.ITEM.getKey(gift.getItem()).toString(), SettlementFoodSharingMemories.snapshotName(gift.getHoverName().getString()), 1);
 			t.used = true;
 			t.giverIdentities[t.source].shrink(1);
 			t.recipientBag.setItem(t.destination, gift);
 			t.giverBag.setChanged();
-			return true;
+			return new Completion(t, delivery);
 		} finally { t.used = true; t.checking = false; }
 	}
 }

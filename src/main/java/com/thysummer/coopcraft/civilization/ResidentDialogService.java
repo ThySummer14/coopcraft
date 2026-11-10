@@ -214,16 +214,24 @@ public final class ResidentDialogService {
 		var meetingView = ResidentMeetingView.present(meeting.result());
 		boolean canHold = meetingView.canHold();
 		List<Component> details = new ArrayList<>(b.lastMeetingReceipt);
-		details.addAll(VillagerInteraction.inspectLines(b.player, b.villager, b.settlement, b.data));
+		details.addAll(VillagerInteraction.inspectCoreLines(b.player, b.villager, b.settlement, b.data));
 		details.addAll(ResidentMeetingView.rations(b.data, b.settlement, b.villager.getUUID(), safeName(b.villager),
 			b.level.getDayTime() / Level.TICKS_PER_DAY));
-		List<Component> lines = details.stream()
-			.limit(ResidentDialogPayload.MAX_LINES).map(ResidentDialogService::bounded).toList();
+		List<Component> lines = withOptionalMemories(details,
+			SettlementFoodSharingMemories.inspect(b.data, b.settlement, b.villager.getUUID()));
 		var snapshot = new ResidentDialogPayload.Snapshot(safeName(b.villager),
 			b.level.dimension().location().toString(), lines, canGift, canInvite, owned, canHold,
 			message(canGift ? "gift_hint" : "gift_unavailable"), bounded(meetingHint),
 			meetingView.hint());
 		return new Prepared(snapshot, ticket, canHold ? meeting : null);
+	}
+
+	/** Preserve existing meeting/ration facts first; old food memories use only remaining packet slots. */
+	static List<Component> withOptionalMemories(List<Component> details, List<Component> memories) {
+		List<Component> lines = new ArrayList<>(details.stream().limit(ResidentDialogPayload.MAX_LINES).toList());
+		memories.stream().limit(Math.min(SettlementFoodSharingMemories.MAX_VISIBLE,
+			ResidentDialogPayload.MAX_LINES - lines.size())).forEach(lines::add);
+		return lines.stream().map(ResidentDialogService::bounded).toList();
 	}
 
 	static boolean giftAvailable(ItemStack currentHand, boolean survival) {

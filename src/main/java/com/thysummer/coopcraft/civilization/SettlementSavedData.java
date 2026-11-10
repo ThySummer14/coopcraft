@@ -66,7 +66,19 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, SettlementStage> stages = new LinkedHashMap<>();
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
+	private SettlementFoodSharingMemories foodSharingMemories = new SettlementFoodSharingMemories();
 	private final SettlementFoodRequests foodRequests = new SettlementFoodRequests();
+	boolean rememberFoodSharing(Settlement camp, SettlementFoodSharing.Completion completion) {
+		boolean changed = foodSharingMemories.record(this, camp, completion);
+		if (changed) setDirty();
+		return changed;
+	}
+	boolean foodSharingMemoriesBlocked() { return foodSharingMemories.blocked(); }
+	List<SettlementFoodSharingMemories.Delivery> foodSharingMemoriesOf(Settlement camp, UUID resident) {
+		return canonicalSettlement(camp) && resident != null && isMember(camp, resident)
+			? foodSharingMemories.recent(camp.id(), resident) : List.of();
+	}
+
 	// Ephemeral adult sharing; no NBT or dirty tracking.
 	private final SettlementFoodDeliveryReservations<SettlementFoodDeliveryScene.Delivery> foodDeliveryReservations = new SettlementFoodDeliveryReservations<>();
 	SettlementFoodDeliveryReservations<SettlementFoodDeliveryScene.Delivery> foodDeliveryReservations() { return foodDeliveryReservations; }
@@ -846,6 +858,9 @@ public final class SettlementSavedData extends SavedData {
 			}
 		}
 		tag.put("ResourceSites", resourceList);
+		Tag sharingMemoriesTag = foodSharingMemories.save();
+		if (sharingMemoriesTag != null) tag.put("FoodSharingMemories", sharingMemoriesTag);
+		else tag.remove("FoodSharingMemories");
 		tag.put("ResourceObservations", resourceObservations.save());
 		tag.put("GatheringAreas", gatheringAreas.save());
 		tag.put("ForagingAreas", foragingAreas.save());
@@ -906,6 +921,7 @@ public final class SettlementSavedData extends SavedData {
 
 	static SettlementSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		SettlementSavedData data = new SettlementSavedData();
+		data.foodSharingMemories = SettlementFoodSharingMemories.load(tag.get("FoodSharingMemories"));
 		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
 		data.gatheringAreas = SettlementGatheringAreas.load(tag.get("GatheringAreas"));
 		data.foragingAreas = SettlementForagingAreas.load(tag.get("ForagingAreas"));

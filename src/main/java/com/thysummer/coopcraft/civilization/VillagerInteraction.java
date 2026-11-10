@@ -148,6 +148,12 @@ public final class VillagerInteraction {
 
 	/** Shared read-only description for chat compatibility and the resident window. */
 	static List<Component> inspectLines(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		List<Component> lines = new ArrayList<>(inspectCoreLines(player, villager, settlement, data));
+		lines.addAll(SettlementFoodSharingMemories.inspect(data, settlement, villager.getUUID()));
+		return List.copyOf(lines);
+	}
+
+	static List<Component> inspectCoreLines(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
 		List<Component> lines = new ArrayList<>();
 		ServerLevel level = (ServerLevel) villager.level();
 		Component name = Component.literal(nameOf(villager).getString());

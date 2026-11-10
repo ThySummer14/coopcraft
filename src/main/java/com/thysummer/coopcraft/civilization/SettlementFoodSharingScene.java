@@ -91,7 +91,10 @@ final class SettlementFoodSharingScene {
 			|| s.pair.joined(s.pair.speaker) && s.pair.joined(s.pair.listener) && !goalsMatch(s)) { cancel(s); return; }
 		if (s.data.foodSharingSessions().pulse(s.pair, resident.getUUID(), s.level.getGameTime(), true)) {
 			// Registry ownership is consumed by completion; do not require active() inside the transaction.
-			if (SettlementFoodSharing.finish(s.ticket, () -> s.pair.completed() && goalsMatch(s))) {
+			var completion = SettlementFoodSharing.finish(s.ticket, () -> s.pair.completed() && goalsMatch(s),
+				s.level.getGameTime(), VillagerInteraction.nameOf(s.giver).getString(), VillagerInteraction.nameOf(s.recipient).getString());
+			if (completion != null) {
+				s.data.rememberFoodSharing(s.camp, completion);
 				s.giver.swing(InteractionHand.MAIN_HAND); s.recipient.swing(InteractionHand.MAIN_HAND);
 			}
 		}
