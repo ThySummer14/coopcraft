@@ -15,7 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Server-thread-only, single-use plank, door and bed batches. Tickets never own items or survive reload. */
+/** Server-thread-only, single-use plank, door, bed and wool batches. Tickets never own items or survive reload. */
 final class SettlementWorkbenchCrafting {
 	private SettlementWorkbenchCrafting() { }
 

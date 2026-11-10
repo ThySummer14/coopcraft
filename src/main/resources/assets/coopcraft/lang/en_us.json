@@ -702,5 +702,7 @@
 	"coopcraft.interaction.action.collect_door_materials": "Collecting oak door materials at the communal store",
 	"coopcraft.interaction.action.workbench_doors": "Crafting carried planks into oak doors at the workbench",
 	"coopcraft.interaction.action.collect_bed_materials": "Collecting white bed materials at the communal store",
-	"coopcraft.interaction.action.workbench_beds": "Crafting carried wool and planks into a white bed at the workbench"
+	"coopcraft.interaction.action.workbench_beds": "Crafting carried wool and planks into a white bed at the workbench",
+	"coopcraft.interaction.action.collect_wool_materials": "Collecting string for white wool at the communal store",
+	"coopcraft.interaction.action.workbench_wool": "Weaving carried string into white wool at the workbench"
 }

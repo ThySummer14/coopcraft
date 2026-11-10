@@ -702,5 +702,7 @@
 	"coopcraft.interaction.action.collect_door_materials": "前往公仓领取橡木门制作原料",
 	"coopcraft.interaction.action.workbench_doors": "在工作台用携带木板制作橡木门",
 	"coopcraft.interaction.action.collect_bed_materials": "前往公仓领取白床制作原料",
-	"coopcraft.interaction.action.workbench_beds": "在工作台用携带羊毛和木板制作白床"
+	"coopcraft.interaction.action.workbench_beds": "在工作台用携带羊毛和木板制作白床",
+	"coopcraft.interaction.action.collect_wool_materials": "前往公仓领取编织白羊毛的线",
+	"coopcraft.interaction.action.workbench_wool": "在工作台用携带的线编织白羊毛"
 }
