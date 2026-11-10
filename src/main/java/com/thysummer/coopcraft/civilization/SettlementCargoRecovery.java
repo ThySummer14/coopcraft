@@ -95,7 +95,8 @@ public final class SettlementCargoRecovery extends SavedData {
 				&& SettlementFoodAge.ordinaryFoodType(new ItemStack(stack.getItem())).isPresent();
 			boolean potatoCargo = stack.is(Items.POTATO) || stack.is(Items.POISONOUS_POTATO);
 			if (!SettlementCargo.isMaterial(stack) && !ConstructionSupply.isMarked(stack)
-				&& !SettlementWorkbenchCargo.isMarked(stack) && !agedFood && !potatoCargo
+				&& !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack)
+				&& !agedFood && !potatoCargo
 				&& !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
 			ItemStack removed = source.removeItem(slot, stack.getCount());
 			if (!removed.isEmpty()) record.stacks.add(removed.copy());

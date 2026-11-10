@@ -21,9 +21,13 @@ class VillagerWorkbenchQuarantineTest {
 	@BeforeAll static void bootstrap() { SharedConstants.tryDetectVersion(); Bootstrap.bootStrap(); }
 
 	private static ItemStack marked(Item item) {
+		return marked(item, SettlementWorkbenchCargo.KEY);
+	}
+
+	private static ItemStack marked(Item item, String key) {
 		ItemStack stack = new ItemStack(item, 3);
 		CompoundTag root = new CompoundTag();
-		root.putString(SettlementWorkbenchCargo.KEY, "unknown_future_format");
+		root.putString(key, "unknown_future_format");
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
 		return stack;
 	}
@@ -40,6 +44,19 @@ class VillagerWorkbenchQuarantineTest {
 			assertEquals(1, VillagerWorkGoal.countCraftingItems(bag, item));
 			assertEquals(1, VillagerWorkGoal.removeItems(bag, item, 99));
 			assertTrue(ItemStack.matches(quarantined, bag.getItem(0)));
+		}
+	}
+
+	@Test void shearingMarkersOnWrongItemsCannotEnterOrdinaryCraftingOrTransfers() {
+		for (Item item : List.of(Items.COBBLESTONE, Items.STICK, Items.SMOOTH_STONE, Items.OAK_LOG)) {
+			ItemStack quarantined = marked(item, SettlementShearingCargo.KEY);
+			SimpleContainer store = new SimpleContainer(quarantined.copy(), new ItemStack(item, 4));
+			SimpleContainer bag = new SimpleContainer(2);
+			assertEquals(4, VillagerWorkGoal.countCraftingItems(store, item));
+			assertEquals(4, VillagerWorkGoal.transferCraftingItems(store, bag, item, 99));
+			assertTrue(ItemStack.matches(quarantined, store.getItem(0)));
+			assertEquals(0, VillagerWorkGoal.removeItems(store, item, 99));
+			assertTrue(ItemStack.matches(quarantined, store.getItem(0)));
 		}
 	}
 

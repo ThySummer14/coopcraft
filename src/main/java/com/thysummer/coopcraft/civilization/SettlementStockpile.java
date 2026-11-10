@@ -137,7 +137,7 @@ public final class SettlementStockpile {
 		int transferred = 0;
 		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
 			ItemStack stack = source.getItem(slot);
-			if (stack.isEmpty() || !stack.is(item)) {
+			if (stack.isEmpty() || !stack.is(item) || SettlementShearingCargo.isMarked(stack)) {
 				continue;
 			}
 			ItemStack offered = stack.copy();
@@ -265,7 +265,7 @@ public final class SettlementStockpile {
 		int insertedTotal = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item) || SettlementFoodAge.isMarked(stack)) {
+			if (!stack.is(item) || SettlementFoodAge.isMarked(stack) || SettlementShearingCargo.isMarked(stack)) {
 				continue;
 			}
 			int inserted = insert(stockpile, stack);

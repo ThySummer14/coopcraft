@@ -45,6 +45,8 @@ public final class SettlementSavedData extends SavedData {
 	private SettlementForagingAreas foragingAreas = new SettlementForagingAreas();
 	private final SettlementForagingLeases foragingLeases = new SettlementForagingLeases();
 	private final SettlementMaterialLeases materialLeases = new SettlementMaterialLeases();
+	// Coordination only: never serialized, and old entity/session identities cannot survive reload.
+	private final SettlementShearingLeases shearingLeases = new SettlementShearingLeases();
 	private final SettlementResourceDiscovery resourceDiscovery = new SettlementResourceDiscovery();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
 	// Transient round-robin order; unrelated membership changes must not restart active sweeps.
@@ -184,6 +186,7 @@ public final class SettlementSavedData extends SavedData {
 	boolean foragingAreasBlocked() { return foragingAreas.blocked(); }
 	SettlementForagingLeases foragingLeases() { return foragingLeases; }
 	SettlementMaterialLeases materialLeases() { return materialLeases; }
+	SettlementShearingLeases shearingLeases() { return shearingLeases; }
 
 	Optional<SettlementForagingAreas.Area> foragingAreaOf(Settlement settlement) {
 		return canonicalSettlement(settlement) ? foragingAreas.of(settlement.id()) : Optional.empty();

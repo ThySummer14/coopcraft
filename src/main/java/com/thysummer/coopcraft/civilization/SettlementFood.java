@@ -16,8 +16,9 @@ public final class SettlementFood {
 		return item == Items.SWEET_BERRIES ? 1 : Villager.FOOD_POINTS.getOrDefault(item, 0);
 	}
 
-	/** Age-marked stock is an explicit simulation handoff, never an ordinary settlement ration. */
+	/** Assigned stock, including malformed cargo, must never become an ordinary settlement ration. */
 	public static int points(ItemStack stack) {
-		return stack == null || stack.isEmpty() || SettlementFoodAge.isMarked(stack) ? 0 : points(stack.getItem());
+		return stack == null || stack.isEmpty() || SettlementFoodAge.isMarked(stack)
+			|| SettlementShearingCargo.isMarked(stack) ? 0 : points(stack.getItem());
 	}
 }

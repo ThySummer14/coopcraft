@@ -724,14 +724,15 @@
 	"coopcraft.command.settlement.shearing_limit": "已达剪毛许可上限（每营16只、每维度128只）。",
 	"coopcraft.command.settlement.shearing_removed": "已撤销本营此羊的剪毛许可。",
 	"coopcraft.command.settlement.shearing_not_found": "本营没有此羊的剪毛许可。",
-	"coopcraft.command.settlement.shearing_saved": "许可已保存，自动剪毛尚未启用。羊 UUID：%s。",
-	"coopcraft.command.settlement.shearing_status": "营地 %s：已保存 %s 条逐羊剪毛许可；自动剪毛尚未启用。",
+	"coopcraft.command.settlement.shearing_saved": "许可已保存。已持剪刀且需要白床羊毛的居民可在安全条件下剪毛。羊 UUID：%s。",
+	"coopcraft.command.settlement.shearing_status": "营地 %s：已保存 %s 条逐羊剪毛许可；实际劳动还需真实主手剪刀、需求与安全复验。",
 	"coopcraft.command.settlement.shearing_permit": "羊 UUID：%s；授权者：%s（仅保存记录，不代表当前羊可用）。",
 	"coopcraft.command.settlement.shearing_nearby_header": "附近已加载羊候选（真实玩家8格内，最多显示8条）；候选不代表已授权或符合授权资格。",
 	"coopcraft.command.settlement.shearing_candidate": "非授权候选羊 UUID：%s；位置：%s, %s, %s；颜色：%s。",
 	"coopcraft.command.settlement.shearing_nearby_none": "附近没有已加载羊候选。",
 	"coopcraft.command.settlement.shearing_preview": "营地 %s（%s）：预览羊 %s 的重复剪毛许可；当前位置：%s, %s, %s；尚未保存。",
 	"coopcraft.command.settlement.shearing_confirm_help": "请在 %s 秒内执行 /coop settlement shearing confirm；取消用 /coop settlement shearing cancel。",
-	"coopcraft.command.settlement.shearing_scope": "许可只涵盖这只羊未来重复剪毛，不授权杀羊、移动、繁殖、后代或其他羊；名字、栅栏、牵绳不是所有权证据。自动剪毛尚未启用。",
-	"coopcraft.command.settlement.shearing_help": "查看候选：/coop settlement shearing nearby；授权：preview <sheep_uuid> 后 confirm；撤销：revoke <sheep_uuid>。"
+	"coopcraft.command.settlement.shearing_scope": "许可仅涵盖这只羊的重复剪毛，不授权杀羊、移动、繁殖、后代或其他羊；名字、栅栏、牵绳不是所有权证据。不会自动领剪刀或替换居民手中物品。",
+	"coopcraft.command.settlement.shearing_help": "查看候选：/coop settlement shearing nearby；授权：preview <sheep_uuid> 后 confirm；撤销：revoke <sheep_uuid>。",
+	"coopcraft.interaction.action.shear_sheep": "正在追踪获准白羊并使用真实剪刀剪毛"
 }

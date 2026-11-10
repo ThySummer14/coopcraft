@@ -13,6 +13,7 @@ public final class SettlementFoodCargo {
 
 	public static boolean isFood(ItemStack stack) {
 		return stack != null && !stack.isEmpty() && !SettlementFoodAge.isMarked(stack)
+			&& !SettlementShearingCargo.isMarked(stack)
 			&& (stack.is(Items.SWEET_BERRIES) || stack.is(Items.POTATO));
 	}
 

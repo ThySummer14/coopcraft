@@ -39,6 +39,9 @@ public class VillagerWorkGoal extends Goal {
 	private static final int EAT_TICKS = 40;
 	private static final int FORAGE_TICKS = 40;
 	private static final long FORAGE_RETRY_TICKS = 200;
+	private static final int SHEARING_TICKS = 40;
+	private static final int SHEARING_MAX_TRAVEL_TICKS = 600;
+	private static final int SHEARING_REPATH_TICKS = 10;
 
 	private final Villager villager;
 	private Action action;
@@ -51,6 +54,10 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos forageTarget;
 	private SettlementForagingLeases forageRegistry;
 	private SettlementForagingLeases.Lease forageLease;
+	private SettlementShearing.Session shearingSession;
+	private final SettlementCargoApproach.Cooldown shearingCooldown = new SettlementCargoApproach.Cooldown();
+	private BlockPos shearingPathTarget;
+	private int shearingPathAge;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
 	private SettlementStarterCrafting.Ticket currentStarterCraft;
@@ -82,6 +89,7 @@ public class VillagerWorkGoal extends Goal {
 	public boolean canUse() {
 		try {
 			releaseMaterialLease();
+			cancelShearing();
 			cancelWorkbenchCrafting();
 			// A released claim must never leave an old GATHER action eligible for an early return.
 			if (action == Action.GATHER) { action = null; target = null; }
@@ -177,7 +185,7 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
 			progress = 0;
 			return action != null;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); throw failure; }
 	}
 
 	@Override
@@ -190,15 +198,16 @@ public class VillagerWorkGoal extends Goal {
 				&& cargoCooldown.ready(villager.level().getGameTime()) && !emergencyForage()) {
 				releaseForageLease();
 				releaseMaterialLease();
+				cancelShearing();
 				return false;
 			}
-			if (isWorkbenchAction() && (shouldEat() || meetingTicket != null || emergencyForage())) {
-				cancelWorkbenchCrafting(); return false;
+			if ((isWorkbenchAction() || action == Action.SHEAR_SHEEP) && (shouldEat() || meetingTicket != null || emergencyForage())) {
+				cancelWorkbenchCrafting(); cancelShearing(); return false;
 			}
 			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
-			if (!continuing) { releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); }
+			if (!continuing) { releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); }
 			return continuing;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); throw failure; }
 	}
 
 	@Override
@@ -207,16 +216,18 @@ public class VillagerWorkGoal extends Goal {
 			progress = 0;
 			travelTicks = 0;
 			if (isWorkbenchAction()) { villager.getNavigation().stop(); tickWorkbenchCrafting(); }
+			else if (action == Action.SHEAR_SHEEP) { villager.getNavigation().stop(); tickShearing(); }
 			else if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
 			else if (isSupplyAction()) { villager.getNavigation().stop(); tickBuildSupply(); }
 			else if (action == Action.RETURN_TO_STOCKPILE) { villager.getNavigation().stop(); tickCargoReturn(); }
 			else navigateToTarget();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
 		cancelWorkbenchCrafting();
+		cancelShearing();
 		releaseMaterialLease();
 		releaseForageLease();
 		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
@@ -266,6 +277,20 @@ public class VillagerWorkGoal extends Goal {
 		if (forageRegistry != null) forageRegistry.release(forageLease);
 		forageLease = null;
 		forageRegistry = null;
+	}
+
+	private void cancelShearing() {
+		SettlementShearing.cancel(shearingSession);
+		shearingSession = null;
+		shearingPathTarget = null;
+		shearingPathAge = 0;
+		if (action == Action.SHEAR_SHEEP) { action = null; target = null; }
+	}
+
+	/** Entity unload is not guaranteed to invoke Goal.stop; no live sheep claim may survive it. */
+	static void cancelShearingOnUnload(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal != null) goal.cancelShearing();
 	}
 
 	private static VillagerWorkGoal goalOf(Villager villager) {
@@ -487,6 +512,8 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	public WorkStatus status() {
+		if (action == Action.SHEAR_SHEEP && shearingSession != null)
+			return new WorkStatus(action.id(), shearingSession.position(), travelTicks >= 100 ? "path_blocked" : null);
 		if (action == Action.ATTEND_MEETING && !hasValidInvitation()) return new WorkStatus("idle", null, null);
 		if (action == Action.ATTEND_MEETING && meetingTicket != null)
 			return new WorkStatus(meetingTicket.waiting() ? "meeting_wait" : "attend_meeting", meetingStore, null);
@@ -557,6 +584,7 @@ public class VillagerWorkGoal extends Goal {
 			refreshMeetingInvitation();
 			if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
 			if (action == null) return;
+			if (action == Action.SHEAR_SHEEP) { tickShearing(); return; }
 			if (isWorkbenchAction()) { tickWorkbenchCrafting(); return; }
 			if (isSupplyAction()) { tickBuildSupply(); return; }
 			if (action == Action.RETURN_TO_STOCKPILE) { tickCargoReturn(); return; }
@@ -617,7 +645,7 @@ public class VillagerWorkGoal extends Goal {
 				);
 				case POLISH_PICKAXE -> craftPolishedPickaxe();
 				case GRIND_SMOOTH_STONE -> grindSmoothStone();
-				case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL -> { return; }
+				case SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -625,7 +653,7 @@ public class VillagerWorkGoal extends Goal {
 				return;
 			}
 			stop();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); throw failure; }
 	}
 
 	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
@@ -690,6 +718,14 @@ public class VillagerWorkGoal extends Goal {
 		if (canGrindSmoothStone()) {
 			return Action.GRIND_SMOOTH_STONE;
 		}
+		if (!hasReturnCargo() && shearingCooldown.ready(villager.level().getGameTime())) {
+			ServerLevel level = (ServerLevel) villager.level();
+			SettlementSavedData data = settlementData();
+			Settlement camp = settlement;
+			shearingSession = SettlementShearing.prepare(level, data, camp, villager,
+				() -> woolDemandStillNeeded(level, data, camp, ConstructionPlanner.materialDemands(data, camp)));
+			if (shearingSession != null) return Action.SHEAR_SHEEP;
+		}
 		currentMaterialRecipe = chooseMaterialRecipe();
 		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS) {
 			workbenchTicket = prepareWorkbenchCrafting();
@@ -717,6 +753,55 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean isWorkbenchAction() {
 		return isCollectWorkbenchAction() || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL;
+	}
+
+	/** The live sheep position, not the originally selected block, drives both travel and work. */
+	private void tickShearing() {
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()
+			|| shouldEat() || meetingTicket != null || emergencyForage() || hasReturnCargo()) { stop(); return; }
+		var sheep = shearingSession.sheep();
+		target = shearingSession.position();
+		if (!constructionPathIsTicking() || !workbenchPathInBounds(level)) { deferShearing(); return; }
+		villager.getLookControl().setLookAt(sheep);
+		if (villager.distanceToSqr(sheep) <= INTERACTION_DISTANCE_SQUARED
+			&& navigationSearchRegionLoaded() && villager.hasLineOfSight(sheep)) {
+			villager.getNavigation().stop();
+			int duration = settlementData().personalityOf(settlement, villager.getUUID())
+				.workDuration(SHEARING_TICKS, VillagerPersonality.WorkType.GATHER);
+			if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
+			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+			if (++progress < duration) return;
+			try {
+				// finish owns the final live gates, the sole vanilla shear call, and real tool damage.
+				SettlementShearing.finish(shearingSession);
+			} finally { stop(); }
+			return;
+		}
+		progress = 0; // A moving/occluded sheep must be reached again before any work can complete.
+		if (++travelTicks >= SHEARING_MAX_TRAVEL_TICKS) { deferShearing(); return; }
+		if (!shearingRepathRequired(shearingPathTarget, target, villager.getNavigation().isDone(), ++shearingPathAge)) return;
+		if (!navigationSearchRegionLoaded() || !foragePositionAccessible(level, target)) { deferShearing(); return; }
+		var path = villager.getNavigation().createPath(target, 0);
+		if (path == null || !path.canReach()) { deferShearing(); return; }
+		for (int index = 0; index < path.getNodeCount(); index++) {
+			if (!foragePositionAccessible(level, path.getNodePos(index))) { deferShearing(); return; }
+		}
+		// Path callbacks cannot replace the pinned sheep, hand, membership or permit unnoticed.
+		if (!isTargetValid()) { stop(); return; }
+		if (!villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())) {
+			deferShearing(); return;
+		}
+		shearingPathTarget = target.immutable();
+		shearingPathAge = 0;
+	}
+
+	static boolean shearingRepathRequired(BlockPos previous, BlockPos current, boolean navigationDone, int age) {
+		return current != null && (previous == null || !previous.equals(current) || navigationDone || age >= SHEARING_REPATH_TICKS);
+	}
+
+	private void deferShearing() {
+		shearingCooldown.defer(villager.level().getGameTime());
+		stop();
 	}
 
 	private boolean isCollectWorkbenchAction() {
@@ -931,6 +1016,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.GATHER) {
 			return selectedGatherTarget;
 		}
+		if (action == Action.SHEAR_SHEEP) return shearingSession == null ? null : shearingSession.position();
 		if (action == Action.BUILD) {
 			return currentBuildTarget == null ? null : currentBuildTarget.position();
 		}
@@ -1173,6 +1259,7 @@ public class VillagerWorkGoal extends Goal {
 				? SettlementMaterialCrafting.Recipe.DOOR : SettlementMaterialCrafting.Recipe.PLANKS)
 			&& SettlementWorkbenchCrafting.valid(workbenchTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
 		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
+		if (action == Action.SHEAR_SHEEP) return shearingSession != null && SettlementShearing.valid(shearingSession);
 		if (isSupplyAction()) return target.equals(supplyStore) && supplyAuthorization != null && supplyAuthorization.getAsBoolean()
 			&& (action == Action.RETURN_BUILD_SUPPLY ? hasReturnableSupply() : currentSupplyTargetValid());
 		if (action == Action.RETURN_TO_STOCKPILE) return cargoTicket != null && target.equals(cargoTicket.store())
@@ -1220,7 +1307,8 @@ public class VillagerWorkGoal extends Goal {
 		if (!(villager.level() instanceof ServerLevel level)) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
-		return (camp != null && SettlementWorkbenchCargo.hasReturnable(villager.getInventory(), camp.id()))
+		return (camp != null && (SettlementWorkbenchCargo.hasReturnable(villager.getInventory(), camp.id())
+			|| SettlementShearingCargo.hasReturnable(villager.getInventory(), camp.id())))
 			|| SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory())
 			|| SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory());
 	}
@@ -1536,7 +1624,7 @@ public class VillagerWorkGoal extends Goal {
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"sticks", Items.STICK, 8);
 		if (!withdrawOneLog() || !SettlementPersonalCrafting.craft(villager.getInventory(),
-			stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack), new ItemStack(Items.STICK, 8))) {
+			stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack), new ItemStack(Items.STICK, 8))) {
 			return;
 		}
 		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
@@ -1555,7 +1643,7 @@ public class VillagerWorkGoal extends Goal {
 	private boolean canCraftSticks() {
 		return hasCraftingStation()
 			&& needsSticks()
-			&& canConvertOne(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack), Items.OAK_LOG, new ItemStack(Items.STICK, 8));
+			&& canConvertOne(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack), Items.OAK_LOG, new ItemStack(Items.STICK, 8));
 	}
 
 	private boolean canPolishPickaxe() {
@@ -1573,7 +1661,7 @@ public class VillagerWorkGoal extends Goal {
 			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& availableItems(Items.SMOOTH_STONE) < 3
-			&& canConvertOne(stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack), Items.COBBLESTONE,
+			&& canConvertOne(stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack), Items.COBBLESTONE,
 				new ItemStack(Items.SMOOTH_STONE));
 	}
 
@@ -1601,7 +1689,7 @@ public class VillagerWorkGoal extends Goal {
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"smooth_stone", Items.SMOOTH_STONE, 1);
 		if (!withdrawItems(Items.COBBLESTONE, 1)
-			|| !SettlementPersonalCrafting.craft(villager.getInventory(), stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack),
+			|| !SettlementPersonalCrafting.craft(villager.getInventory(), stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack),
 				new ItemStack(Items.SMOOTH_STONE))) {
 			return;
 		}
@@ -1651,13 +1739,13 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean withdrawOneLog() {
-		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack))) {
+		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack))) {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
 		if (stockpile != null) {
 			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-				if (!stockpile.getItem(slot).is(ItemTags.LOGS) || SettlementWorkbenchCargo.isMarked(stockpile.getItem(slot))) {
+				if (!stockpile.getItem(slot).is(ItemTags.LOGS) || SettlementWorkbenchCargo.isMarked(stockpile.getItem(slot)) || SettlementShearingCargo.isMarked(stockpile.getItem(slot))) {
 					continue;
 				}
 				ItemStack removed = stockpile.removeItem(slot, 1);
@@ -1674,7 +1762,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isPolishedPickaxe(ItemStack stack) {
-		if (!stack.is(Items.STONE_PICKAXE) || SettlementWorkbenchCargo.isMarked(stack)) {
+		if (!stack.is(Items.STONE_PICKAXE) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack)) {
 			return false;
 		}
 		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
@@ -1737,7 +1825,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean hasStonePickaxe() {
 		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
-		if (SettlementWorkbenchCargo.isMarked(hand)) return false;
+		if (SettlementWorkbenchCargo.isMarked(hand) || SettlementShearingCargo.isMarked(hand)) return false;
 		if (hand.is(Items.STONE_PICKAXE)) {
 			return true;
 		}
@@ -1746,7 +1834,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
 			ItemStack stack = villager.getInventory().getItem(slot);
-			if (stack.is(Items.STONE_PICKAXE) && !SettlementWorkbenchCargo.isMarked(stack)) {
+			if (stack.is(Items.STONE_PICKAXE) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack)) {
 				villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
 				villager.getInventory().setItem(slot, ItemStack.EMPTY);
 				return true;
@@ -1776,7 +1864,7 @@ public class VillagerWorkGoal extends Goal {
 		int count = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (stack.is(item) && !SettlementWorkbenchCargo.isMarked(stack)) count += stack.getCount();
+			if (stack.is(item) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack)) count += stack.getCount();
 		}
 		return count;
 	}
@@ -1786,7 +1874,7 @@ public class VillagerWorkGoal extends Goal {
 		int transferred = 0;
 		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
 			ItemStack stack = source.getItem(slot);
-			if (stack.isEmpty() || !stack.is(item) || SettlementWorkbenchCargo.isMarked(stack)) continue;
+			if (stack.isEmpty() || !stack.is(item) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack)) continue;
 			ItemStack offered = stack.copy();
 			offered.setCount(Math.min(stack.getCount(), count - transferred));
 			int inserted = SettlementStockpile.insert(target, offered);
@@ -1803,7 +1891,7 @@ public class VillagerWorkGoal extends Goal {
 		int remaining = count;
 		for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item) || SettlementWorkbenchCargo.isMarked(stack)) {
+			if (!stack.is(item) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack)) {
 				continue;
 			}
 			ItemStack removed = inventory.removeItem(slot, remaining);
@@ -1819,6 +1907,7 @@ public class VillagerWorkGoal extends Goal {
 		GATHER("gather"),
 		FORAGE("forage"),
 		HARVEST_CROP("harvest_crop"),
+		SHEAR_SHEEP("shear_sheep"),
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
 		CRAFT_MATERIALS("craft_materials"),

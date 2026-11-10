@@ -56,7 +56,10 @@ public final class Civilization {
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
 		ServerTickEvents.END_SERVER_TICK.register(Civilization::tick);
 		ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
-			if (entity instanceof Villager villager) VillagerWorkGoal.cancelMeetingInvitation(villager);
+			if (entity instanceof Villager villager) {
+				VillagerWorkGoal.cancelMeetingInvitation(villager);
+				VillagerWorkGoal.cancelShearingOnUnload(villager);
+			}
 		});
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {
 			if (entity instanceof Villager villager) {

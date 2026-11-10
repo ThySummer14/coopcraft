@@ -5,6 +5,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"PlayerAdvancementsMixin",
+		"SheepShearingDropsMixin",
 		"VillagerMakeLoveMixin",
 		"VillagerInteractionMixin",
 		"MerchantMenuMixin",
