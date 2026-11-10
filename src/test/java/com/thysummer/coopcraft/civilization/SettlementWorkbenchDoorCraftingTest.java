@@ -191,7 +191,7 @@ class SettlementWorkbenchDoorCraftingTest {
 
 	@Test void unsupportedRecipesCannotStartAndTwoWorkersCannotClaimSameSixPlanks() {
 		Fixture f = new Fixture();
-		assertNull(SettlementWorkbenchCrafting.prepare(f.data, f.camp, ACTOR, f.bag, Recipe.STICKS, () -> true, () -> true));
+		assertNull(SettlementWorkbenchCrafting.prepare(f.data, f.camp, ACTOR, f.bag, Recipe.CAMPFIRE_COAL, () -> true, () -> true));
 		assertNull(SettlementWorkbenchCrafting.prepare(f.data, f.camp, ACTOR, f.bag, null, () -> true, () -> true));
 		UUID other = new UUID(83, 2);
 		f.data.registerMember(f.camp, other, 0);

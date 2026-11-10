@@ -65,7 +65,7 @@ class ConstructionSupplyGoalWiringTest {
 		assertTrue(stop.contains("supplyAuthorization=null"));
 		assertFalse(stop.contains("getInventory"));
 		assertFalse(stop.contains("ConstructionSupply"));
-		assertTrue(methods.get("chooseAction").startsWith("{if(settlementData().getStockpile(settlement).isEmpty())returnnull;"));
+		assertTrue(methods.get("chooseAction").startsWith("{toolStickDemand=false;if(settlementData().getStockpile(settlement).isEmpty())returnnull;"));
 		assertTrue(methods.get("findWorkSettlement").contains("ConstructionSupply.hasAny(villager.getInventory())"));
 		String lookup = methods.get("findWorkSettlement");
 		// Javac's AST printer may parenthesize an inferred single lambda parameter.
