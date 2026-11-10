@@ -1,5 +1,7 @@
 package com.thysummer.coopcraft.civilization;
 
+import com.thysummer.coopcraft.civilization.simulation.ResourceType;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
