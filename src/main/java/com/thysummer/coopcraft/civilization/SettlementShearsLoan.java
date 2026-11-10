@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
@@ -38,6 +39,8 @@ public final class SettlementShearsLoan {
 	}
 
 	private record Stamp(ResourceLocation dimension, UUID camp, UUID actor, UUID loan, boolean hadCustomData) { }
+	/** Immutable identity only; exposing it never transfers or authorizes custody of a tool. */
+	public record Identity(ResourceLocation dimension, UUID camp, UUID actor, UUID loan) { }
 
 	/** Presence, not recognition: wrong items, corrupt formats and future versions stay quarantined. */
 	public static boolean isMarked(ItemStack stack) {
@@ -98,6 +101,13 @@ public final class SettlementShearsLoan {
 	}
 
 	public static boolean isRecognized(ItemStack stack) { return read(stack) != null; }
+
+	/** Uses exactly the same strict parser as ordinary returns, including conflicting-purpose checks. */
+	public static Optional<Identity> identityOf(ItemStack stack) {
+		Stamp stamp = read(stack);
+		return stamp == null ? Optional.empty() : Optional.of(
+			new Identity(stamp.dimension(), stamp.camp(), stamp.actor(), stamp.loan()));
+	}
 
 	public static boolean ownedBy(ItemStack stack, ResourceLocation dimension, UUID camp, UUID actor) {
 		Stamp stamp = read(stack);

@@ -107,6 +107,13 @@ public final class SettlementCommands {
 			.then(LiteralArgumentBuilder.<S>literal("recover")
 				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
 					.executes(ctx -> handler.run(ctx, "cargo", "recover"))))
+			.then(LiteralArgumentBuilder.<S>literal("shears")
+				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "cargo", "shears"))))
+			.then(LiteralArgumentBuilder.<S>literal("reclaim-shears").requires(admin)
+				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
+					.then(RequiredArgumentBuilder.<S, String>argument("cargo_settlement", StringArgumentType.word())
+						.executes(ctx -> handler.run(ctx, "cargo", "reclaim-shears")))))
 			.then(LiteralArgumentBuilder.<S>literal("stranded").requires(admin)
 				.executes(ctx -> handler.run(ctx, "cargo", "stranded")))
 			.then(LiteralArgumentBuilder.<S>literal("rescue").requires(admin)
@@ -162,6 +169,8 @@ public final class SettlementCommands {
 			throw new IllegalStateException("Settlement commands require the server thread");
 		}
 		// Remnants remain at the death location even after the resident's membership is removed.
+		if (action.equals("cargo") && (option.equals("shears") || option.equals("reclaim-shears")))
+			return SettlementShearsReclaimCommands.execute(context, option);
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
 		if (action.equals("shearing")) return SettlementShearingCommands.execute(context, option);

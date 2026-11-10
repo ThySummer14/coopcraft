@@ -736,5 +736,19 @@
 	"coopcraft.command.settlement.shearing_help": "Candidates: /coop settlement shearing nearby; grant: preview <sheep_uuid> then confirm; revoke: revoke <sheep_uuid>.",
 	"coopcraft.interaction.action.shear_sheep": "Following a permitted white sheep and shearing with real shears",
 	"coopcraft.interaction.action.borrow_shears": "Walking to the stockpile to borrow real shears",
-	"coopcraft.interaction.action.return_shears": "Returning borrowed shears"
+	"coopcraft.interaction.action.return_shears": "Returning borrowed shears",
+	"coopcraft.command.settlement.cargo_shears_player_unavailable": "Requires the current online, living, non-spectator player.",
+	"coopcraft.command.settlement.cargo_shears_actual_position": "Run at your actual position and dimension; execute cannot substitute a recovery location.",
+	"coopcraft.command.settlement.cargo_shears_none": "No eligible shears with recorded death-settlement evidence. Legacy, unknown, or mismatched loans remain unchanged.",
+	"coopcraft.command.settlement.cargo_shears_scope": "Only eligible shears still held in the death record can be reclaimed. OP 2 must stand within 3 blocks of the original site. Tools enter your main inventory; carry them back to the stockpile yourself. Loans already in player inventories are not processed.",
+	"coopcraft.command.settlement.cargo_shears_settlement_invalid": "Invalid settlement UUID or the specified settlement no longer exists.",
+	"coopcraft.command.settlement.cargo_shears_not_at_place": "Both player and original death site must be in bounds, loaded, and ticking, within 3 blocks of each other.",
+	"coopcraft.command.settlement.cargo_shears_borrower_present": "A membership claim or living borrower is still present, or identity checks are incomplete. No loan was settled.",
+	"coopcraft.command.settlement.cargo_shears_no_capacity": "No free main-inventory slot. The shears and loan remain in the original record.",
+	"coopcraft.command.settlement.cargo_shears_invalid": "No eligible shears match the specified settlement, deceased borrower, dimension, and recorded death evidence.",
+	"coopcraft.command.settlement.cargo_shears_changed": "The player, settlement, record, or identity changed before transfer. Undelivered tools remain in custody.",
+	"coopcraft.command.settlement.cargo_shears_row": "Settlement %1$s (%2$s): %3$s shears eligible for reclaim.",
+	"coopcraft.command.settlement.cargo_shears_camp_unavailable": "Settlement %1$s is unavailable. Its %2$s shears remain in custody and cannot be reclaimed.",
+	"coopcraft.command.settlement.cargo_shears_hint": "At the site, run /coop settlement cargo reclaim-shears %1$s <settlementUUID> to explicitly reclaim and release the matching loans.",
+	"coopcraft.command.settlement.cargo_shears_recovered": "Reclaimed %2$s shears for settlement %1$s into your main inventory and released their loans. %3$s items remain in the record. Carry the tools back to the stockpile yourself."
 }

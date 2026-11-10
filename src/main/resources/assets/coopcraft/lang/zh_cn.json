@@ -736,5 +736,19 @@
 	"coopcraft.command.settlement.shearing_help": "查看候选：/coop settlement shearing nearby；授权：preview <sheep_uuid> 后 confirm；撤销：revoke <sheep_uuid>。",
 	"coopcraft.interaction.action.shear_sheep": "正在追踪获准白羊并使用真实剪刀剪毛",
 	"coopcraft.interaction.action.borrow_shears": "正在到公仓领取真实剪刀",
-	"coopcraft.interaction.action.return_shears": "正在归还借用剪刀"
+	"coopcraft.interaction.action.return_shears": "正在归还借用剪刀",
+	"coopcraft.command.settlement.cargo_shears_player_unavailable": "需要当前在线、存活且非旁观的真实玩家。",
+	"coopcraft.command.settlement.cargo_shears_actual_position": "请在真实玩家所在维度和位置执行，不能用 execute 伪造现场。",
+	"coopcraft.command.settlement.cargo_shears_none": "这条记录没有具备死亡营地证据且可清算的合法剪刀；旧档、未知或异属借据仍原样保留。",
+	"coopcraft.command.settlement.cargo_shears_scope": "只清算仍在真实遗物记录中的合法剪刀；须 OP 2 在原死亡点3格内执行，进入本人主背包后自行携回公仓。不会处理已取入玩家背包的借据。",
+	"coopcraft.command.settlement.cargo_shears_settlement_invalid": "指定营地 UUID 无效或营地已不存在。",
+	"coopcraft.command.settlement.cargo_shears_not_at_place": "玩家和原死亡点须在边界内、已加载且活动，实际距离不超过3格。",
+	"coopcraft.command.settlement.cargo_shears_borrower_present": "仍发现该借用者的成员声明、活体，或无法完整核实身份；未清算。",
+	"coopcraft.command.settlement.cargo_shears_no_capacity": "主背包没有可用空槽；剪刀与借据仍留在原记录。",
+	"coopcraft.command.settlement.cargo_shears_invalid": "这条记录没有与指定营地、死者、维度及死亡证据一致的合法剪刀。",
+	"coopcraft.command.settlement.cargo_shears_changed": "玩家、营地、记录或身份在交接前发生变化；未交接的工具仍保留。",
+	"coopcraft.command.settlement.cargo_shears_row": "营地 %1$s（%2$s）：可清算剪刀 %3$s 把。",
+	"coopcraft.command.settlement.cargo_shears_camp_unavailable": "营地 %1$s 已不可用，记录中 %2$s 把剪刀仍保留，不能清算。",
+	"coopcraft.command.settlement.cargo_shears_hint": "到场后执行 /coop settlement cargo reclaim-shears %1$s <营地UUID>，显式取回并解除对应借据。",
+	"coopcraft.command.settlement.cargo_shears_recovered": "已将营地 %1$s 的 %2$s 把剪刀移入你的主背包并解除借据；整条遗物记录还剩 %3$s 件。请自行携回公仓。"
 }

@@ -38,7 +38,7 @@ import net.minecraft.world.level.saveddata.SavedData;
  */
 public final class SettlementCargoRecovery extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlement_cargo_recovery";
-	private static final int DATA_VERSION = 2;
+	private static final int DATA_VERSION = 3;
 	private static final int MAX_CARGO_SLOTS = 8;
 	private static final int MAX_RECORD_SLOTS = MAX_CARGO_SLOTS + 1;
 	private static final int MAX_PENDING_DEATH_NOTICES = 128;
@@ -56,6 +56,7 @@ public final class SettlementCargoRecovery extends SavedData {
 	public enum Status { UNAVAILABLE, INVALID, NOT_AT_PLACE, NO_CAPACITY, RECOVERED }
 	public record Result(Status status, int moved, int remaining) { }
 	public record MaterialCount(ResourceLocation itemId, int count) { }
+	public record ShearsClaim(UUID camp, int count) { }
 	public record Snapshot(UUID recordId, UUID deceasedId, BlockPos position, String name,
 		List<MaterialCount> items, int totalCount) {
 		public Snapshot { position = position.immutable(); items = List.copyOf(items); }
@@ -136,7 +137,7 @@ public final class SettlementCargoRecovery extends SavedData {
 		// Potatoes and their poisonous byproduct are real custody in either mode, including old/custom stacks.
 		// Other ordinary food keeps the earlier mode-specific personal-ration boundary.
 		boolean preserveFood = !SettlementSimulationService.isSurvivalEnabled(claim.data(), claim.settlement());
-		CargoRecord record = new CargoRecord(deceasedId, position, safeName(name), new ArrayList<>());
+		CargoRecord record = new CargoRecord(deceasedId, position, safeName(name), claim.settlement().id(), new ArrayList<>());
 		// Move only actual source contents. Repeated callbacks see the drained inventory.
 		for (int slot = 0; slot < source.getContainerSize(); slot++) {
 			ItemStack stack = source.getItem(slot);
@@ -221,6 +222,75 @@ public final class SettlementCargoRecovery extends SavedData {
 		return new Result(moved > 0 ? Status.RECOVERED : Status.NO_CAPACITY, moved, record.total());
 	}
 
+	/**
+	 * Read-only, immutable counts. A tool's own marker cannot prove the deceased's camp: the record
+	 * must independently retain that evidence from capture. Migrated records never acquire it by inference.
+	 */
+	public List<ShearsClaim> reclaimableShears(UUID recordId, ResourceLocation dimension) {
+		if (!available() || recordId == null || dimension == null) return List.of();
+		CargoRecord record = records.get(recordId);
+		if (record == null || record.deathSettlement == null) return List.of();
+		int count = 0;
+		for (ItemStack stack : record.stacks) {
+			if (SettlementShearsLoan.ownedBy(stack, dimension, record.deathSettlement, record.deceasedId)) count++;
+		}
+		return count == 0 ? List.of() : List.of(new ShearsClaim(record.deathSettlement, count));
+	}
+
+	/**
+	 * Explicitly reclaims only existing, recognized loans from this actual death record. The caller
+	 * supplies the player's 36 main slots and rechecks operator permission, same-dimension death-site
+	 * arrival, the explicitly selected camp and the absence of an active borrower on every callback.
+	 * Storage and destination must be distinct, non-overlapping and non-reentrant, with the same
+	 * synchronous reference-retaining setter contract as SettlementShearsLoan. Ordinary recover keeps
+	 * all markers intact; this method never scans a player's already recovered belongings.
+	 * Result.remaining counts all cargo still in the record, including quarantined/non-loan items.
+	 */
+	public Result reclaimShears(UUID recordId, ResourceLocation dimension, UUID camp, Container destination,
+		BooleanSupplier authority) {
+		if (!available()) return new Result(Status.UNAVAILABLE, 0, 0);
+		if (recordId == null || dimension == null || camp == null || destination == null || authority == null)
+			return new Result(Status.INVALID, 0, 0);
+		CargoRecord record = records.get(recordId);
+		if (!authority.getAsBoolean() || !available() || records.get(recordId) != record)
+			return new Result(Status.NOT_AT_PLACE, 0, 0);
+		if (record == null || !camp.equals(record.deathSettlement)) return new Result(Status.INVALID, 0, 0);
+		if (reclaimableShears(recordId, dimension).isEmpty()) return new Result(Status.INVALID, 0, record.total());
+		boolean[] stillAuthorized = { true };
+		BooleanSupplier currentAuthority = () -> {
+			boolean allowed = available() && records.get(recordId) == record && authority.getAsBoolean();
+			// An authority check must not make a stale record into a source of new items.
+			stillAuthorized[0] = allowed && available() && records.get(recordId) == record;
+			return stillAuthorized[0];
+		};
+		int moved = 0;
+		try {
+			for (int slot = 0; slot < record.stacks.size(); slot++) {
+				if (!SettlementShearsLoan.ownedBy(record.stacks.get(slot), dimension, camp, record.deceasedId)) continue;
+				int recordSlot = slot;
+				SettlementShearsLoan.Hand source = new SettlementShearsLoan.Hand() {
+					@Override public ItemStack get() { return record.stacks.get(recordSlot); }
+					@Override public void set(ItemStack stack) {
+						if (record.stacks.get(recordSlot) == stack) return;
+						record.stacks.set(recordSlot, stack);
+						setDirty();
+					}
+				};
+				// The live marked reference is detached, accepted, then unmarked by the existing loan logic.
+				if (SettlementShearsLoan.returnFromHand(source, destination, dimension, camp, record.deceasedId, currentAuthority))
+					moved++;
+				if (!stillAuthorized[0]) break;
+			}
+		} finally {
+			if (records.get(recordId) == record) {
+				if (record.stacks.removeIf(ItemStack::isEmpty)) setDirty();
+				if (record.stacks.isEmpty()) { records.remove(recordId); setDirty(); }
+			}
+		}
+		return new Result(moved > 0 ? Status.RECOVERED : stillAuthorized[0] ? Status.NO_CAPACITY : Status.NOT_AT_PLACE,
+			moved, record.total());
+	}
+
 	@Override
 	public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
 		if (!available()) return preservedUnreadable.copy();
@@ -231,6 +301,7 @@ public final class SettlementCargoRecovery extends SavedData {
 			entry.putUUID("Deceased", record.deceasedId);
 			entry.putLong("Position", record.position.asLong());
 			entry.putString("Name", record.name);
+			if (record.deathSettlement != null) entry.putUUID("DeathSettlement", record.deathSettlement);
 			ListTag stacks = new ListTag();
 			for (ItemStack stack : record.stacks) if (!stack.isEmpty()) stacks.add(stack.save(registries));
 			entry.put("Stacks", stacks);
@@ -244,7 +315,7 @@ public final class SettlementCargoRecovery extends SavedData {
 		SettlementCargoRecovery data = new SettlementCargoRecovery();
 		try {
 			int version = tag.getInt("DataVersion");
-			if (!tag.contains("DataVersion", Tag.TAG_INT) || (version != 1 && version != DATA_VERSION)
+			if (!tag.contains("DataVersion", Tag.TAG_INT) || (version != 1 && version != 2 && version != DATA_VERSION)
 				|| !tag.contains("Records", Tag.TAG_LIST)) {
 				return unreadable(tag);
 			}
@@ -254,6 +325,9 @@ public final class SettlementCargoRecovery extends SavedData {
 				CompoundTag entry = list.getCompound(index);
 				if (!entry.hasUUID("Deceased") || !entry.contains("Position", Tag.TAG_LONG)
 					|| !entry.contains("Stacks", Tag.TAG_LIST) || !entry.contains("Name", Tag.TAG_STRING)) return unreadable(tag);
+				// Old formats never recorded this evidence. A same-named field cannot be promoted to proof.
+				if (entry.contains("DeathSettlement") && (version < 3 || !entry.hasUUID("DeathSettlement"))) return unreadable(tag);
+				UUID deathSettlement = entry.hasUUID("DeathSettlement") ? entry.getUUID("DeathSettlement") : null;
 				UUID id = entry.getUUID("Deceased");
 				if (data.records.containsKey(id)) return unreadable(tag);
 				List<ItemStack> stacks = new ArrayList<>();
@@ -267,7 +341,7 @@ public final class SettlementCargoRecovery extends SavedData {
 					stacks.add(stack);
 				}
 				data.records.put(id, new CargoRecord(id, BlockPos.of(entry.getLong("Position")),
-					safeName(entry.getString("Name")), stacks));
+					safeName(entry.getString("Name")), deathSettlement, stacks));
 			}
 			return data;
 		} catch (RuntimeException exception) {
@@ -293,9 +367,11 @@ public final class SettlementCargoRecovery extends SavedData {
 		private final UUID deceasedId;
 		private final BlockPos position;
 		private final String name;
+		private final UUID deathSettlement;
 		private final List<ItemStack> stacks;
-		private CargoRecord(UUID deceasedId, BlockPos position, String name, List<ItemStack> stacks) {
+		private CargoRecord(UUID deceasedId, BlockPos position, String name, UUID deathSettlement, List<ItemStack> stacks) {
 			this.deceasedId = deceasedId; this.position = position.immutable(); this.name = name; this.stacks = stacks;
+			this.deathSettlement = deathSettlement;
 		}
 		private int total() { return stacks.stream().mapToInt(ItemStack::getCount).sum(); }
 		private Snapshot snapshot() {

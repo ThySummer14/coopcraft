@@ -111,7 +111,7 @@ class SettlementShearsLoanDeathTest {
 		assertEquals(9, f.recovery.takeDeathNotice(f.deathIdentity));
 		assertEquals(0, f.recovery.takeDeathNotice(f.deathIdentity));
 		CompoundTag saved = save(f.recovery);
-		assertEquals(2, saved.getInt("DataVersion"));
+		assertEquals(3, saved.getInt("DataVersion"));
 		assertEquals(9, saved.getList("Records", Tag.TAG_COMPOUND).getCompound(0).getList("Stacks", Tag.TAG_COMPOUND).size());
 		SettlementCargoRecovery loaded = SettlementCargoRecovery.load(saved, registries);
 		assertEquals(saved, save(loaded));
@@ -223,10 +223,11 @@ class SettlementShearsLoanDeathTest {
 		for (int slot = 0; slot < 8; slot++) f.bag.setItem(slot, cargo(slot));
 		assertEquals(8, f.capture());
 		CompoundTag legacy = save(f.recovery); legacy.putInt("DataVersion", 1);
+		legacy.getList("Records", Tag.TAG_COMPOUND).getCompound(0).remove("DeathSettlement");
 		SettlementCargoRecovery migrated = SettlementCargoRecovery.load(legacy, registries);
 		assertTrue(migrated.available()); assertEquals(8, migrated.inspect(f.actor).orElseThrow().totalCount());
 		CompoundTag upgraded = save(migrated);
-		assertEquals(2, upgraded.getInt("DataVersion"));
+		assertEquals(3, upgraded.getInt("DataVersion"));
 		assertEquals(legacy.get("Records"), upgraded.get("Records"));
 		CompoundTag oldNine = legacy.copy();
 		ListTag oldStacks = oldNine.getList("Records", Tag.TAG_COMPOUND).getCompound(0).getList("Stacks", Tag.TAG_COMPOUND);
@@ -234,11 +235,13 @@ class SettlementShearsLoanDeathTest {
 		assertUnavailable(oldNine);
 		CompoundTag newNine = oldNine.copy(); newNine.putInt("DataVersion", 2);
 		assertTrue(SettlementCargoRecovery.load(newNine, registries).available());
-		assertEquals(newNine, save(SettlementCargoRecovery.load(newNine, registries)));
+		CompoundTag migratedNine = newNine.copy(); migratedNine.putInt("DataVersion", 3);
+		assertEquals(migratedNine, save(SettlementCargoRecovery.load(newNine, registries)));
 		CompoundTag newTen = newNine.copy();
 		newTen.getList("Records", Tag.TAG_COMPOUND).getCompound(0).getList("Stacks", Tag.TAG_COMPOUND).add(f.loan().save(registries));
 		assertUnavailable(newTen);
-		CompoundTag future = newNine.copy(); future.putInt("DataVersion", 3); future.putString("FutureField", "preserve");
+		CompoundTag v3Ten = newTen.copy(); v3Ten.putInt("DataVersion", 3); assertUnavailable(v3Ten);
+		CompoundTag future = newNine.copy(); future.putInt("DataVersion", 4); future.putString("FutureField", "preserve");
 		assertUnavailable(future);
 		CompoundTag wrongType = newNine.copy(); wrongType.putByte("DataVersion", (byte) 2); assertUnavailable(wrongType);
 	}
