@@ -86,6 +86,8 @@
 	"coopcraft.interaction.action.gather": "采集标记资源",
 	"coopcraft.interaction.action.forage": "采集甜浆果",
 	"coopcraft.interaction.action.build": "施工",
+	"coopcraft.interaction.action.share_food": "分享随身余粮",
+	"coopcraft.interaction.action.receive_food": "接过同伴口粮",
 	"coopcraft.interaction.action.eat_personal": "吃随身口粮",
 	"coopcraft.interaction.action.eat": "前往公仓进食",
 	"coopcraft.interaction.action.craft": "制作工具",

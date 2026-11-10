@@ -46,6 +46,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private final Villager villager;
 	private Action action;
+	private SettlementFoodSharingScene.Session foodSharingSession;
+	private final ProposalConversationCooldown foodSharingCooldown = new ProposalConversationCooldown();
 	private SettlementPersonalMeal.Ticket personalMealTicket;
 	private SettlementPersonalMeal.Ticket personalMealOrigin;
 	private SettlementPersonalMeal.Clock personalMealClock;
@@ -123,8 +125,12 @@ public class VillagerWorkGoal extends Goal {
 			// A physical public meal may be unreachable; own food needs no trip to that store.
 			if (action == Action.EAT && preparePersonalMeal()) return true;
 			// Selection is a boundary, never a licence to interrupt a valid current job.
-			if (action != null && isTargetValid()) return true;
+			if (action != null && isTargetValid()) {
+				if (!isFoodSharingAction()) SettlementFoodSharingScene.cancelOnUnload(villager);
+				return true;
+			}
 			cancelPersonalMeal();
+			if (foodSharingSession != null) cancelFoodSharing();
 			cancelScouting();
 			if (action == Action.COLLECT_STONE_PICKAXE) publicPickaxeCooldown.defer(villager.level().getGameTime());
 			cancelChildCare(); cancelSowing();
@@ -142,6 +148,9 @@ public class VillagerWorkGoal extends Goal {
 			releaseForageLease();
 			refreshMeetingInvitation();
 			if (preparePersonalMeal()) return true;
+			// Existing work already returned above. Own eating and meeting invitations win.
+			if (action != null && !isTargetValid()) { action = null; target = null; }
+			if (prepareFoodSharing()) return true;
 			Optional<Settlement> workSettlement = findWorkSettlement();
 			if (workSettlement.isEmpty()) {
 				cargoTicket = null;
@@ -253,7 +262,7 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
 			progress = 0;
 			return action != null;
-		} catch (RuntimeException | Error failure) { cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
@@ -263,6 +272,10 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.EAT_PERSONAL) {
 				if (personalMealValid()) return true;
 				cancelPersonalMeal(); return false;
+			}
+			if (isFoodSharingAction()) {
+				if (foodSharingValid()) return true;
+				cancelFoodSharing(); return false;
 			}
 			refreshMeetingInvitation();
 			if (action == Action.SCOUT_MATERIAL_AREA && !scoutingValid()) { cancelScouting(); return false; }
@@ -293,7 +306,7 @@ public class VillagerWorkGoal extends Goal {
 			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
 			if (!continuing) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); }
 			return continuing;
-		} catch (RuntimeException | Error failure) { cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
@@ -302,6 +315,7 @@ public class VillagerWorkGoal extends Goal {
 			progress = 0;
 			travelTicks = 0;
 			if (action == Action.EAT_PERSONAL) { villager.getNavigation().stop(); tickPersonalMeal(); }
+			else if (isFoodSharingAction()) { villager.getNavigation().stop(); tickFoodSharing(); }
 			else if (action == Action.SCOUT_MATERIAL_AREA) { villager.getNavigation().stop(); tickScouting(); }
 			else if (isProposalConversationAction()) { villager.getNavigation().stop(); tickProposalConversation(); }
 			else if (action == Action.DISCUSS_COUNCIL) { villager.getNavigation().stop(); tickAutonomousMeeting(); }
@@ -316,11 +330,12 @@ public class VillagerWorkGoal extends Goal {
 			else if (action == Action.FEED_CHILD) { villager.getNavigation().stop(); tickChildCare(); }
 			else if (action == Action.SOW_POTATO) { villager.getNavigation().stop(); tickSowing(); }
 			else navigateToTarget();
-		} catch (RuntimeException | Error failure) { cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
+		cancelFoodSharing();
 		cancelPersonalMeal();
 		cancelScouting();
 		cancelProposalConversation();
@@ -349,6 +364,67 @@ public class VillagerWorkGoal extends Goal {
 		searchCooldown = 0;
 		travelTicks = 0;
 		villager.getNavigation().stop();
+	}
+
+	private boolean isFoodSharingAction() { return action == Action.SHARE_FOOD || action == Action.RECEIVE_FOOD; }
+
+	/** Read-only: a reservation cannot commandeer another Goal's valid task or custody. */
+	static boolean readyForFoodSharing(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && !goal.isFoodSharingAction()) || goal.personalMealTicket != null
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.cargoTicket != null
+			|| goal.teachingSession != null || goal.autonomousMeetingSession != null || goal.proposalConversationSession != null
+			|| goal.childCareTicket != null || goal.childCareLease != null || goal.sowingTicket != null
+			|| goal.materialLease != null || goal.forageLease != null || goal.workbenchTicket != null
+			|| goal.hasAnyShearsLoan() || goal.hasTeachingCustody() || ConstructionSupply.hasAny(resident.getInventory())
+			|| SettlementCargo.hasCargo(resident.getInventory())
+			|| resident.getInventory().hasAnyMatching(stack -> SettlementFoodAge.isMarked(stack) || SettlementShearingCargo.isMarked(stack)
+				|| SettlementWorkbenchCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack))
+			|| !resident.getMainHandItem().isEmpty() || !resident.getOffhandItem().isEmpty()) return false;
+		var data = SettlementSavedData.get(level);
+		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
+			&& !data.councilSessions().claimed(resident.getUUID()) && !SettlementProposalConversation.claimed(resident)
+			&& !data.childCareClaims().claimed(resident.getUUID(), level.getGameTime());
+	}
+	static SettlementFoodSharingScene.Session foodSharingSessionOf(Villager resident) {
+		var goal = goalOf(resident);
+		return goal != null && goal.isFoodSharingAction() ? goal.foodSharingSession : null;
+	}
+	private boolean prepareFoodSharing() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		var data = SettlementSavedData.get(level);
+		var camp = data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		if (camp == null || !readyForFoodSharing(villager)) {
+			SettlementFoodSharingScene.cancelOnUnload(villager); return false;
+		}
+		var session = SettlementFoodSharingScene.current(villager, data);
+		if (session == null && foodSharingCooldown.attempt(level.getGameTime()))
+			session = SettlementFoodSharingScene.poll(villager, data, camp);
+		if (session == null) return false;
+		settlement = camp; foodSharingSession = session;
+		action = session.giver == villager ? Action.SHARE_FOOD : Action.RECEIVE_FOOD;
+		target = villager.blockPosition().immutable(); progress = 0;
+		if (!SettlementFoodSharingScene.join(session, villager)) { cancelFoodSharing(); return false; }
+		return true;
+	}
+	private boolean foodSharingValid() {
+		refreshMeetingInvitation();
+		return foodSharingSession != null && target != null && target.equals(villager.blockPosition())
+			&& readyForFoodSharing(villager) && SettlementFoodSharingScene.valid(foodSharingSession);
+	}
+	private void tickFoodSharing() {
+		if (!foodSharingValid()) { stop(); return; }
+		var session = foodSharingSession;
+		villager.getNavigation().stop();
+		villager.getLookControl().setLookAt(session.giver == villager ? session.recipient : session.giver, 30, 30);
+		SettlementFoodSharingScene.pulse(session, villager);
+		if (!foodSharingValid()) stop();
+	}
+	private void cancelFoodSharing() {
+		SettlementFoodSharingScene.cancelOnUnload(villager);
+		SettlementFoodSharingScene.cancel(foodSharingSession); foodSharingSession = null;
+		if (isFoodSharingAction()) { action = null; target = null; }
 	}
 
 	/** One failed-scan clock per Goal, retained across stop/start; invitations bypass this clock. */
@@ -382,7 +458,8 @@ public class VillagerWorkGoal extends Goal {
 		SettlementSavedData data = SettlementSavedData.get(level);
 		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
 			&& !data.councilSessions().claimed(resident.getUUID())
-			&& !data.childCareClaims().claimed(resident.getUUID(), level.getGameTime());
+			&& !data.childCareClaims().claimed(resident.getUUID(), level.getGameTime())
+			&& !SettlementFoodSharingScene.claimed(resident);
 	}
 
 	static SettlementProposalConversation.Session proposalConversationSessionOf(Villager resident) {
@@ -436,7 +513,7 @@ public class VillagerWorkGoal extends Goal {
 			|| goal.foodTicket != null || goal.meetingTicket != null || goal.hasAnyShearsLoan()
 			|| goal.hasReturnCargo() || goal.hasTeachingCustody()) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
-		if (data.councilSessions().claimed(resident.getUUID()) || SettlementProposalConversation.claimed(resident)) return false;
+		if (data.councilSessions().claimed(resident.getUUID()) || (SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident))) return false;
 		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
 		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
 	}
@@ -452,7 +529,7 @@ public class VillagerWorkGoal extends Goal {
 			|| SettlementCargo.isMaterial(resident.getOffhandItem())) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
 		if (data.teachingSessions().find(resident.getUUID(), level.getGameTime()) != null
-			|| SettlementProposalConversation.claimed(resident)) return false;
+			|| (SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident))) return false;
 		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
 		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
 	}
@@ -623,7 +700,7 @@ public class VillagerWorkGoal extends Goal {
 		SettlementSavedData data = SettlementSavedData.get(level);
 		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
 			&& !data.councilSessions().claimed(resident.getUUID())
-			&& !SettlementProposalConversation.claimed(resident);
+			&& !(SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident));
 	}
 
 	private boolean childCareInterrupted() {
@@ -853,7 +930,8 @@ public class VillagerWorkGoal extends Goal {
 	static void cancelShearingOnUnload(Villager villager) {
 		SettlementProposalConversation.cancelOnUnload(villager);
 		VillagerWorkGoal goal = goalOf(villager);
-		if (goal != null) { goal.cancelPersonalMeal(); goal.cancelShearing(); goal.cancelChildCare(); goal.cancelSowing(); goal.cancelProposalConversation(); }
+		SettlementFoodSharingScene.cancelOnUnload(villager);
+		if (goal != null) { goal.cancelFoodSharing(); goal.cancelPersonalMeal(); goal.cancelShearing(); goal.cancelChildCare(); goal.cancelSowing(); goal.cancelProposalConversation(); }
 		if (villager.level() instanceof ServerLevel level)
 			SettlementSavedData.get(level).childCareClaims().cancelResident(villager.getUUID());
 	}
@@ -1163,6 +1241,7 @@ public class VillagerWorkGoal extends Goal {
 	public void tick() {
 		try {
 			if (action == Action.EAT_PERSONAL) { tickPersonalMeal(); return; }
+			if (isFoodSharingAction()) { tickFoodSharing(); return; }
 			refreshMeetingInvitation();
 			if (action == Action.SCOUT_MATERIAL_AREA) { tickScouting(); return; }
 			if (isProposalConversationAction()) { tickProposalConversation(); return; }
@@ -1243,7 +1322,7 @@ public class VillagerWorkGoal extends Goal {
 				return;
 			}
 			stop();
-		} catch (RuntimeException | Error failure) { cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
@@ -2075,6 +2154,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean isTargetValid() {
 		if (action == Action.EAT_PERSONAL) return personalMealValid();
+		if (isFoodSharingAction()) return foodSharingValid();
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
@@ -2381,6 +2461,7 @@ public class VillagerWorkGoal extends Goal {
 		if (camp == null || data.needsOf(camp, villager.getUUID()).satiety() > SettlementNeeds.HUNGRY_AT) return false;
 		var ticket = SettlementPersonalMeal.prepare(level, data, camp, villager);
 		if (ticket == null) return false;
+		cancelFoodSharing();
 		cancelPersonalMeal();
 		if (foodTicket != null) foodTicket.cancel();
 		foodTicket = null;
@@ -2890,6 +2971,8 @@ public class VillagerWorkGoal extends Goal {
 		HARVEST_CROP("harvest_crop"),
 		SOW_POTATO("sow_potato"),
 		FEED_CHILD("feed_child"),
+		SHARE_FOOD("share_food"),
+		RECEIVE_FOOD("receive_food"),
 		BORROW_SHEARS("borrow_shears"),
 		RETURN_SHEARS("return_shears"),
 		SHEAR_SHEEP("shear_sheep"),
