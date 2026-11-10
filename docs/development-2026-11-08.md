@@ -1216,3 +1216,6 @@
 - 第九十三增量 `51d0d20c32a66a7f4c902f54c01146e1925cfbfd` [首次CI](https://github.com/ThySummer14/coopcraft/actions/runs/42809341993)的生产/客户端代码编译及jar重映射完成，但compileTestJava失败：新Goal接线测试遗漏compact辅助方法，JUnit和两组实验尚未执行，也未发布成功构建产物。后续仅补全该测试辅助方法，不放松生产检查，不重新运行旧提交；以修正提交的首次CI判断结果。
 
 - 测试辅助方法修正 `8b5b5b4ab6ea67d90f2213914ffd81815d2a65fa` 的[首次CI](https://github.com/ThySummer14/coopcraft/actions/runs/42809988843)已执行2074项JUnit：新增30项均通过，但5项旧断言失败。2项货物支持列表未加入STICKS，2项仍用STICKS作为不支持配方，1项接线测试未容纳chooseAction开头的瞬时状态清理。逐项核查后迁移这些测试预期，仍测试真正不支持的营火配方、未知标记和无仓停止；不改生产逻辑，也不将该次报告记为构建通过。
+
+- 木棍物流测试兼容修正 `423a3db82315941df55ac91a5b305c1675f20579`（本地23f91a1，同树39900c20e6e8edd41e141f348cca515ce0b3029f）[首次CI](https://github.com/ThySummer14/coopcraft/actions/runs/42810716684)完整build、2074项JUnit（新增30，0失败/0跳过）及两组纯Java实验通过。报告与构建zip下载核对SHA；安装jar为1,502,184字节，SHA同步到固定交接页。原51d0d20和8b5b5b4失败记录保留，不重复运行旧构建。
+- 固定交接页更新到423a3db，补充1原木→8木棍→首镐余6木棍的验收、公共与私人原料边界、严格V2/重载、并发余量限制及精确构建产物；不改代码，不启动游戏。
