@@ -39,6 +39,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Set<UUID> ambiguousSettlementIds = new LinkedHashSet<>();
 	private long membershipRevision;
 	private SettlementResourceObservations resourceObservations = new SettlementResourceObservations();
+	private SettlementSowingPlots sowingPlots = new SettlementSowingPlots();
 	private SettlementShearingPermits shearingPermits = new SettlementShearingPermits();
 	private PlayerProtectedAreas protectedAreas = new PlayerProtectedAreas();
 	private SettlementGatheringAreas gatheringAreas = new SettlementGatheringAreas();
@@ -112,6 +113,47 @@ public final class SettlementSavedData extends SavedData {
 			protectedAreas = update.value();
 			setDirty();
 		}
+		return update.status();
+	}
+
+	public SettlementSowingPlots sowingPlots() { return sowingPlots; }
+	static boolean withinSowingRange(Settlement camp, BlockPos pos) {
+		if (camp == null || !SettlementSowingPlots.validPosition(pos)) return false;
+		double dx = (double) pos.getX() - camp.center().getX(), dz = (double) pos.getZ() - camp.center().getZ();
+		return dx * dx + dz * dz <= 4096;
+	}
+	private boolean ownsSowingPosition(Settlement camp, BlockPos pos) {
+		if (!canonicalSettlement(camp) || !withinSowingRange(camp, pos)) return false;
+		return all().stream().filter(this::canonicalSettlement)
+			.min(java.util.Comparator.comparingDouble((Settlement candidate) -> {
+				double dx = (double) pos.getX() - candidate.center().getX(), dz = (double) pos.getZ() - candidate.center().getZ();
+				return dx * dx + dz * dz;
+			}).thenComparing(candidate -> candidate.id().toString())).orElse(null) == camp;
+	}
+	public Optional<SettlementSowingPlots.Permit> sowingPermitOf(Settlement camp, BlockPos pos) {
+		return ownsSowingPosition(camp, pos) ? sowingPlots.of(pos).filter(p -> p.campId().equals(camp.id())) : Optional.empty();
+	}
+	public List<BlockPos> sowingPositions(Settlement camp) {
+		return sowingPlots.all().stream().filter(p -> sowingPermitOf(camp, p.position()).orElse(null) == p)
+			.map(SettlementSowingPlots.Permit::position).toList();
+	}
+	public boolean canUseSowingPlot(Settlement camp, BlockPos pos) {
+		return sowingPermitOf(camp, pos).isPresent() && !protectedAreas.blocked()
+			&& !protectedAreas.contains(pos) && !protectedAreas.contains(pos.below());
+	}
+	public SettlementSowingPlots.Status addSowingPlot(Settlement camp, BlockPos pos) {
+		if (sowingPlots.blocked()) return SettlementSowingPlots.Status.PRESERVED_UNSUPPORTED;
+		if (!ownsSowingPosition(camp, pos) || protectedAreas.blocked() || protectedAreas.contains(pos) || protectedAreas.contains(pos.below()))
+			return SettlementSowingPlots.Status.INVALID;
+		return updateSowingPlots(sowingPlots.add(camp.id(), pos));
+	}
+	public SettlementSowingPlots.Status removeSowingPlot(Settlement camp, BlockPos pos) {
+		if (sowingPlots.blocked()) return SettlementSowingPlots.Status.PRESERVED_UNSUPPORTED;
+		if (!canonicalSettlement(camp) || !withinSowingRange(camp, pos)) return SettlementSowingPlots.Status.INVALID;
+		return updateSowingPlots(sowingPlots.remove(camp.id(), pos));
+	}
+	private SettlementSowingPlots.Status updateSowingPlots(SettlementSowingPlots.Update update) {
+		if (update.value() != sowingPlots) { sowingPlots = update.value(); setDirty(); }
 		return update.status();
 	}
 
@@ -769,6 +811,7 @@ public final class SettlementSavedData extends SavedData {
 		tag.put("ResourceObservations", resourceObservations.save());
 		tag.put("GatheringAreas", gatheringAreas.save());
 		tag.put("ForagingAreas", foragingAreas.save());
+		tag.put("SowingPlots", sowingPlots.save());
 		Tag shearingTag = shearingPermits.save();
 		if (shearingTag == null) tag.remove("ShearingPermits");
 		else tag.put("ShearingPermits", shearingTag);
@@ -828,6 +871,7 @@ public final class SettlementSavedData extends SavedData {
 		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
 		data.gatheringAreas = SettlementGatheringAreas.load(tag.get("GatheringAreas"));
 		data.foragingAreas = SettlementForagingAreas.load(tag.get("ForagingAreas"));
+		data.sowingPlots = SettlementSowingPlots.load(tag.get("SowingPlots"));
 		data.shearingPermits = SettlementShearingPermits.load(tag.get("ShearingPermits"), tag.get("DataVersion"));
 		data.protectedAreas = PlayerProtectedAreas.load(tag.get("PlayerProtectedAreas"), tag.get("DataVersion"));
 

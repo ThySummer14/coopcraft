@@ -33,9 +33,32 @@ public final class SettlementCropHarvest {
 		return !stack.isEmpty() && stack.is(Items.POTATO) && stack.getComponentsPatch().isEmpty();
 	}
 
-	/** Keep the caller's marked-plot authority and the real dimension's independent protection veto. */
+	/** A selected sowing permit cannot be replaced by a regrant or a later manual mark. */
+	static record Permission(SettlementSavedData data, Settlement camp, BlockPos position,
+		boolean manual, SettlementSowingPlots.Permit permit) { }
+
+	static Permission capturePermission(SettlementSavedData data, Settlement camp, BlockPos pos) {
+		if (pos == null || data.isResidentModificationBlocked(pos)) return null;
+		if (data.resourcesOf(camp).contains(pos) && data.find(pos).filter(camp::equals).isPresent())
+			return new Permission(data, camp, pos.immutable(), true, null);
+		if (!data.canUseSowingPlot(camp, pos)) return null;
+		return data.sowingPermitOf(camp, pos).map(permit -> new Permission(data, camp, pos.immutable(), false, permit)).orElse(null);
+	}
+
+	static boolean permissionValid(Permission permission, SettlementSavedData data, Settlement camp, BlockPos pos) {
+		if (permission == null || permission.data() != data || permission.camp() != camp
+			|| !permission.position().equals(pos) || data.isResidentModificationBlocked(pos)) return false;
+		return permission.manual()
+			? data.resourcesOf(camp).contains(pos) && data.find(pos).filter(camp::equals).isPresent()
+			: data.canUseSowingPlot(camp, pos) && data.sowingPermitOf(camp, pos).orElse(null) == permission.permit();
+	}
+
 	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos pos) {
-		return validTarget(data, settlement, pos,
+		return validTarget(level, data, settlement, pos, capturePermission(data, settlement, pos));
+	}
+
+	static boolean validTarget(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos pos, Permission permission) {
+		return validTarget(data, settlement, pos, permission,
 			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
 			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos));
 	}
@@ -43,12 +66,15 @@ public final class SettlementCropHarvest {
 	/** Lazy world reads let the loaded/authority gates be tested without starting a server. */
 	static boolean validTarget(SettlementSavedData data, Settlement settlement, BlockPos pos,
 		BooleanSupplier loaded, BooleanSupplier entityTicking, Supplier<BlockState> block) {
-		return pos != null && !data.isResidentModificationBlocked(pos)
-			&& data.resourcesOf(settlement).contains(pos)
-			&& data.find(pos).filter(settlement::equals).isPresent()
+		return validTarget(data, settlement, pos, capturePermission(data, settlement, pos), loaded, entityTicking, block);
+	}
+
+	static boolean validTarget(SettlementSavedData data, Settlement settlement, BlockPos pos, Permission permission,
+		BooleanSupplier loaded, BooleanSupplier entityTicking, Supplier<BlockState> block) {
+		return pos != null && permissionValid(permission, data, settlement, pos)
 			&& SettlementForaging.canForage(data, settlement)
 			&& loaded.getAsBoolean() && entityTicking.getAsBoolean() && isRipe(block.get())
-			&& !data.isResidentModificationBlocked(pos);
+			&& permissionValid(permission, data, settlement, pos);
 	}
 
 	static Optional<BlockPos> findRipe(ServerLevel level, SettlementSavedData data, Settlement settlement, BlockPos origin) {
@@ -59,7 +85,7 @@ public final class SettlementCropHarvest {
 
 	static Optional<BlockPos> findRipe(SettlementSavedData data, Settlement settlement, BlockPos origin,
 		Predicate<BlockPos> loaded, Predicate<BlockPos> ticking, Function<BlockPos, BlockState> block) {
-		return data.resourcesOf(settlement).stream()
+		return java.util.stream.Stream.concat(data.resourcesOf(settlement).stream(), data.sowingPositions(settlement).stream()).distinct()
 			.filter(pos -> Math.abs(pos.getY() - origin.getY()) <= 4)
 			.filter(pos -> { long dx = pos.getX() - origin.getX(), dz = pos.getZ() - origin.getZ(); return dx * dx + dz * dz <= 144; })
 			.filter(pos -> validTarget(data, settlement, pos, () -> loaded.test(pos),
@@ -86,9 +112,16 @@ public final class SettlementCropHarvest {
 	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
 		SimpleContainer inventory, BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking,
 		Supplier<BlockState> block, Supplier<List<ItemStack>> loot, Predicate<BlockState> replant) {
+		return harvest(data, settlement, actor, pos, capturePermission(data, settlement, pos), inventory,
+			adult, loaded, ticking, block, loot, replant);
+	}
+
+	static int harvest(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos, Permission permission,
+		SimpleContainer inventory, BooleanSupplier adult, BooleanSupplier loaded, BooleanSupplier ticking,
+		Supplier<BlockState> block, Supplier<List<ItemStack>> loot, Predicate<BlockState> replant) {
 		var attempt = SettlementBerryCargoHarvest.capture(data, settlement, actor);
 		if (!attempt.valid(data, settlement, actor, adult)
-			|| !validTarget(data, settlement, pos, loaded, ticking, block)) return 0;
+			|| !validTarget(data, settlement, pos, permission, loaded, ticking, block)) return 0;
 		BlockState mature = block.get();
 		var reserved = outputAfterSeed(loot.get());
 		if (reserved.isEmpty() || data.isResidentModificationBlocked(pos)
@@ -97,7 +130,7 @@ public final class SettlementCropHarvest {
 			.mapToInt(ItemStack::getCount).sum();
 		List<ItemStack> output = reserved.get().stream().map(attempt::potatoOutputCopy).toList();
 		if (!SettlementHarvestCommit.commit(inventory, output,
-			() -> validTarget(data, settlement, pos, loaded, ticking, block)
+			() -> validTarget(data, settlement, pos, permission, loaded, ticking, block)
 				&& block.get().equals(mature) && attempt.valid(data, settlement, actor, adult)
 				&& !data.isResidentModificationBlocked(pos) && replant.test(mature))) return 0;
 		if (potatoes > 0) SettlementSimulationService.recordCarriedProduction(
@@ -106,7 +139,11 @@ public final class SettlementCropHarvest {
 	}
 
 	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos) {
-		int potatoes = harvest(data, settlement, villager.getUUID(), pos, villager.getInventory(),
+		return harvest(level, data, settlement, villager, pos, capturePermission(data, settlement, pos));
+	}
+
+	static int harvest(ServerLevel level, SettlementSavedData data, Settlement settlement, Villager villager, BlockPos pos, Permission permission) {
+		int potatoes = harvest(data, settlement, villager.getUUID(), pos, permission, villager.getInventory(),
 			() -> villager.isAlive() && !villager.isRemoved() && !villager.isBaby(),
 			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
 			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),

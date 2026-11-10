@@ -875,3 +875,12 @@ status和materials会同时显示保存的施工步骤数、蓝图ID、下一位
 
 
 仓旁自主协商的现场人数、工时、存档和未验证边界见[自主协商](autonomous-council.md)。该设置独立于原五个模拟开关，关闭依赖时暂停但不抹掉明确选择；坏格式保留并停用，不通过开关命令修复。
+
+
+## 单格播种许可
+
+- `/coop settlement planting`：只读列出本营保存的作物格许可，不扫描世界或创建模拟。
+- `/coop settlement planting mark <x> <y> <z>`：OP2在实际6格内授权现成空耕地，坐标填土豆未来所在的空气格。
+- `/coop settlement planting revoke <x> <y> <z>`：OP2撤销本营指定许可，不要求目标区块已加载或仍为空地。
+
+一次许可覆盖该格播种及成熟土豆采收复种，包括后来玩家种入的土豆；独立人工资源标记仍需单独取消。没有自动开垦，survival开启时不新播种。完整边界见[安全播种](surplus-potato-sowing.md)。

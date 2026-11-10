@@ -76,6 +76,16 @@ public final class SettlementCommands {
 					.executes(ctx -> handler.run(ctx, "observations", operation))));
 		}
 		settlement.then(observations);
+		var planting = LiteralArgumentBuilder.<S>literal("planting")
+			.executes(ctx -> handler.run(ctx, "planting", ""));
+		for (String operation : List.of("mark", "revoke")) {
+			planting.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.then(RequiredArgumentBuilder.<S, Integer>argument("x", IntegerArgumentType.integer())
+					.then(RequiredArgumentBuilder.<S, Integer>argument("y", IntegerArgumentType.integer())
+						.then(RequiredArgumentBuilder.<S, Integer>argument("z", IntegerArgumentType.integer())
+							.executes(ctx -> handler.run(ctx, "planting", operation))))));
+		}
+		settlement.then(planting);
 		var shearing = LiteralArgumentBuilder.<S>literal("shearing")
 			.executes(ctx -> handler.run(ctx, "shearing", ""));
 		shearing.then(LiteralArgumentBuilder.<S>literal("nearby").executes(ctx -> handler.run(ctx, "shearing", "nearby")));
@@ -192,6 +202,7 @@ public final class SettlementCommands {
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
 		if (action.equals("teaching")) return SettlementTeachingCommands.execute(context, option);
+		if (action.equals("planting")) return SettlementSowingCommands.execute(context, option);
 		if (action.equals("shearing")) return SettlementShearingCommands.execute(context, option);
 		if (action.equals("foraging")) return SettlementForagingCommands.execute(context, option);
 		if (action.equals("gathering")) return SettlementGatheringCommands.execute(context, option);

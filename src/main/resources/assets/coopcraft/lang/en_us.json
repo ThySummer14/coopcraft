@@ -798,5 +798,20 @@
 	"coopcraft.command.settlement.meeting_autonomy_permission": "Operator level 2 is required to change autonomous council settings.",
 	"coopcraft.command.settlement.meeting_autonomy_player_unavailable": "Use an online, living, non-spectator player in the same dimension near the settlement.",
 	"coopcraft.interaction.action.discuss_council": "Deliberating together at the communal store",
-	"coopcraft.interaction.action.council_waiting": "Waiting for nearby residents to begin deliberation"
+	"coopcraft.interaction.action.council_waiting": "Waiting for nearby residents to begin deliberation",
+	"coopcraft.command.settlement.planting_player_unavailable": "Use your actual online player in this dimension. Changes require OP2.",
+	"coopcraft.command.settlement.planting_preserved_unsupported": "Sowing permission data is unsupported or malformed and is preserved unchanged. Editing and use are disabled.",
+	"coopcraft.command.settlement.planting_invalid": "That coordinate is outside this settlement's valid sowing permission scope.",
+	"coopcraft.command.settlement.planting_invalid_target": "Choose loaded, ticking, unprotected empty farmland within 6 blocks. Enter the crop-cell coordinates; farmland must be directly below.",
+	"coopcraft.command.settlement.planting_created": "Authorized sowing and mature-potato harvesting in this cell.",
+	"coopcraft.command.settlement.planting_unchanged": "This cell already has this settlement's sowing permission. Nothing changed.",
+	"coopcraft.command.settlement.planting_removed": "Revoked this cell's sowing permission. Independent manual resource marks are unchanged.",
+	"coopcraft.command.settlement.planting_not_found": "This cell has no sowing permission for this settlement.",
+	"coopcraft.command.settlement.planting_other_settlement": "This cell's permission belongs to another settlement and cannot be changed here.",
+	"coopcraft.command.settlement.planting_limit": "Sowing permission limit reached: 32 cells per settlement and 128 per dimension. Revoke unused cells first.",
+	"coopcraft.command.settlement.planting_scope": "Scope: sow and harvest/replant mature potatoes in this prepared cell, including potatoes players later plant here. No land clearing. New sowing uses only ordinary potatoes above residents' retained food in physical-food mode.",
+	"coopcraft.command.settlement.planting_help": "Use /coop settlement planting, planting mark <x> <y> <z>, or planting revoke <x> <y> <z>. Coordinates identify the crop cell.",
+	"coopcraft.command.settlement.planting_status": "%1$s: %2$s saved single-cell sowing permissions.",
+	"coopcraft.command.settlement.planting_plot": "Crop cell %1$s, %2$s, %3$s; permission currently valid: %4$s (not a seed, maturity, or reachability check).",
+	"coopcraft.interaction.action.sow_potato": "Sowing surplus potatoes"
 }

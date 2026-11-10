@@ -798,5 +798,20 @@
 	"coopcraft.command.settlement.meeting_autonomy_permission": "需要OP2权限才能更改仓旁自主协商设置。",
 	"coopcraft.command.settlement.meeting_autonomy_player_unavailable": "请由同维度、在线且存活的非旁观玩家在聚落附近操作。",
 	"coopcraft.interaction.action.discuss_council": "在公仓旁自行商议",
-	"coopcraft.interaction.action.council_waiting": "等候仓旁居民开始协商"
+	"coopcraft.interaction.action.council_waiting": "等候仓旁居民开始协商",
+	"coopcraft.command.settlement.planting_player_unavailable": "需要本人在线、在当前维度实际位置操作；修改需 OP2。",
+	"coopcraft.command.settlement.planting_preserved_unsupported": "种植许可格式未知或损坏，已原样保留；停止编辑和使用这批许可。",
+	"coopcraft.command.settlement.planting_invalid": "该坐标不属于当前聚落的有效种植许可范围。",
+	"coopcraft.command.settlement.planting_invalid_target": "请选择身边6格内已加载且活动的现成空耕地：坐标填作物格，下方须为耕地，两格均不能受保护。",
+	"coopcraft.command.settlement.planting_created": "已授权这一格播种及成熟土豆采收。",
+	"coopcraft.command.settlement.planting_unchanged": "这一格已有本营种植许可，没有变更。",
+	"coopcraft.command.settlement.planting_removed": "已撤销这一格种植许可；独立人工资源标记不受影响。",
+	"coopcraft.command.settlement.planting_not_found": "这一格没有本营种植许可。",
+	"coopcraft.command.settlement.planting_other_settlement": "这一格许可属于另一聚落，不能在此修改。",
+	"coopcraft.command.settlement.planting_limit": "已达到许可上限：每营32格、每维度128格；请先撤销不再使用的位置。",
+	"coopcraft.command.settlement.planting_scope": "范围：只允许此格现成耕地播种、成熟土豆采收复种，包括之后玩家种入的土豆；不连片开垦。新播种仅用默认实物模式下居民留粮后的普通种薯。",
+	"coopcraft.command.settlement.planting_help": "用法：/coop settlement planting；planting mark <x> <y> <z> 或 planting revoke <x> <y> <z>，坐标均为作物格。",
+	"coopcraft.command.settlement.planting_status": "%1$s：已保存 %2$s 个单格种植许可。",
+	"coopcraft.command.settlement.planting_plot": "作物格 %1$s, %2$s, %3$s；许可当前有效：%4$s（不代表已有种薯、成熟或可达）。",
+	"coopcraft.interaction.action.sow_potato": "用富余种薯播种"
 }
