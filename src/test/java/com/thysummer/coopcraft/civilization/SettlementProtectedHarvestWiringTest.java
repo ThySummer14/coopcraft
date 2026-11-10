@@ -12,6 +12,7 @@ import javax.tools.ToolProvider;
 
 import com.sun.source.tree.BinaryTree;
 import com.sun.source.tree.BlockTree;
+import com.sun.source.tree.ConditionalExpressionTree;
 import com.sun.source.tree.IfTree;
 import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.MemberSelectTree;
@@ -20,6 +21,8 @@ import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.ParenthesizedTree;
 import com.sun.source.tree.ReturnTree;
 import com.sun.source.tree.Tree;
+import com.sun.source.tree.TryTree;
+import com.sun.source.tree.VariableTree;
 import com.sun.source.tree.UnaryTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreeScanner;
@@ -30,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** AST adapter checks supplement the real pure-service tests; no live world or AI is executed. */
 class SettlementProtectedHarvestWiringTest {
-	private static final List<String> SERVICES = List.of("SettlementGathering", "SettlementForaging", "SettlementCropHarvest");
+	private static final List<String> SERVICES = List.of("SettlementGathering", "SettlementCropHarvest");
 
 	@Test void worldAdaptersPreserveCallerDataButVetoWithCurrentDimensionBeforeWorldReads() throws Exception {
 		int checked = 0;
@@ -53,24 +56,46 @@ class SettlementProtectedHarvestWiringTest {
 			assertEquals(List.of(position), arguments(loaded));
 			checked++;
 		}
-		assertEquals(8, checked, "Three continuation/harvest pairs and both food finders must be checked");
+		assertEquals(5, checked, "Gathering/crop continuation and harvest, plus the crop finder");
+		assertBerryPermissionWiring();
 	}
 
 	@Test void gatheringAndBerryWorldMutationsRecheckLiveDimensionInsideTheirCallbacks() throws Exception {
-		for (String service : List.of("SettlementGathering", "SettlementForaging")) {
-			MethodTree method = worldHarvest(service);
-			String mutation = service.equals("SettlementGathering") ? "level.destroyBlock" : "level.setBlock";
-			String position = service.equals("SettlementGathering") ? "pos" : "position";
-			assertEquals(1, invocations(method, mutation).size());
-			var writes = lambdas(method).stream().filter(lambda -> !invocations(lambda, mutation).isEmpty()).toList();
-			assertEquals(1, writes.size());
-			BinaryTree body = assertInstanceOf(BinaryTree.class, writes.getFirst().getBody());
-			assertEquals(Tree.Kind.CONDITIONAL_AND, body.getKind());
-			assertLiveAllowed(body.getLeftOperand(), position);
-			MethodInvocationTree write = assertInstanceOf(MethodInvocationTree.class, body.getRightOperand());
-			assertEquals(mutation, write.getMethodSelect().toString());
-			assertEquals(position, write.getArguments().getFirst().toString());
-		}
+		MethodTree gathering = worldHarvest("SettlementGathering");
+		assertEquals(1, invocations(gathering, "level.destroyBlock").size());
+		var writes = lambdas(gathering).stream().filter(lambda -> !invocations(lambda, "level.destroyBlock").isEmpty()).toList();
+		assertEquals(1, writes.size());
+		BinaryTree body = assertInstanceOf(BinaryTree.class, writes.getFirst().getBody());
+		assertEquals(Tree.Kind.CONDITIONAL_AND, body.getKind());
+		assertLiveAllowed(body.getLeftOperand(), "pos");
+		MethodInvocationTree destroy = assertInstanceOf(MethodInvocationTree.class, body.getRightOperand());
+		assertEquals("level.destroyBlock", destroy.getMethodSelect().toString());
+		assertEquals("pos", destroy.getArguments().getFirst().toString());
+		MethodTree berry = methods("SettlementForaging").stream().filter(method -> worldMethod(method)
+			&& method.getName().contentEquals("harvest") && method.getParameters().size() == 7).findFirst().orElseThrow();
+		VariableTree current = assertInstanceOf(VariableTree.class, berry.getBody().getStatements().getFirst());
+		assertEquals("current", current.getName().toString());
+		LambdaExpressionTree identity = assertInstanceOf(LambdaExpressionTree.class, current.getInitializer());
+		assertConjuncts(identity.getBody(), "liveAdult(level, data, settlement, villager)", "registry != null",
+			"registry.valid(lease, data, settlement, villager.getUUID(), position, level.getGameTime())");
+		var delegate = invocations(berry, "harvest").getFirst();
+		assertEquals(List.of("data", "settlement", "villager.getUUID()", "position", "villager.getInventory()", "current"),
+			arguments(delegate).subList(0, 6));
+		assertEquals(1, invocations(berry, "level.setBlock").size());
+		LambdaExpressionTree write = assertInstanceOf(LambdaExpressionTree.class, delegate.getArguments().get(10));
+		assertConjuncts(write.getBody(), "current.getAsBoolean()", "data.canHarvestBerries(settlement, position)",
+			"inBounds(level, position)", "level.isLoaded(position)", "level.isPositionEntityTicking(position)",
+			"level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL)");
+		LambdaExpressionTree loot = assertInstanceOf(LambdaExpressionTree.class, delegate.getArguments().get(9));
+		ConditionalExpressionTree gatedLoot = assertInstanceOf(ConditionalExpressionTree.class, loot.getBody());
+		assertConjuncts(gatedLoot.getCondition(), "current.getAsBoolean()", "data.canHarvestBerries(settlement, position)",
+			"inBounds(level, position)", "level.isLoaded(position)", "level.isPositionEntityTicking(position)");
+		assertEquals("List.of()", gatedLoot.getFalseExpression().toString());
+		assertEquals(1, invocations(gatedLoot.getTrueExpression(), "Block.getDrops").size());
+		MethodTree direct = worldHarvest("SettlementForaging");
+		assertEquals(1, invocations(direct, "registry.claim").size());
+		TryTree scoped = assertInstanceOf(TryTree.class, direct.getBody().getStatements().get(3));
+		assertEquals(List.of("lease"), arguments(invocations(scoped.getFinallyBlock(), "registry.release").getFirst()));
 	}
 
 	@Test void potatoWorldWriteAndSwingCannotPrecedeTheCurrentDimensionVeto() throws Exception {
@@ -96,14 +121,92 @@ class SettlementProtectedHarvestWiringTest {
 		assertEquals("true", success.getExpression().toString());
 	}
 
-	@Test void legacyPublicBerryFinderResolvesCurrentDimensionAndDelegatesToProtectedFinder() throws Exception {
-		MethodTree legacy = methods("SettlementForaging").stream().filter(method -> worldMethod(method)
-			&& method.getName().contentEquals("findRipeBush") && method.getParameters().size() == 2).findFirst().orElseThrow();
-		assertEquals(1, legacy.getBody().getStatements().size());
-		ReturnTree returned = assertInstanceOf(ReturnTree.class, legacy.getBody().getStatements().getFirst());
-		MethodInvocationTree call = assertInstanceOf(MethodInvocationTree.class, returned.getExpression());
-		assertEquals("findRipeBush", call.getMethodSelect().toString());
-		assertEquals(List.of("level", "SettlementSavedData.get(level)", "origin"), arguments(call));
+	@Test void everyBerryFinderRequiresIdentityAndWorldFinderDelegatesWithLivePermission() throws Exception {
+		var finders = methods("SettlementForaging").stream().filter(method -> method.getName().contentEquals("findRipeBush")).toList();
+		assertEquals(2, finders.size());
+		for (MethodTree finder : finders) {
+			var parameters = finder.getParameters().stream().map(p -> p.getType() + " " + p.getName()).toList();
+			assertTrue(parameters.contains("SettlementSavedData data"));
+			assertTrue(parameters.contains("Settlement settlement"));
+			assertTrue(parameters.contains(worldMethod(finder) ? "Villager villager" : "UUID actor"));
+		}
+		MethodTree finder = finders.stream().filter(SettlementProtectedHarvestWiringTest::worldMethod).findFirst().orElseThrow();
+		assertInitialPresenceGuard(finder, "Optional.empty()");
+		var call = invocations(finder, "findRipeBush").getFirst();
+		assertEquals(List.of("data", "settlement", "villager.getUUID()", "origin"), arguments(call).subList(0, 4));
+		assertConjuncts(assertInstanceOf(LambdaExpressionTree.class, call.getArguments().get(4)).getBody(),
+			"presentAdult(level, data, villager)", "claims.unique(data, settlement, member)");
+		assertEquals(List.of("level::isLoaded", "level::isPositionEntityTicking"), arguments(call).subList(6, 8));
+		assertEquals("level::getBlockState", arguments(call).get(9));
+		MethodTree scan = finders.stream().filter(method -> !worldMethod(method)).findFirst().orElseThrow();
+		List<IfTree> scanGates = new ArrayList<>();
+		new TreeScanner<Void, Void>() {
+			@Override public Void visitBlock(BlockTree block, Void unused) {
+				var statements = block.getStatements();
+				for (int index = 0; index + 1 < statements.size(); index++) {
+					if (!(statements.get(index) instanceof IfTree guard) || invocations(guard.getCondition(), "loaded.test").isEmpty()) continue;
+					scanGates.add(guard);
+					assertEquals("!permission.validForScan(pos, adult) || !inBounds.test(pos) || !loaded.test(pos) || !ticking.test(pos) || !available.test(pos)",
+						unparenthesized(guard.getCondition()).toString());
+					assertEquals(Tree.Kind.CONTINUE, guard.getThenStatement().getKind());
+					IfTree read = assertInstanceOf(IfTree.class, statements.get(index + 1));
+					assertConjuncts(read.getCondition(), "isRipe(block.apply(pos))", "permission.validForScan(pos, adult)");
+				}
+				return super.visitBlock(block, unused);
+			}
+		}.scan(scan, null);
+		assertEquals(1, scanGates.size(), "Every scan read must follow the live permission and availability gate");
+		ReturnTree returned = assertInstanceOf(ReturnTree.class, finder.getBody().getStatements().getLast());
+		assertEquals(List.of("level", "data", "settlement", "villager"), arguments(invocations(returned, "liveAdult").getFirst()));
+	}
+
+	private static void assertBerryPermissionWiring() throws Exception {
+		var berry = methods("SettlementForaging");
+		MethodTree present = named(berry, "presentAdult");
+		assertConjuncts(returnExpression(present), "SettlementSavedData.get(level) == data", "villager.level() == level",
+			"villager.isAlive()", "!villager.isRemoved()", "!villager.isBaby()",
+			"level.getEntity(villager.getUUID()) == villager", "inBounds(level, villager.blockPosition())",
+			"level.isLoaded(villager.blockPosition())", "level.isPositionEntityTicking(villager.blockPosition())");
+		assertConjuncts(returnExpression(named(berry, "liveAdult")), "presentAdult(level, data, villager)",
+			"SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()), level.dimension(), data, settlement)");
+		assertConjuncts(returnExpression(named(berry, "permitted")), "area.contains(pos)", "member != null",
+			"data.memberIdentity(actor) == member", "data.isMember(settlement, actor)",
+			"data.foragingAreaOf(settlement).orElse(null) == area", "data.canHarvestBerries(settlement, pos)", "canForage(data, settlement)");
+		for (String check : List.of("valid", "validForScan")) assertConjuncts(returnExpression(named(berry, check)),
+			"permitted(pos)", "attempt." + check + "(data, settlement, actor, adult)");
+		MethodTree world = berry.stream().filter(method -> worldMethod(method) && method.getName().contentEquals("validTarget")).findFirst().orElseThrow();
+		assertInitialPresenceGuard(world, "false");
+		var call = invocations(world, "validTarget").getFirst();
+		assertEquals(List.of("data", "settlement", "villager.getUUID()", "pos"), arguments(call).subList(0, 4));
+		assertConjuncts(assertInstanceOf(LambdaExpressionTree.class, call.getArguments().get(4)).getBody(),
+			"presentAdult(level, data, villager)", "claims.unique(data, settlement, member)");
+		MethodTree pure = berry.stream().filter(method -> !worldMethod(method) && method.getName().contentEquals("validTarget")).findFirst().orElseThrow();
+		assertConjuncts(returnExpression(pure), "permission != null", "permission.validForScan(pos, adult)",
+			"loaded.getAsBoolean()", "ticking.getAsBoolean()", "isRipe(block.get())", "permission.validForScan(pos, adult)");
+	}
+
+	private static void assertInitialPresenceGuard(MethodTree method, String rejected) {
+		IfTree guard = assertInstanceOf(IfTree.class, method.getBody().getStatements().getFirst());
+		assertEquals("!presentAdult(level, data, villager)", unparenthesized(guard.getCondition()).toString());
+		assertEquals(rejected, assertInstanceOf(ReturnTree.class, guard.getThenStatement()).getExpression().toString());
+	}
+	private static MethodTree named(List<MethodTree> methods, String name) {
+		return methods.stream().filter(method -> method.getName().contentEquals(name)).findFirst().orElseThrow();
+	}
+	private static Tree returnExpression(MethodTree method) {
+		return assertInstanceOf(ReturnTree.class, method.getBody().getStatements().getLast()).getExpression();
+	}
+	private static void assertConjuncts(Tree expression, String... expected) {
+		List<String> actual = new ArrayList<>();
+		collectConjuncts(expression, actual);
+		assertEquals(List.of(expected), actual, "Every gate must short-circuit in order before world access");
+	}
+	private static void collectConjuncts(Tree tree, List<String> result) {
+		tree = unparenthesized(tree);
+		if (tree instanceof BinaryTree binary && binary.getKind() == Tree.Kind.CONDITIONAL_AND) {
+			collectConjuncts(binary.getLeftOperand(), result);
+			collectConjuncts(binary.getRightOperand(), result);
+		} else result.add(tree.toString());
 	}
 
 	private static void assertLiveAllowed(Tree tree, String position) {
