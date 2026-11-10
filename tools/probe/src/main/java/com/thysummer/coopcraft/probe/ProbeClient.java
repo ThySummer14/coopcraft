@@ -2,7 +2,6 @@ package com.thysummer.coopcraft.probe;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +11,6 @@ public final class ProbeClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		WorldRenderEvents.END.register(context -> ProbeFrameTimes.record(System.nanoTime()));
 		ClientLifecycleEvents.CLIENT_STOPPING.register(client -> ProbeHttp.stop());
 		try {
 			ProbeHttp.start(ProbeConfig.clientPort(), ProbeConfig.token(), ProbeClientApi.routes());

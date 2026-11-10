@@ -28,7 +28,7 @@ public final class ProbeFrameTimes {
 	public static synchronized void record(long nanoTime) {
 		if (lastFrameNanos != 0) {
 			long elapsed = nanoTime - lastFrameNanos;
-			if (elapsed > 0 && elapsed < 30_000_000_000L) {
+			if (elapsed > 0) {
 				recentNanos[next] = elapsed;
 				next = (next + 1) % WINDOW_SIZE;
 				count = Math.min(WINDOW_SIZE, count + 1);

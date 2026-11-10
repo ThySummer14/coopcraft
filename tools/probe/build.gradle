@@ -33,6 +33,10 @@ dependencies {
 	mappings loom.officialMojangMappings()
 	modImplementation 'net.fabricmc:fabric-loader:0.20.1'
 	modImplementation 'net.fabricmc.fabric-api:fabric-api:0.116.17+1.21.1'
+
+	testImplementation platform('org.junit:junit-bom:5.11.4')
+	testImplementation 'org.junit.jupiter:junit-jupiter'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 processResources {
@@ -45,6 +49,10 @@ processResources {
 
 tasks.withType(JavaCompile).configureEach {
 	it.options.release = 21
+}
+
+tasks.withType(Test).configureEach {
+	useJUnitPlatform()
 }
 
 java {

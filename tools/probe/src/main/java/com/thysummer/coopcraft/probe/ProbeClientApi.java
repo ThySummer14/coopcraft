@@ -41,8 +41,6 @@ public final class ProbeClientApi {
 	public static Map<String, ProbeHttp.Handler> routes() {
 		return Map.ofEntries(
 			Map.entry("/status", body -> onClient(ProbeClientApi::status)),
-			Map.entry("/perf/frame", body -> onClient(ProbeFrameTimes::snapshot)),
-			Map.entry("/perf/reset", body -> onClient(ProbeFrameTimes::reset)),
 			Map.entry("/ui/snapshot", body -> onClient(ProbeClientApi::uiSnapshot)),
 			Map.entry("/ui/click", body -> onClient(() -> uiClick(body))),
 			Map.entry("/ui/close", body -> onClient(() -> {
