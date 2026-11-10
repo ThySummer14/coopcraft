@@ -78,6 +78,12 @@ class SettlementPolishingCargoTest {
 	}
 	private static void quarantined(ItemStack stack) {
 		SimpleContainer bag = new SimpleContainer(1), store = new SimpleContainer(9); bag.setItem(0, stack.copy());
+		// setItem clamps stacks with a removed MAX_STACK_SIZE component. Restore the malformed
+		// fixture after insertion so quarantine, rather than container normalization, is under test.
+		bag.getItem(0).setCount(stack.getCount());
+		assertEquals(stack.getCount(), bag.getItem(0).getCount());
+		assertEquals(stack.getComponentsPatch(), bag.getItem(0).getComponentsPatch());
+		assertTrue(ItemStack.matches(stack, bag.getItem(0)));
 		assertTrue(SettlementWorkbenchCargo.isMarked(stack)); assertNull(SettlementWorkbenchCargo.recipe(stack));
 		assertEquals(SettlementWorkbenchCargo.Phase.UNKNOWN, SettlementWorkbenchCargo.phase(stack));
 		assertFalse(SettlementWorkbenchCargo.hasReturnable(bag, CAMP));
