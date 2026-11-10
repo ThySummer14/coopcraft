@@ -436,7 +436,7 @@ public final class SettlementSimulationService {
 		return moved;
 	}
 
-	/** Ephemeral boundary for one synchronous server-thread crafting operation, never persisted. */
+	/** Ephemeral server-thread crafting evidence; a travelling batch must seal its synchronous pickup window. */
 	public static final class CraftingAttempt {
 		private final SettlementSimulationState state;
 		private final com.thysummer.coopcraft.civilization.simulation.SimulationWorld world;
@@ -446,6 +446,7 @@ public final class SettlementSimulationService {
 		private final Item output;
 		private final int produced;
 		private final long watermark;
+		private Long sealedInputEnd;
 		private boolean completed;
 
 		private CraftingAttempt(SettlementSimulationState state, UUID actor, String personId,
@@ -489,6 +490,14 @@ public final class SettlementSimulationService {
 		return new CraftingAttempt(state, actor, personId, recipe, output, produced);
 	}
 
+	/** Freeze synchronous pickup evidence before a physical batch travels to its workbench. */
+	static void sealCraftingInputs(CraftingAttempt attempt) {
+		if (attempt != null && !attempt.completed && attempt.sealedInputEnd == null) {
+			attempt.sealedInputEnd = attempt.world == null ? 0L
+				: attempt.world.ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		}
+	}
+
 	private static boolean validCraftingAttempt(SettlementSavedData data, Settlement settlement,
 		UUID actor, CraftingAttempt attempt) {
 		if (attempt == null || attempt.state == null || !attempt.actor.equals(actor)) {
@@ -513,7 +522,8 @@ public final class SettlementSimulationService {
 		}
 		SettlementSimulationState state = attempt.state;
 		List<Long> causes = new ArrayList<>();
-		long end = state.world().ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		long end = attempt.sealedInputEnd != null ? attempt.sealedInputEnd
+			: state.world().ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
 		// Only direct exports after this attempt began. Pre-existing real inventory has unknown provenance.
 		for (long id = attempt.watermark + 1; id <= end; id++) {
 			SimulationEvent event = state.world().ledger().event(id).orElseThrow();

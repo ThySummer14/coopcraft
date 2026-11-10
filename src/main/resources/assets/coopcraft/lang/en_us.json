@@ -694,5 +694,9 @@
 	"coopcraft.command.settlement.gathering_summary_unavailable": "Materials: permission or protection data is unusable, automatic gathering paused. Details: /coop settlement gathering.",
 	"coopcraft.command.settlement.gathering_mode_wood": "Mode WOOD: ordinary oak logs only (minecraft:oak_log).",
 	"coopcraft.command.settlement.gathering_mode_stone": "Mode STONE: plain stone and cobblestone only (minecraft:stone, minecraft:cobblestone).",
-	"coopcraft.command.settlement.gathering_mode_both": "Mode BOTH: ordinary oak logs, plain stone and cobblestone only."
+	"coopcraft.command.settlement.gathering_mode_both": "Mode BOTH: ordinary oak logs, plain stone and cobblestone only.",
+	"coopcraft.workbench_cargo.reserved": "Workbench cargo: reserved materials or products",
+	"coopcraft.workbench_cargo.return_to_source": "Return through a resident of the source camp; unknown formats stay untouched",
+	"coopcraft.interaction.action.collect_plank_materials": "Collecting plank materials at the communal store",
+	"coopcraft.interaction.action.workbench_planks": "Crafting carried logs into planks at the workbench"
 }

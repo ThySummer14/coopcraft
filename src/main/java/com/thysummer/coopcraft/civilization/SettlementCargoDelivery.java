@@ -90,8 +90,10 @@ public final class SettlementCargoDelivery {
 		if (moved > 0) data.setDirty();
 		if (moved == 0 && (!matches(ticket, data, camp, actor, inventory) || !atStore.getAsBoolean()
 			|| !matches(ticket, data, camp, actor, inventory))) return new Result(Status.INVALID, 0);
-		boolean materialCargo = SettlementCargo.hasCargo(inventory);
+		boolean materialCargo = SettlementCargo.hasCargo(inventory)
+			|| SettlementWorkbenchCargo.hasReturnable(inventory, camp.id());
 		moved += SettlementStockpile.depositGatheredResources(currentStore, inventory);
+		moved += SettlementWorkbenchCargo.deposit(inventory, currentStore, camp.id());
 		if (!ticket.survival) moved += SettlementFoodCargo.depositSurplus(data, camp, actor, inventory, currentStore);
 		if (moved == 0 && !materialCargo && hasMarkedHarvestFood(inventory)
 			&& !hasDeliverableFood(data, camp, actor, inventory)) return new Result(Status.FOOD_UNAVAILABLE, 0);

@@ -49,6 +49,7 @@ public final class SettlementSavedData extends SavedData {
 	// Transient round-robin order; unrelated membership changes must not restart active sweeps.
 	private final LinkedHashMap<UUID, SettlementMember> discoveryRoster = new LinkedHashMap<>();
 	private final Map<UUID, Object> stockpileBindings = new LinkedHashMap<>();
+	private final Map<UUID, Object> craftingStationBindings = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> stockpiles = new LinkedHashMap<>();
 	private final Map<UUID, BlockPos> hearths = new LinkedHashMap<>();
 	private final Map<UUID, Set<BlockPos>> resourceSites = new LinkedHashMap<>();
@@ -561,7 +562,13 @@ public final class SettlementSavedData extends SavedData {
 		return Optional.ofNullable(craftingStations.get(settlement.id()));
 	}
 
+	Object craftingStationBindingToken(Settlement settlement) {
+		return craftingStationBindings.get(settlement.id());
+	}
+
 	public void setCraftingStation(Settlement settlement, BlockPos pos) {
+		if (pos.equals(craftingStations.get(settlement.id()))) return;
+		craftingStationBindings.put(settlement.id(), new Object());
 		craftingStations.put(settlement.id(), pos.immutable());
 		setDirty();
 	}

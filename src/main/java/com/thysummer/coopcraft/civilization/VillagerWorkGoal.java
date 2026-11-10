@@ -54,6 +54,7 @@ public class VillagerWorkGoal extends Goal {
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
 	private SettlementStarterCrafting.Ticket currentStarterCraft;
+	private SettlementWorkbenchCrafting.Ticket workbenchTicket;
 	private Settlement settlement;
 	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
@@ -81,6 +82,7 @@ public class VillagerWorkGoal extends Goal {
 	public boolean canUse() {
 		try {
 			releaseMaterialLease();
+			cancelWorkbenchCrafting();
 			// A released claim must never leave an old GATHER action eligible for an early return.
 			if (action == Action.GATHER) { action = null; target = null; }
 			selectedGatherTarget = null;
@@ -175,7 +177,7 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
 			progress = 0;
 			return action != null;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
 	}
 
 	@Override
@@ -184,16 +186,19 @@ public class VillagerWorkGoal extends Goal {
 			refreshMeetingInvitation();
 			if (action != null && action != Action.EAT && action != Action.ATTEND_MEETING
 				&& action != Action.RETURN_TO_STOCKPILE && !villager.isBaby()
-				&& settlement != null && hasReturnCargo()
+				&& !isWorkbenchAction() && settlement != null && hasReturnCargo()
 				&& cargoCooldown.ready(villager.level().getGameTime()) && !emergencyForage()) {
 				releaseForageLease();
 				releaseMaterialLease();
 				return false;
 			}
+			if (isWorkbenchAction() && (shouldEat() || meetingTicket != null || emergencyForage())) {
+				cancelWorkbenchCrafting(); return false;
+			}
 			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
-			if (!continuing) { releaseForageLease(); releaseMaterialLease(); }
+			if (!continuing) { releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); }
 			return continuing;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
 	}
 
 	@Override
@@ -201,15 +206,17 @@ public class VillagerWorkGoal extends Goal {
 		try {
 			progress = 0;
 			travelTicks = 0;
-			if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
+			if (isWorkbenchAction()) { villager.getNavigation().stop(); tickWorkbenchCrafting(); }
+			else if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
 			else if (isSupplyAction()) { villager.getNavigation().stop(); tickBuildSupply(); }
 			else if (action == Action.RETURN_TO_STOCKPILE) { villager.getNavigation().stop(); tickCargoReturn(); }
 			else navigateToTarget();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
+		cancelWorkbenchCrafting();
 		releaseMaterialLease();
 		releaseForageLease();
 		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
@@ -550,6 +557,7 @@ public class VillagerWorkGoal extends Goal {
 			refreshMeetingInvitation();
 			if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
 			if (action == null) return;
+			if (isWorkbenchAction()) { tickWorkbenchCrafting(); return; }
 			if (isSupplyAction()) { tickBuildSupply(); return; }
 			if (action == Action.RETURN_TO_STOCKPILE) { tickCargoReturn(); return; }
 			if ((action == Action.GATHER || action == Action.CRAFT_FIRST_WORKBENCH || action == Action.FORAGE || action == Action.HARVEST_CROP)
@@ -609,7 +617,7 @@ public class VillagerWorkGoal extends Goal {
 				);
 				case POLISH_PICKAXE -> craftPolishedPickaxe();
 				case GRIND_SMOOTH_STONE -> grindSmoothStone();
-				case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY -> { return; }
+				case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -617,7 +625,7 @@ public class VillagerWorkGoal extends Goal {
 				return;
 			}
 			stop();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); throw failure; }
 	}
 
 	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
@@ -683,12 +691,104 @@ public class VillagerWorkGoal extends Goal {
 			return Action.GRIND_SMOOTH_STONE;
 		}
 		currentMaterialRecipe = chooseMaterialRecipe();
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_PLANK_MATERIALS;
+		}
 		if (currentMaterialRecipe != null) {
 			return Action.CRAFT_MATERIALS;
 		}
 		if (hasReturnCargo()) return null;
 		selectedGatherTarget = chooseGatherTarget();
 		return selectedGatherTarget == null ? null : Action.GATHER;
+	}
+
+	private boolean isWorkbenchAction() {
+		return action == Action.COLLECT_PLANK_MATERIALS || action == Action.WORKBENCH_PLANKS;
+	}
+
+	private void cancelWorkbenchCrafting() {
+		SettlementWorkbenchCrafting.cancel(workbenchTicket);
+		workbenchTicket = null;
+		if (isWorkbenchAction()) { action = null; target = null; }
+	}
+
+	private SettlementWorkbenchCrafting.Ticket prepareWorkbenchCrafting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		BlockPos station = data.getCraftingStation(camp).orElse(null);
+		if (store == null || station == null || !ConstructionWorkshop.withinWorkRange(camp.center(), store)
+			|| !ConstructionWorkshop.withinWorkRange(camp.center(), station) || !foragePositionAccessible(level, station)) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		BlockState stationState = level.getBlockState(station);
+		if (binding == null || !stationState.is(Blocks.CRAFTING_TABLE)) return null;
+		ConstructionJob job = data.getConstructionJob(camp).orElse(null);
+		var projects = ConstructionPlanner.projects(data, camp);
+		var planIds = job == null ? projects.stream().map(ConstructionPlanner.Project::blueprintId).toList() : List.of(job.blueprintId());
+		var plans = planIds.stream().map(BlueprintManager::get).toList();
+		var demands = ConstructionPlanner.materialDemands(data, camp);
+		return SettlementWorkbenchCrafting.prepare(data, camp, villager.getUUID(), villager.getInventory(),
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+				&& level.getEntity(villager.getUUID()) == villager && foragePositionAccessible(level, villager.blockPosition())
+				&& binding.valid() && foragePositionAccessible(level, station)
+				&& level.getBlockState(station).equals(stationState)
+				&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+					level.dimension(), data, camp),
+			() -> java.util.Objects.equals(job, data.getConstructionJob(camp).orElse(null))
+				&& projects.equals(ConstructionPlanner.projects(data, camp))
+				&& plans.equals(planIds.stream().map(BlueprintManager::get).toList())
+				&& demands.equals(ConstructionPlanner.materialDemands(data, camp))
+				&& plankDemandStillNeeded(level, data, camp, demands));
+	}
+
+	/** Recheck output/prerequisite shortage without asking for a second log after pickup. */
+	private boolean plankDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		int planks = SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_PLANKS);
+		for (Map<Item, Integer> demand : demands) {
+			if (demand.getOrDefault(Items.OAK_PLANKS, 0) > planks) return true;
+			for (var recipe : SettlementMaterialCrafting.Recipe.values()) {
+				long available = recipe.output() == Items.WHITE_BED
+					? ConstructionMaterials.available(stockpile, data.simulationOf(camp).orElse(null), recipe.output())
+					: SettlementMaterialCrafting.countPlain(stockpile, recipe.output());
+				if (demand.getOrDefault(recipe.output(), 0) > available
+					&& recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0) > planks) return true;
+			}
+		}
+		return false;
+	}
+
+	private void tickWorkbenchCrafting() {
+		// start and direct tick both use the same final live gates before resolving the store.
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) { stop(); return; }
+		if (shouldEat() || meetingTicket != null || emergencyForage()) { stop(); return; }
+		if (!atCargoStore()) { progress = 0; tickStoreTravel(false); return; }
+		villager.getNavigation().stop();
+		villager.getLookControl().setLookAt(target.getCenter());
+		if (action == Action.COLLECT_PLANK_MATERIALS) {
+			Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+			if (!SettlementWorkbenchCrafting.pickup(workbenchTicket, settlementData(), settlement,
+				villager.getUUID(), villager.getInventory(), stockpile, () -> isTargetValid() && atCargoStore())) { stop(); return; }
+			action = Action.WORKBENCH_PLANKS;
+			target = workbenchTicket.station();
+			progress = 0;
+			travelTicks = 0;
+			return;
+		}
+		int duration = settlementData().personalityOf(settlement, villager.getUUID())
+			.workDuration(CRAFT_TICKS, VillagerPersonality.WorkType.CRAFT);
+		if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
+		duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+		if (++progress < duration) return;
+		SettlementWorkbenchCrafting.finish(workbenchTicket, settlementData(), settlement, villager.getUUID(),
+			villager.getInventory(), () -> isTargetValid() && atCargoStore());
+		stop(); // Products stay in the real bag for the ordinary cargo delivery route.
 	}
 
 	private SettlementStarterCrafting.Ticket prepareStarterCrafting() {
@@ -752,7 +852,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private void craftMaterials() {
 		// Recheck shortages and the pinned plan after travel/work, including a data-pack reload.
-		if (currentMaterialRecipe == null || chooseMaterialRecipe() != currentMaterialRecipe) {
+		if (currentMaterialRecipe == null || currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS
+			|| chooseMaterialRecipe() != currentMaterialRecipe) {
 			return;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
@@ -769,6 +870,10 @@ public class VillagerWorkGoal extends Goal {
 	private BlockPos chooseTarget(Action action) {
 		if (action == null || settlement == null) {
 			return null;
+		}
+		if (isWorkbenchAction()) {
+			return workbenchTicket == null ? null : action == Action.COLLECT_PLANK_MATERIALS
+				? workbenchTicket.store() : workbenchTicket.station();
 		}
 		if (action == Action.GATHER) {
 			return selectedGatherTarget;
@@ -1006,6 +1111,10 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
+		if (isWorkbenchAction()) return workbenchTicket != null
+			&& target.equals(action == Action.COLLECT_PLANK_MATERIALS ? workbenchTicket.store() : workbenchTicket.station())
+			&& workbenchTicket.collected() == (action == Action.WORKBENCH_PLANKS)
+			&& SettlementWorkbenchCrafting.valid(workbenchTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
 		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
 		if (isSupplyAction()) return target.equals(supplyStore) && supplyAuthorization != null && supplyAuthorization.getAsBoolean()
 			&& (action == Action.RETURN_BUILD_SUPPLY ? hasReturnableSupply() : currentSupplyTargetValid());
@@ -1054,7 +1163,8 @@ public class VillagerWorkGoal extends Goal {
 		if (!(villager.level() instanceof ServerLevel level)) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
-		return SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory())
+		return (camp != null && SettlementWorkbenchCargo.hasReturnable(villager.getInventory(), camp.id()))
+			|| SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory())
 			|| SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory());
 	}
 
@@ -1248,7 +1358,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private void tickStoreTravel(boolean supply) {
 		ServerLevel level = (ServerLevel) villager.level();
-		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS || !constructionPathIsTicking()) {
+		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS || !constructionPathIsTicking()
+			|| (isWorkbenchAction() && !workbenchPathInBounds(level))) {
 			if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); return;
 		}
 		if (!villager.getNavigation().isDone()) return;
@@ -1257,11 +1368,21 @@ public class VillagerWorkGoal extends Goal {
 				var path = villager.getNavigation().createPath(candidate, 0);
 				if (path == null || !path.canReach()) return false;
 				for (int i = 0; i < path.getNodeCount(); i++) {
-					if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) return false;
+					if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))
+						|| (isWorkbenchAction() && !foragePositionAccessible(level, path.getNodePos(i)))) return false;
 				}
 				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
 			});
 		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); }
+	}
+
+	private boolean workbenchPathInBounds(ServerLevel level) {
+		var path = villager.getNavigation().getPath();
+		if (path == null) return true;
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			if (!foragePositionAccessible(level, path.getNodePos(i))) return false;
+		}
+		return true;
 	}
 
 	private boolean shouldEat() {
@@ -1358,7 +1479,7 @@ public class VillagerWorkGoal extends Goal {
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"sticks", Items.STICK, 8);
 		if (!withdrawOneLog() || !SettlementPersonalCrafting.craft(villager.getInventory(),
-			stack -> stack.is(ItemTags.LOGS), new ItemStack(Items.STICK, 8))) {
+			stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack), new ItemStack(Items.STICK, 8))) {
 			return;
 		}
 		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt).ifPresent(completed ->
@@ -1377,7 +1498,7 @@ public class VillagerWorkGoal extends Goal {
 	private boolean canCraftSticks() {
 		return hasCraftingStation()
 			&& needsSticks()
-			&& canConvertOne(stack -> stack.is(ItemTags.LOGS), Items.OAK_LOG, new ItemStack(Items.STICK, 8));
+			&& canConvertOne(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack), Items.OAK_LOG, new ItemStack(Items.STICK, 8));
 	}
 
 	private boolean canPolishPickaxe() {
@@ -1395,7 +1516,7 @@ public class VillagerWorkGoal extends Goal {
 			&& SettlementToolUpgrade.supportsPolishing(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
 			&& availableItems(Items.SMOOTH_STONE) < 3
-			&& canConvertOne(stack -> stack.is(Items.COBBLESTONE), Items.COBBLESTONE,
+			&& canConvertOne(stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack), Items.COBBLESTONE,
 				new ItemStack(Items.SMOOTH_STONE));
 	}
 
@@ -1423,7 +1544,7 @@ public class VillagerWorkGoal extends Goal {
 		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
 			"smooth_stone", Items.SMOOTH_STONE, 1);
 		if (!withdrawItems(Items.COBBLESTONE, 1)
-			|| !SettlementPersonalCrafting.craft(villager.getInventory(), stack -> stack.is(Items.COBBLESTONE),
+			|| !SettlementPersonalCrafting.craft(villager.getInventory(), stack -> stack.is(Items.COBBLESTONE) && !SettlementWorkbenchCargo.isMarked(stack),
 				new ItemStack(Items.SMOOTH_STONE))) {
 			return;
 		}
@@ -1444,24 +1565,24 @@ public class VillagerWorkGoal extends Goal {
 
 	private long availableItems(Item item) {
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		return villager.getInventory().countItem(item) + (stockpile == null ? 0 : stockpile.countItem(item))
+		return countCraftingItems(villager.getInventory(), item) + (stockpile == null ? 0 : countCraftingItems(stockpile, item))
 			+ SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
 	}
 
 	private boolean withdrawItems(Item item, int count) {
-		int missing = count - villager.getInventory().countItem(item);
+		int missing = count - countCraftingItems(villager.getInventory(), item);
 		if (missing <= 0) {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		int realAvailable = stockpile == null ? 0 : stockpile.countItem(item);
+		int realAvailable = stockpile == null ? 0 : countCraftingItems(stockpile, item);
 		long abstractAvailable = SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
 		if (realAvailable + abstractAvailable < missing) {
 			return false;
 		}
 		if (realAvailable > 0) {
 			int requested = Math.min(missing, realAvailable);
-			int inserted = SettlementStockpile.transferItem(stockpile, villager.getInventory(), item, requested);
+			int inserted = transferCraftingItems(stockpile, villager.getInventory(), item, requested);
 			if (inserted < requested) {
 				return false;
 			}
@@ -1473,13 +1594,13 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean withdrawOneLog() {
-		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
+		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS) && !SettlementWorkbenchCargo.isMarked(stack))) {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
 		if (stockpile != null) {
 			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-				if (!stockpile.getItem(slot).is(ItemTags.LOGS)) {
+				if (!stockpile.getItem(slot).is(ItemTags.LOGS) || SettlementWorkbenchCargo.isMarked(stockpile.getItem(slot))) {
 					continue;
 				}
 				ItemStack removed = stockpile.removeItem(slot, 1);
@@ -1496,7 +1617,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isPolishedPickaxe(ItemStack stack) {
-		if (!stack.is(Items.STONE_PICKAXE)) {
+		if (!stack.is(Items.STONE_PICKAXE) || SettlementWorkbenchCargo.isMarked(stack)) {
 			return false;
 		}
 		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
@@ -1559,6 +1680,7 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean hasStonePickaxe() {
 		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
+		if (SettlementWorkbenchCargo.isMarked(hand)) return false;
 		if (hand.is(Items.STONE_PICKAXE)) {
 			return true;
 		}
@@ -1567,7 +1689,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
 			ItemStack stack = villager.getInventory().getItem(slot);
-			if (stack.is(Items.STONE_PICKAXE)) {
+			if (stack.is(Items.STONE_PICKAXE) && !SettlementWorkbenchCargo.isMarked(stack)) {
 				villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
 				villager.getInventory().setItem(slot, ItemStack.EMPTY);
 				return true;
@@ -1592,11 +1714,39 @@ public class VillagerWorkGoal extends Goal {
 		return SettlementSavedData.get((ServerLevel) villager.level());
 	}
 
+	/** Keep legacy custom-item semantics, but never borrow a workbench custody marker. */
+	static int countCraftingItems(Container inventory, Item item) {
+		int count = 0;
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			ItemStack stack = inventory.getItem(slot);
+			if (stack.is(item) && !SettlementWorkbenchCargo.isMarked(stack)) count += stack.getCount();
+		}
+		return count;
+	}
+
+	static int transferCraftingItems(Container source, Container target, Item item, int count) {
+		if (source == target || count <= 0) return 0;
+		int transferred = 0;
+		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
+			ItemStack stack = source.getItem(slot);
+			if (stack.isEmpty() || !stack.is(item) || SettlementWorkbenchCargo.isMarked(stack)) continue;
+			ItemStack offered = stack.copy();
+			offered.setCount(Math.min(stack.getCount(), count - transferred));
+			int inserted = SettlementStockpile.insert(target, offered);
+			if (inserted == 0) continue;
+			stack.shrink(inserted);
+			source.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+			transferred += inserted;
+		}
+		if (transferred > 0) source.setChanged();
+		return transferred;
+	}
+
 	static int removeItems(Container inventory, Item item, int count) {
 		int remaining = count;
 		for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item)) {
+			if (!stack.is(item) || SettlementWorkbenchCargo.isMarked(stack)) {
 				continue;
 			}
 			ItemStack removed = inventory.removeItem(slot, remaining);
@@ -1615,6 +1765,8 @@ public class VillagerWorkGoal extends Goal {
 		CRAFT_PICKAXE("craft"),
 		CRAFT_STICKS("craft"),
 		CRAFT_MATERIALS("craft_materials"),
+		COLLECT_PLANK_MATERIALS("collect_plank_materials"),
+		WORKBENCH_PLANKS("workbench_planks"),
 		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),

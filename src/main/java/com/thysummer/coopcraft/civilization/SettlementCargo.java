@@ -10,7 +10,8 @@ public final class SettlementCargo {
 	private SettlementCargo() { }
 
 	public static boolean isMaterial(ItemStack stack) {
-		return stack != null && !stack.isEmpty() && (stack.is(ItemTags.LOGS)
+		return stack != null && !stack.isEmpty() && !SettlementWorkbenchCargo.isMarked(stack)
+			&& (stack.is(ItemTags.LOGS)
 			|| stack.is(Items.COBBLESTONE) || stack.is(Items.STICK) || stack.is(Items.SMOOTH_STONE));
 	}
 

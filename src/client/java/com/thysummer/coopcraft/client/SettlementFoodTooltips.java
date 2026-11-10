@@ -2,6 +2,7 @@ package com.thysummer.coopcraft.client;
 
 import com.thysummer.coopcraft.civilization.SettlementFoodAge;
 import com.thysummer.coopcraft.civilization.ConstructionSupply;
+import com.thysummer.coopcraft.civilization.SettlementWorkbenchCargo;
 
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
 import net.minecraft.ChatFormatting;
@@ -16,6 +17,10 @@ public final class SettlementFoodTooltips {
 			if (ConstructionSupply.isMarked(stack)) {
 				lines.add(Component.translatable("coopcraft.construction_supply.reserved").withStyle(ChatFormatting.GOLD));
 				lines.add(Component.translatable("coopcraft.construction_supply.recovered").withStyle(ChatFormatting.GRAY));
+			}
+			if (SettlementWorkbenchCargo.isMarked(stack)) {
+				lines.add(Component.translatable("coopcraft.workbench_cargo.reserved").withStyle(ChatFormatting.GOLD));
+				lines.add(Component.translatable("coopcraft.workbench_cargo.return_to_source").withStyle(ChatFormatting.GRAY));
 			}
 			if (SettlementFoodAge.isMarked(stack)) {
 				lines.add(Component.translatable("coopcraft.food_age.cargo_only").withStyle(ChatFormatting.GOLD));

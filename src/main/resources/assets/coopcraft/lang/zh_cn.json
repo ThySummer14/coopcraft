@@ -694,5 +694,9 @@
 	"coopcraft.command.settlement.gathering_summary_unavailable": "木石：许可或保护数据不可用，自动木石采集已暂停。详情：/coop settlement gathering。",
 	"coopcraft.command.settlement.gathering_mode_wood": "WOOD 模式：仅普通橡木原木（minecraft:oak_log）。",
 	"coopcraft.command.settlement.gathering_mode_stone": "STONE 模式：仅普通石头和圆石（minecraft:stone、minecraft:cobblestone）。",
-	"coopcraft.command.settlement.gathering_mode_both": "BOTH 模式：仅普通橡木原木、普通石头和圆石。"
+	"coopcraft.command.settlement.gathering_mode_both": "BOTH 模式：仅普通橡木原木、普通石头和圆石。",
+	"coopcraft.workbench_cargo.reserved": "工作台生产货物：材料或产物用途保留",
+	"coopcraft.workbench_cargo.return_to_source": "由本营居民送回公仓；未知格式保留，不自动使用",
+	"coopcraft.interaction.action.collect_plank_materials": "前往公仓领取木板制作原料",
+	"coopcraft.interaction.action.workbench_planks": "在工作台用携带原木制作木板"
 }
