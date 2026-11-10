@@ -68,7 +68,7 @@ class SettlementToolDistributionTest {
 		for (int scenario = 0; scenario < 10; scenario++) {
 			Fixture f = new Fixture(); ItemStack stack = new ItemStack(Items.STONE_PICKAXE);
 			switch (scenario) {
-				case 0 -> stack.setCount(2);
+				case 0 -> { /* Set malformed count on the live slot after insertion below. */ }
 				case 1 -> stack.setDamageValue(1);
 				case 2 -> stack.set(DataComponents.CUSTOM_NAME, Component.literal("Private"));
 				case 3 -> stack.set(DataComponents.CUSTOM_DATA, CustomData.of(new CompoundTag()));
@@ -80,7 +80,15 @@ class SettlementToolDistributionTest {
 				case 9 -> stack.enchant(VanillaRegistries.createLookup().lookupOrThrow(Registries.ENCHANTMENT)
 					.getOrThrow(Enchantments.UNBREAKING), 1);
 			}
-			f.store.setItem(0, stack); ItemStack before = stack.copy();
+			ItemStack before = stack.copy();
+			f.store.setItem(0, stack);
+			assertTrue(ItemStack.matches(before, f.store.getItem(0)), "insertion preserves scenario " + scenario);
+			if (scenario == 0) {
+				// SimpleContainer.setItem clamps tools to one; mutate its live stack to exercise rejection.
+				f.store.getItem(0).setCount(2);
+				assertEquals(2, f.store.getItem(0).getCount());
+				before = stack.copy();
+			}
 			assertNull(f.prepareOptional(), "scenario " + scenario);
 			assertSame(stack, f.store.getItem(0)); assertTrue(ItemStack.matches(before, stack));
 			assertTrue(f.hand.get().isEmpty());
