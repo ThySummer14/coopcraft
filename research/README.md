@@ -1,0 +1,66 @@
+# 《文明演化》Mod 研究文库
+
+> 项目：**CoopCraft / Minecraft Java 1.21.1 / Fabric**  
+> 研究范围：原始社会至多种后续社会形态，强调多路径、可逆、并存与跨时代相互影响。  
+> 本目录是**研究证据、机制设计、游戏创意与实验的版本化知识库**，不是自动生效的代码需求。
+
+## 从这里开始
+
+**当前S0研究收束入口**：[原始社会综合设计与封版条件 v1.0](stages/S0-primitive/S0-integrated-design-and-freeze-v1.0.md)，附 [生态、迁徙与营地间联系 v1.0](stages/S0-primitive/ecology-mobility-and-contacts-v1.0.md)。这代表研究范围已形成统一设计基线，**不是软件功能已通过验收**。
+
+
+1. **[跨时代研究总纲 v0.1](framework/cross-era-master-v0.1.md)**：统一12个研究维度（D01–D12）、S0–S7研究单元、研究完成标准、资本主义经营玩法构想。
+2. **[原始社会研究体系与 Fabric 工程对接 v1.1](stages/S0-primitive/research-framework-v1.1.md)**：统一因果模型、研究依赖和原始社会阶段的工程接入策略。
+3. **[原始社会：玩家参与与制度涌现 v0.1](stages/S0-primitive/player-participation-v0.1.md)**：从研究走向 Minecraft 可玩的居民交互与社会反馈。
+4. **[S0 共同体需求与劳动协调 v0.1](stages/S0-primitive/needs-and-labor-coordination-v0.1.md)**：已核对 main 最新提交，研究多项生存需求竞争时的劳动调度、玩家参与和任务预留。
+5. **[S1 定居农业研究与 Fabric 实现规格 v0.1](stages/S1-early-agriculture/S1-integrated-gameplay-and-implementation-v0.1.md)** 与 **[土地投入/使用权/分配 v0.2](stages/S1-early-agriculture/land-investment-rights-and-surplus-v0.2.md)**：从真实播种/收获到长期权利、家庭领取和土地改良，按 P0/P1/P2 实现。
+6. **[S2 早期国家阶段卡](stages/S2-early-state/stage-card.md)** 与 **[土地、继承、阶层、公共工程及贡赋的L2规格](stages/S2-early-state/S2-land-inheritance-public-works-v0.1.md)**：产权、实际工时、征纳与继承如何衔接现有 S0/S1；研究提案，未编码。
+7. **[S5 资本主义机制与工程规格 v0.2](stages/S5-capitalism/S5-integrated-mechanics-and-implementation-v0.2.md)** 与 **[早期店铺经营创意 v0.1](stages/S5-capitalism/shop-to-capital-circuit-v0.1.md)**：12维、产权/工资/货币、实际成交、危机与12项对照测试；L2设计候选，未编码。
+8. **[研究工作流程](WORKFLOW.md)** 与 **[阶段卡模板](framework/stage-card-template.md)**：未来如何逐轮讨论、验证并归档。
+
+仓库内现行开发基线是 **[docs/civilization-design.md](../docs/civilization-design.md)**，请先检查最新代码、GameTest 与该文档，再决定哪条研究建议需要进入开发。研究资料不取代源码、测试或已确认的接口。
+
+## 阶段导航（研究单元，不是强制升级顺序）
+
+| ID | 研究单元 | 招牌玩法 | 深度状态 |
+|---|---|---|---|
+| S0 | 流动采集与早期共同体 | 采集、互助、公仓、探路、迁居、学习 | **L2研究设计 v1.0 已收束；软件仍待验收** |
+| S1 | 定居、园艺与农业共同体 | 真实耕地/播种/收获、留种与土地使用权 | **L1研究已覆盖，L2垂直切片规格待开发验证** |
+| S2 | 早期国家、贡赋与强制劳动 | 公共工程、继承、劳役、阶层与制度改革 | **L1阶段卡已整理；L2规格 v0.1 待软件验证** |
+| S3 | 领主制与租佃 | 庄园、地租、劳役与公地 | L1：待系统整理 |
+| S4 | 城镇、行会与商业网络 | 市场交易、商队、商品化及制度反馈 | **[L1研究已定稿，L2规格待代码验证](stages/S4-commercial-towns/S4-integrated-research-and-gameplay-v0.2.md)** |
+| S5 | 资本主义生产方式 | 店铺→雇佣生产→资本循环 | **L2机制规格v0.2待实验验证，暂不编码** |
+| S6 | 社会主义组织实验 | 合作社、公共企业与计划协调 | L1：待系统整理 |
+| S7 | 高度社会化合作（未来情境） | 公共工程、共享知识与社会保障 | 理论情境，待L1 |
+
+技术、生产关系、治理和分配至少四轴分别研究；同一世界允许不同制度并存、互相影响和重组。阶段标识是方便研究的理想类型，不是所有文明都必须经过的路线。
+
+## 研究深度与完成规则
+
+- **L1：阶段索引。** 12维基本回答、证据与争论、3条因果链、1个代表玩法、跨阶段接口。
+- **L2：可玩设计。** 玩家5–30分钟闭环、NPC无玩家时自治、真实资源与社会反馈、数据结构、3个对照实验及2个边界实验。
+- **L3：专项深研。** 仅针对影响关键闭环的理论争论或实际瓶颈继续深入。
+- 满足阶段的L2验收即可冻结当前设计版本，未尽问题列入后续队列；不应永远停留在一个阶段。
+
+## 旧版研究归档（阅读时先看版本提醒）
+
+- [原始社会完整设计 v1.0（历史版本）](stages/S0-primitive/archives/full-design-v1.0.md)
+- [生产分配系统 v0.1（历史版本）](stages/S0-primitive/archives/economy-v0.1.md)
+- [旧版 Agent 执行说明 v1.0（历史版本）](stages/S0-primitive/archives/agent-handoff-v1.0.md)
+
+这些文件保留早期研究脉络，含过时的 NeoForge 或工程进度建议。**绝不可从历史版文档直接复制工程配置。**
+
+## 讨论如何变成仓库资产
+
+- 新想法或争议：先搜索已有 Issue；没有对应主题时新建 `[研究/Sx]` Issue，说明历史证据、待证机制与影响玩法。
+- 明确形成结论或有版本化材料：通过 `docs/research-...` 分支提交研究 PR，链接对应 Issue，尽可能不修改可运行源码。
+- 一次讨论可以只更新阶段卡和研究日志；不要为同一概念复制多个完整文档。
+- 开发需求必须经过与当前 Fabric 源码、存档和测试的对照。**研究提案 ≠ 已实现功能。**
+- 新证据推翻旧判断时保留变更记录，不静默改写历史结论。
+- 本仓库遵守 **分支 + PR + CI** 的协作约定，不直接推送主分支。
+
+后续可以在聊天中明确提出“把这轮研究归档到 CoopCraft”，届时会按当前可用的仓库权限发起新的 PR 或更新相关 Issue；此流程不是无人值守的自动同步。
+
+## 文档标识与约定
+
+建议研究编号 `RES-S0-D08-001`，机制实验编号 `EXP-S0-...`，设计决定编号 `ADR-...`。每份新资料尽可能注明版本、日期、研究状态、适用社会、证据来源、开发状态、链接与待验证假设。详情见 [WORKFLOW.md](WORKFLOW.md)。
