@@ -46,6 +46,8 @@ public class VillagerWorkGoal extends Goal {
 	private final Villager villager;
 	private Action action;
 	private SettlementAutonomousTeaching.Session teachingSession;
+	private SettlementAutonomousMeetings.Session autonomousMeetingSession;
+	private final SettlementCargoApproach.Cooldown autonomousMeetingCooldown = new SettlementCargoApproach.Cooldown();
 	private final SettlementCargoApproach.Search teachingApproach = new SettlementCargoApproach.Search();
 	private final SettlementCargoApproach.Cooldown teachingCooldown = new SettlementCargoApproach.Cooldown();
 	private BlockPos teachingPathTarget;
@@ -97,6 +99,7 @@ public class VillagerWorkGoal extends Goal {
 			// Selection is a boundary, never a licence to interrupt a valid current job.
 			if (action != null && isTargetValid()) return true;
 			if (teachingSession != null) cancelTeaching();
+			if (autonomousMeetingSession != null) cancelAutonomousMeeting();
 			releaseMaterialLease();
 			cancelShearing();
 			cancelWorkbenchCrafting();
@@ -155,6 +158,7 @@ public class VillagerWorkGoal extends Goal {
 				if (prepareCargoReturn()) return true;
 			}
 			// Existing invitations are read without scanning nearby residents, even during search backoff.
+			if (action == null && prepareAutonomousMeeting(false)) return true;
 			if (action == null && prepareTeaching(false)) return true;
 			if (searchCooldown > 0) {
 				searchCooldown--;
@@ -180,6 +184,7 @@ public class VillagerWorkGoal extends Goal {
 			}
 			if (action != null && isTargetValid()) return true;
 			action = null; target = null;
+			if (prepareAutonomousMeeting(true)) return true;
 			if (prepareTeaching(true)) return true;
 			if (action != Action.BUILD) {
 				Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
@@ -209,13 +214,14 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
 			progress = 0;
 			return action != null;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); throw failure; }
 	}
 
 	@Override
 	public boolean canContinueToUse() {
 		try {
 			refreshMeetingInvitation();
+			if (action == Action.DISCUSS_COUNCIL && !autonomousMeetingValid()) { cancelAutonomousMeeting(); return false; }
 			if (action == Action.ATTEND_LESSON && !teachingValid()) { cancelTeaching(); return false; }
 			if (hasAnyShearsLoan() && action != Action.SHEAR_SHEEP && action != Action.RETURN_SHEARS && action != Action.EAT) {
 				cancelShearing(); return false;
@@ -233,9 +239,9 @@ public class VillagerWorkGoal extends Goal {
 				cancelWorkbenchCrafting(); cancelShearing(); return false;
 			}
 			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
-			if (!continuing) { releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); }
+			if (!continuing) { releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); }
 			return continuing;
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); throw failure; }
 	}
 
 	@Override
@@ -243,7 +249,8 @@ public class VillagerWorkGoal extends Goal {
 		try {
 			progress = 0;
 			travelTicks = 0;
-			if (action == Action.ATTEND_LESSON) { villager.getNavigation().stop(); tickTeaching(); }
+			if (action == Action.DISCUSS_COUNCIL) { villager.getNavigation().stop(); tickAutonomousMeeting(); }
+			else if (action == Action.ATTEND_LESSON) { villager.getNavigation().stop(); tickTeaching(); }
 			else if (isShearsLoanAction()) { villager.getNavigation().stop(); tickShearsLoan(); }
 			else if (isWorkbenchAction()) { villager.getNavigation().stop(); tickWorkbenchCrafting(); }
 			else if (action == Action.SHEAR_SHEEP) { villager.getNavigation().stop(); tickShearing(); }
@@ -251,11 +258,12 @@ public class VillagerWorkGoal extends Goal {
 			else if (isSupplyAction()) { villager.getNavigation().stop(); tickBuildSupply(); }
 			else if (action == Action.RETURN_TO_STOCKPILE) { villager.getNavigation().stop(); tickCargoReturn(); }
 			else navigateToTarget();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
+		cancelAutonomousMeeting();
 		cancelTeaching();
 		cancelWorkbenchCrafting();
 		cancelShearing();
@@ -288,8 +296,72 @@ public class VillagerWorkGoal extends Goal {
 			|| goal.foodTicket != null || goal.meetingTicket != null || goal.hasAnyShearsLoan()
 			|| goal.hasReturnCargo() || goal.hasTeachingCustody()) return false;
 		SettlementSavedData data = SettlementSavedData.get(level);
+		if (data.councilSessions().claimed(resident.getUUID())) return false;
 		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
 		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
+	}
+
+	/** Read-only eligibility inspection, including reservations that have not joined a Goal yet. */
+	static boolean readyForAutonomousMeeting(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && goal.action != Action.DISCUSS_COUNCIL)
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.teachingSession != null
+			|| goal.hasAnyShearsLoan() || goal.hasReturnCargo() || goal.hasTeachingCustody()
+			|| SettlementCargo.isMaterial(resident.getMainHandItem())
+			|| SettlementCargo.isMaterial(resident.getOffhandItem())) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		if (data.teachingSessions().find(resident.getUUID(), level.getGameTime()) != null) return false;
+		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
+		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
+	}
+
+	static SettlementAutonomousMeetings.Session autonomousMeetingSessionOf(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		return goal != null && goal.action == Action.DISCUSS_COUNCIL ? goal.autonomousMeetingSession : null;
+	}
+
+	private boolean prepareAutonomousMeeting(boolean allowSearch) {
+		// Default-OFF residents must not pay the candidate/body inspection cost.
+		if (settlement == null) return false;
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		if (state == null || !state.autonomousMeetingsAvailable() || !state.autonomousMeetingsEnabled()
+			|| !state.survivalEnabled() || !state.normsEnabled()) return false;
+		if (!readyForAutonomousMeeting(villager)) return false;
+		var session = SettlementAutonomousMeetings.current(villager, settlementData());
+		if (session == null && allowSearch && autonomousMeetingCooldown.ready(villager.level().getGameTime())) {
+			autonomousMeetingCooldown.defer(villager.level().getGameTime());
+			session = SettlementAutonomousMeetings.poll(villager, settlementData(), settlement);
+		}
+		if (session == null) return false;
+		autonomousMeetingSession = session;
+		action = Action.DISCUSS_COUNCIL;
+		target = session.store;
+		if (!SettlementAutonomousMeetings.join(session, villager)) { cancelAutonomousMeeting(); return false; }
+		return true;
+	}
+
+	private boolean autonomousMeetingValid() {
+		return autonomousMeetingSession != null && target != null && target.equals(autonomousMeetingSession.store)
+			&& readyForAutonomousMeeting(villager) && SettlementAutonomousMeetings.valid(autonomousMeetingSession);
+	}
+
+	private void cancelAutonomousMeeting() {
+		SettlementAutonomousMeetings.cancelOnUnload(villager); // Also releases a pending group reservation.
+		SettlementAutonomousMeetings.cancel(autonomousMeetingSession);
+		autonomousMeetingSession = null;
+		if (action == Action.DISCUSS_COUNCIL) { action = null; target = null; }
+	}
+
+	private void tickAutonomousMeeting() {
+		if (!autonomousMeetingValid()) { stop(); return; }
+		var session = autonomousMeetingSession;
+		villager.getNavigation().stop();
+		Villager other = session.participants.stream().filter(participant -> participant != villager).findFirst().orElse(null);
+		boolean safe = other != null && villager.hasLineOfSight(other) && other.hasLineOfSight(villager);
+		SettlementAutonomousMeetings.pulse(session, villager, safe);
+		if (!autonomousMeetingValid()) { stop(); return; }
+		if (other != null) villager.getLookControl().setLookAt(other, 30, 30);
 	}
 
 	static boolean teachingPurpose(ItemStack stack) {
@@ -663,6 +735,10 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	public WorkStatus status() {
+		if (action == Action.DISCUSS_COUNCIL && autonomousMeetingSession != null) {
+			String phase = autonomousMeetingSession.phase();
+			return new WorkStatus(phase.equals("closed") ? "idle" : phase.equals("discussing") ? "discuss_council" : "council_waiting", target, null);
+		}
 		if (action == Action.ATTEND_LESSON && teachingSession != null) {
 			String phase = teachingSession.phase();
 			return new WorkStatus(phase.equals("closed") ? "idle" : phase.equals("teaching") ? "lesson_learning"
@@ -738,6 +814,7 @@ public class VillagerWorkGoal extends Goal {
 	public void tick() {
 		try {
 			refreshMeetingInvitation();
+			if (action == Action.DISCUSS_COUNCIL) { tickAutonomousMeeting(); return; }
 			if (action == Action.ATTEND_LESSON) { tickTeaching(); return; }
 			if (hasAnyShearsLoan() && action != Action.SHEAR_SHEEP && action != Action.RETURN_SHEARS && action != Action.EAT) { stop(); return; }
 			if (isShearsLoanAction()) { tickShearsLoan(); return; }
@@ -804,7 +881,7 @@ public class VillagerWorkGoal extends Goal {
 				);
 				case POLISH_PICKAXE -> craftPolishedPickaxe();
 				case GRIND_SMOOTH_STONE -> grindSmoothStone();
-				case ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
+				case DISCUSS_COUNCIL, ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -812,7 +889,7 @@ public class VillagerWorkGoal extends Goal {
 				return;
 			}
 			stop();
-		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); throw failure; }
+		} catch (RuntimeException | Error failure) { releaseMaterialLease(); cancelWorkbenchCrafting(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); throw failure; }
 	}
 
 	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
@@ -1522,6 +1599,7 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
+		if (action == Action.DISCUSS_COUNCIL) return autonomousMeetingValid();
 		if (action == Action.ATTEND_LESSON) return teachingValid();
 		if (isShearsLoanAction()) return shearsLoanTicket != null && target.equals(shearsLoanTicket.store)
 			&& shearsLoanTicket.returning == (action == Action.RETURN_SHEARS) && SettlementShearing.validLoan(shearsLoanTicket);
@@ -2207,6 +2285,7 @@ public class VillagerWorkGoal extends Goal {
 		POLISH_PICKAXE("polish"),
 		GRIND_SMOOTH_STONE("grind"),
 		ATTEND_LESSON("attend_lesson"),
+		DISCUSS_COUNCIL("discuss_council"),
 		ATTEND_MEETING("attend_meeting"),
 		EAT("eat");
 

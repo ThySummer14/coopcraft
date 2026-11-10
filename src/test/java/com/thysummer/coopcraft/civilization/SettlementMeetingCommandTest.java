@@ -56,7 +56,7 @@ class SettlementMeetingCommandTest {
 			}
 		}
 		var completions = dispatcher.getCompletionSuggestions(dispatcher.parse("coop settlement meeting ", 0)).get();
-		assertEquals(List.of("hold"), completions.getList().stream().map(suggestion -> suggestion.getText()).toList());
+		assertEquals(List.of("autonomy", "hold"), completions.getList().stream().map(suggestion -> suggestion.getText()).toList());
 	}
 
 	@Test

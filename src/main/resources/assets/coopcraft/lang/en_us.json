@@ -788,5 +788,15 @@
 	"coopcraft.interaction.action.lesson_waiting": "Waiting for the lesson partner at the workbench",
 	"coopcraft.interaction.action.lesson_learning": "Learning a craft together at the workbench",
 	"coopcraft.interaction.action.collect_torch_materials": "Collecting fuel and sticks for torches at the communal store",
-	"coopcraft.interaction.action.workbench_torches": "Making torches from carried materials at the workbench"
+	"coopcraft.interaction.action.workbench_torches": "Making torches from carried materials at the workbench",
+	"coopcraft.command.settlement.meeting_autonomy_on": "Autonomous store-side councils are enabled. A real proposal, an informed resident and enough adults present are still required; only completed discussion is settled.",
+	"coopcraft.command.settlement.meeting_autonomy_off": "Autonomous store-side councils are disabled. Player-organized meetings remain available.",
+	"coopcraft.command.settlement.meeting_autonomy_paused": "Autonomous councils are selected but paused because survival and norm mapping are not both enabled.",
+	"coopcraft.command.settlement.meeting_autonomy_blocked_format": "The autonomous council settings have an unknown or damaged format. The original data is preserved and this feature is paused; toggle commands cannot overwrite it.",
+	"coopcraft.command.settlement.meeting_autonomy_needs_modes": "Enable survival and norm mapping for this settlement before enabling autonomous store-side councils.",
+	"coopcraft.command.settlement.meeting_autonomy_invalid_operation": "Use meeting autonomy to inspect, or on / off to configure autonomous store-side councils.",
+	"coopcraft.command.settlement.meeting_autonomy_permission": "Operator level 2 is required to change autonomous council settings.",
+	"coopcraft.command.settlement.meeting_autonomy_player_unavailable": "Use an online, living, non-spectator player in the same dimension near the settlement.",
+	"coopcraft.interaction.action.discuss_council": "Deliberating together at the communal store",
+	"coopcraft.interaction.action.council_waiting": "Waiting for nearby residents to begin deliberation"
 }

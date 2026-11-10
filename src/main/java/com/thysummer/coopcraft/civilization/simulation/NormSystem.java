@@ -261,7 +261,12 @@ public final class NormSystem {
 	}
 
 	/** Opaque read-only identity/eligibility review. Opinions are deliberately not captured. */
-	public record MeetingReview(MeetingResult result, Object stamp) {}
+	public record MeetingReview(MeetingResult result, Object stamp) {
+		/** Whether this review found an onsite source with core-validated proposal provenance. */
+		public boolean hasVerifiedSource() {
+			return stamp instanceof ReviewStamp review && review.source() != null && review.information() != null;
+		}
+	}
 
 	private record ReviewedResident(Person person, String id, String camp, boolean adult, boolean hasTime) {}
 	private record ReviewStamp(NormSystem owner, long day, long lastMeetingDay, NormProposal proposal,

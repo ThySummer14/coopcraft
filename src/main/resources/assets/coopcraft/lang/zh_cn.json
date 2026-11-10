@@ -788,5 +788,15 @@
 	"coopcraft.interaction.action.lesson_waiting": "在工作台旁等候教学伙伴",
 	"coopcraft.interaction.action.lesson_learning": "与同营伙伴共同学习工艺",
 	"coopcraft.interaction.action.collect_torch_materials": "前往公仓领取火把的燃料与木棍",
-	"coopcraft.interaction.action.workbench_torches": "在工作台用携带材料制作火把"
+	"coopcraft.interaction.action.workbench_torches": "在工作台用携带材料制作火把",
+	"coopcraft.command.settlement.meeting_autonomy_on": "仓旁自主协商已开启；仍需真实提案、知情居民及足够现场成年人，完成共同讨论后才结算。",
+	"coopcraft.command.settlement.meeting_autonomy_off": "仓旁自主协商已关闭。手动组织会议仍可使用。",
+	"coopcraft.command.settlement.meeting_autonomy_paused": "仓旁自主协商的设置为开启，但生存与规范映射未同时开启，当前暂停。",
+	"coopcraft.command.settlement.meeting_autonomy_blocked_format": "自主协商配置格式未知或损坏，已保留原数据并暂停本功能；不能用开关命令覆盖。",
+	"coopcraft.command.settlement.meeting_autonomy_needs_modes": "请先为该聚落开启生存与规范映射，再启用仓旁自主协商。",
+	"coopcraft.command.settlement.meeting_autonomy_invalid_operation": "使用 meeting autonomy 查询，或用 on / off 设置仓旁自主协商。",
+	"coopcraft.command.settlement.meeting_autonomy_permission": "需要OP2权限才能更改仓旁自主协商设置。",
+	"coopcraft.command.settlement.meeting_autonomy_player_unavailable": "请由同维度、在线且存活的非旁观玩家在聚落附近操作。",
+	"coopcraft.interaction.action.discuss_council": "在公仓旁自行商议",
+	"coopcraft.interaction.action.council_waiting": "等候仓旁居民开始协商"
 }

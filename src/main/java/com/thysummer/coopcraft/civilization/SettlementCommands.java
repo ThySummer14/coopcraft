@@ -130,9 +130,16 @@ public final class SettlementCommands {
 			.then(LiteralArgumentBuilder.<S>literal("rescue").requires(admin)
 				.then(RequiredArgumentBuilder.<S, String>argument("cargo_record", StringArgumentType.word())
 					.executes(ctx -> handler.run(ctx, "cargo", "rescue")))));
+		var autonomy = LiteralArgumentBuilder.<S>literal("autonomy")
+			.executes(ctx -> handler.run(ctx, "meeting_autonomy", ""));
+		for (String operation : List.of("on", "off")) {
+			autonomy.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.executes(ctx -> handler.run(ctx, "meeting_autonomy", operation)));
+		}
 		settlement.then(LiteralArgumentBuilder.<S>literal("meeting")
 			.executes(ctx -> handler.run(ctx, "meeting", ""))
-			.then(LiteralArgumentBuilder.<S>literal("hold").executes(ctx -> handler.run(ctx, "meeting", "hold"))));
+			.then(LiteralArgumentBuilder.<S>literal("hold").executes(ctx -> handler.run(ctx, "meeting", "hold")))
+			.then(autonomy));
 		settlement.then(LiteralArgumentBuilder.<S>literal("events")
 			.executes(ctx -> handler.run(ctx, "events", ""))
 			.then(RequiredArgumentBuilder.<S, Integer>argument("count", IntegerArgumentType.integer(1, SettlementEvents.MAX_COUNT))
@@ -198,6 +205,7 @@ public final class SettlementCommands {
 			for (Component line : observationMessages(data, settlement)) source.sendSuccess(() -> line, false);
 			return 1;
 		}
+		if (action.equals("meeting_autonomy")) return SettlementAutonomousMeetingCommands.execute(source, player, data, settlement, option);
 		if (action.equals("meeting")) {
 			SettlementMeetings.Result result = option.equals("hold")
 				? SettlementMeetings.hold(level, data, settlement, player)

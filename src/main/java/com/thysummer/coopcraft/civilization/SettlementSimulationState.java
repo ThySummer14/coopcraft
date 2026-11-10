@@ -48,6 +48,9 @@ public final class SettlementSimulationState {
 	private boolean growthEnabled;
 	private boolean skillsEnabled;
 	private boolean normsEnabled;
+	private boolean autonomousMeetingsEnabled;
+	private Tag invalidAutonomousMeetings;
+	private long autonomousMeetingsVersion;
 	private long foodRequestModeVersion;
 
 	long foodRequestModeVersion() { return foodRequestModeVersion; }
@@ -136,6 +139,39 @@ public final class SettlementSimulationState {
 	public void setNormsEnabled(boolean enabled) {
 		if (normsEnabled != enabled) foodRequestModeVersion++;
 		normsEnabled = enabled;
+	}
+
+	public boolean autonomousMeetingsAvailable() { return invalidAutonomousMeetings == null; }
+
+	public boolean autonomousMeetingsEnabled() { return autonomousMeetingsEnabled; }
+
+	long autonomousMeetingsVersion() { return autonomousMeetingsVersion; }
+
+	/** Unsupported optional data must survive even an explicit attempt to change this setting. */
+	public void setAutonomousMeetingsEnabled(boolean enabled) {
+		if (!autonomousMeetingsAvailable() || autonomousMeetingsEnabled == enabled) return;
+		autonomousMeetingsEnabled = enabled;
+		autonomousMeetingsVersion++;
+	}
+
+	private Tag saveAutonomousMeetings() {
+		if (invalidAutonomousMeetings != null) return invalidAutonomousMeetings.copy();
+		CompoundTag result = new CompoundTag();
+		result.putInt("Version", 1);
+		result.putBoolean("Enabled", autonomousMeetingsEnabled);
+		return result;
+	}
+
+	private void loadAutonomousMeetings(Tag raw) {
+		if (raw == null) return; // Existing worlds never opt in implicitly.
+		if (raw instanceof CompoundTag root && root.getAllKeys().equals(Set.of("Version", "Enabled"))
+			&& root.contains("Version", Tag.TAG_INT) && root.getInt("Version") == 1
+			&& root.contains("Enabled", Tag.TAG_BYTE)
+			&& (root.getByte("Enabled") == 0 || root.getByte("Enabled") == 1)) {
+			autonomousMeetingsEnabled = root.getByte("Enabled") == 1;
+			return;
+		}
+		invalidAutonomousMeetings = raw.copy();
 	}
 
 	public long lastSurvivalDay() {
@@ -298,6 +334,7 @@ public final class SettlementSimulationState {
 		}
 		tag.putLong("Day", world.day());
 		tag.put("CraftLessons", saveCraftLessons());
+		tag.put("AutonomousMeetings", saveAutonomousMeetings());
 		tag.putLong("NextBatchId", world.nextBatchId());
 		tag.putBoolean("SurvivalEnabled", survivalEnabled);
 		tag.putBoolean("ProductionEnabled", productionEnabled);
@@ -383,6 +420,7 @@ public final class SettlementSimulationState {
 		state.growthEnabled = tag.contains("GrowthEnabled") && tag.getBoolean("GrowthEnabled");
 		state.skillsEnabled = tag.contains("SkillsEnabled") && tag.getBoolean("SkillsEnabled");
 		state.normsEnabled = tag.contains("NormsEnabled") && tag.getBoolean("NormsEnabled");
+		state.loadAutonomousMeetings(tag.get("AutonomousMeetings"));
 		state.lastSurvivalDay = tag.contains("LastSurvivalDay") ? tag.getLong("LastSurvivalDay") : Long.MIN_VALUE;
 		ListTag residents = tag.getList("Residents", ListTag.TAG_COMPOUND);
 		Map<String, List<String>> parentage = new LinkedHashMap<>();

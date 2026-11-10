@@ -15,6 +15,8 @@
 | `/coop settlement reserves normal\|high` | OP等级2 | 选择常规或加倍备粮目标，仅影响觅食者后续补储备判断 |
 | `/coop settlement meeting` | 普通玩家 | 只读查看今日会议机会、选中议题与当前规则效果 |
 | `/coop settlement meeting hold` | 普通玩家 | 在真实公仓旁组织已有议题的一次现场讨论；不是玩家投票 |
+| `/coop settlement meeting autonomy` | 普通玩家 | 只读查看仓旁自主协商设置，旧档默认关闭 |
+| `/coop settlement meeting autonomy on\|off` | OP2 | 单独开启/关闭仓旁自主协商，开启前需已有survival+norms |
 | `/coop settlement rations` | 普通玩家 | 只读查看已加载居民当日件数额度、所领食物含营养与当前饥饿 |
 | `/coop settlement construction` | 普通玩家 | 只读查看任务蓝图ID、原点、nextIndex、保存/当前指纹与兼容原因 |
 | `/coop settlement construction adopt <fingerprint>` | OP等级2 | 显式核验并为无签名旧任务补签名 |
@@ -870,3 +872,6 @@ status和materials会同时显示保存的施工步骤数、蓝图ID、下一位
 `/coop settlement teaching hold <师傅UUID> <学徒UUID>` 由实际到场OP2玩家组织一次指导；不自动替换任何参与者。
 
 须启用survival、skills、norms，玩家、师徒及两人之间都满足4格范围和现场门禁；师傅CRAFT至少1.1且领先0.1。双方每核心日各只能参与一次，重载、切换角色或伙伴不重置。无自动邀约或新对话按钮；详见[现场教学](field-craft-teaching.md)。
+
+
+仓旁自主协商的现场人数、工时、存档和未验证边界见[自主协商](autonomous-council.md)。该设置独立于原五个模拟开关，关闭依赖时暂停但不抹掉明确选择；坏格式保留并停用，不通过开关命令修复。
