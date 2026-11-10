@@ -977,3 +977,5 @@
 - 新增56项JUnit源码（借据20、任务身份14、死亡兼容9、装备保护6、Goal接线7）。20个修改Java文件语法解析、738条双语键/占位符、Mixin JSON与diff检查通过；旧接线断言继续明确要求三类标记隔离。完整编译/JUnit尚未执行，等待本次提交的首次自动CI，未运行游戏。
 
 - 第七十七增量首次备份 `6fd022729b97b42852cb32335b59f919dc5415e1`（本地 `0263992`、同树 `80a1aab9bb9bee8155ba421ef5aec55bc77cd12b`）[首次CI](https://github.com/ThySummer14/coopcraft/actions/runs/42759718144)生产代码编译通过，compileTestJava因新借据测试夹具向CUSTOM_MODEL_DATA传入int而失败，实际API要求CustomModelData。JUnit未运行、两组实验跳过；仅修夹具类型，保留全部组件守恒断言和生产代码，修订提交另取自动CI结果，不重跑旧提交。
+
+- 修订 `cf5deb6515c0c0d5648e28b5a7a2d0908f0e7a63`（本地 `be40f71`、同树 `45faa9bc239857955053657563a65abf8151dfda`）[自动CI](https://github.com/ThySummer14/coopcraft/actions/runs/42760234560)编译通过并首次执行1702项JUnit，2失败、0跳过；新增56项全部通过，包括实际Minecraft死亡字段/调用先后和装备setter字节码检查。下载报告SHA已核对。两项旧白床/编织工作台接线断言只匹配原有工作台路径条件，未接受新增借还动作共用安全边界；更新为同时明确要求工作台与借还检查，不删除检查、不改生产代码，不重跑旧提交。
