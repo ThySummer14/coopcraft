@@ -4,6 +4,7 @@ import com.thysummer.coopcraft.CoopCraft;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,11 +38,16 @@ import net.minecraft.world.level.saveddata.SavedData;
  */
 public final class SettlementCargoRecovery extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlement_cargo_recovery";
-	private static final int DATA_VERSION = 1;
+	private static final int DATA_VERSION = 2;
 	private static final int MAX_CARGO_SLOTS = 8;
+	private static final int MAX_RECORD_SLOTS = MAX_CARGO_SLOTS + 1;
+	private static final int MAX_PENDING_DEATH_NOTICES = 128;
 	private static final Factory<SettlementCargoRecovery> FACTORY = new Factory<>(
 		SettlementCargoRecovery::new, SettlementCargoRecovery::load, null);
 	private final Map<UUID, CargoRecord> records = new LinkedHashMap<>();
+	// The early hook and AFTER_DEATH run synchronously in the same vanilla die invocation.
+	// Only the exact dying object may consume its notification; receipts are never persisted.
+	private final Map<Object, Integer> pendingDeathNotices = new IdentityHashMap<>();
 	private CompoundTag preservedUnreadable;
 
 	/** False means unknown/corrupt stored data is retained verbatim and all mutations fail closed. */
@@ -59,27 +65,70 @@ public final class SettlementCargoRecovery extends SavedData {
 		return level.getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
 	}
 
-	/** Called only by AFTER_DEATH, before membership cleanup. Infection may already have discarded the entity. */
+	/** Called just after vanilla commits dead=true, before killer conversion or any equipment loot. */
+	public static void captureBeforeDeath(ServerLevel level, Villager villager) {
+		if (level == null || villager == null || villager.level() != level || !level.getServer().isSameThread()) return;
+		SettlementMembershipClaims.Resolution claims = SettlementMembershipClaims.resolve(level, villager.getUUID());
+		if (!eligible(claims, level.dimension(), villager.getUUID())) return;
+		SettlementCargoRecovery recovery = get(level);
+		if (!recovery.available()) return;
+		recovery.captureBeforeDeath(villager, claims, level.dimension(), villager.getUUID(), villager.blockPosition(),
+			villager.getName().getString(), villager::getInventory, villager::getMainHandItem,
+			stack -> SettlementShearsEquipment.clear(villager, stack));
+	}
+
+	/** AFTER_DEATH consumes the early receipt once; the fallback still accepts discarded originals. */
 	public static int captureDeath(ServerLevel level, Villager villager) {
 		if (level == null || villager == null || villager.level() != level) return 0;
+		SettlementCargoRecovery recovery = get(level);
+		int captured = recovery.takeDeathNotice(villager);
+		if (captured > 0) return captured;
 		SettlementMembershipClaims.Resolution claims = SettlementMembershipClaims.resolve(level, villager.getUUID());
 		if (!eligible(claims, level.dimension(), villager.getUUID())) return 0;
 		// Deliberately no isRemoved(), isAlive() or level.getEntity() gate: AFTER_DEATH is the evidence.
-		SettlementCargoRecovery recovery = get(level);
 		if (!recovery.available()) {
 			CoopCraft.LOGGER.warn("Cannot preserve deceased member cargo: recovery data in {} is unknown or malformed; original data retained (member {})",
 				level.dimension().location(), villager.getUUID());
 			return 0;
 		}
 		return recovery.captureDeath(claims, level.dimension(), villager.getUUID(), villager.blockPosition(),
-			villager.getName().getString(), villager::getInventory);
+			villager.getName().getString(), villager::getInventory, villager::getMainHandItem,
+			stack -> SettlementShearsEquipment.clear(villager, stack));
+	}
+
+	int captureBeforeDeath(Object deathIdentity, SettlementMembershipClaims.Resolution claims, ResourceKey<Level> dimension,
+		UUID deceasedId, BlockPos position, String name, Supplier<? extends Container> inventory,
+		Supplier<ItemStack> mainHand, Predicate<ItemStack> clearHand) {
+		if (deathIdentity == null) return 0;
+		int captured = captureDeath(claims, dimension, deceasedId, position, name, inventory, mainHand, clearHand);
+		if (captured > 0 && !pendingDeathNotices.containsKey(deathIdentity)) {
+			// A third-party exception before AFTER_DEATH must not retain unbounded entity references.
+			// Eviction drops only a chat receipt; persistent physical custody remains untouched.
+			if (pendingDeathNotices.size() >= MAX_PENDING_DEATH_NOTICES) {
+				var iterator = pendingDeathNotices.keySet().iterator(); iterator.next(); iterator.remove();
+			}
+			pendingDeathNotices.put(deathIdentity, captured);
+		}
+		return captured;
+	}
+
+	int takeDeathNotice(Object deathIdentity) {
+		Integer count = pendingDeathNotices.remove(deathIdentity);
+		return count == null ? 0 : count;
 	}
 
 	/** Pure death-event entry contract: removed/discarded entities remain eligible by their unique raw claim. */
 	int captureDeath(SettlementMembershipClaims.Resolution claims, ResourceKey<Level> dimension,
 		UUID deceasedId, BlockPos position, String name, Supplier<? extends Container> inventory) {
+		return captureDeath(claims, dimension, deceasedId, position, name, inventory, () -> ItemStack.EMPTY, stack -> false);
+	}
+
+	/** A marked hand is extra real custody. clearHand must remove exactly its expected stack or return false. */
+	int captureDeath(SettlementMembershipClaims.Resolution claims, ResourceKey<Level> dimension,
+		UUID deceasedId, BlockPos position, String name, Supplier<? extends Container> inventory,
+		Supplier<ItemStack> mainHand, Predicate<ItemStack> clearHand) {
 		if (!available() || !eligible(claims, dimension, deceasedId) || position == null || inventory == null
-			|| records.containsKey(deceasedId)) return 0;
+			|| mainHand == null || clearHand == null || records.containsKey(deceasedId)) return 0;
 		Container source = inventory.get();
 		if (source == null || source.getContainerSize() > MAX_CARGO_SLOTS) return 0;
 		var claim = claims.uniqueClaim().orElseThrow();
@@ -96,10 +145,17 @@ public final class SettlementCargoRecovery extends SavedData {
 			boolean potatoCargo = stack.is(Items.POTATO) || stack.is(Items.POISONOUS_POTATO);
 			if (!SettlementCargo.isMaterial(stack) && !ConstructionSupply.isMarked(stack)
 				&& !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack)
+				&& !SettlementShearsLoan.isMarked(stack)
 				&& !agedFood && !potatoCargo
 				&& !(preserveFood && SettlementFoodCargo.isFood(stack))) continue;
 			ItemStack removed = source.removeItem(slot, stack.getCount());
 			if (!removed.isEmpty()) record.stacks.add(removed.copy());
+		}
+		ItemStack held = mainHand.get();
+		if (SettlementShearsLoan.isMarked(held)) {
+			// Preserve unknown/foreign stamps verbatim. No validation, unmarking, new tool or repair.
+			ItemStack actual = held.copy();
+			if (clearHand.test(held)) record.stacks.add(actual);
 		}
 		if (record.total() > 0) {
 			records.put(deceasedId, record);
@@ -187,7 +243,9 @@ public final class SettlementCargoRecovery extends SavedData {
 	static SettlementCargoRecovery load(CompoundTag tag, HolderLookup.Provider registries) {
 		SettlementCargoRecovery data = new SettlementCargoRecovery();
 		try {
-			if (tag.getInt("DataVersion") != DATA_VERSION || !tag.contains("Records", Tag.TAG_LIST)) {
+			int version = tag.getInt("DataVersion");
+			if (!tag.contains("DataVersion", Tag.TAG_INT) || (version != 1 && version != DATA_VERSION)
+				|| !tag.contains("Records", Tag.TAG_LIST)) {
 				return unreadable(tag);
 			}
 			ListTag list = (ListTag) tag.get("Records");
@@ -200,7 +258,7 @@ public final class SettlementCargoRecovery extends SavedData {
 				if (data.records.containsKey(id)) return unreadable(tag);
 				List<ItemStack> stacks = new ArrayList<>();
 				ListTag savedStacks = (ListTag) entry.get("Stacks");
-				if (savedStacks.size() > MAX_CARGO_SLOTS
+				if (savedStacks.size() > (version == 1 ? MAX_CARGO_SLOTS : MAX_RECORD_SLOTS)
 					|| (!savedStacks.isEmpty() && savedStacks.getElementType() != Tag.TAG_COMPOUND)) return unreadable(tag);
 				for (int slot = 0; slot < savedStacks.size(); slot++) {
 					ItemStack stack = ItemStack.parseOptional(registries, savedStacks.getCompound(slot));

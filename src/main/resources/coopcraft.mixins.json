@@ -6,6 +6,7 @@
 	"mixins": [
 		"PlayerAdvancementsMixin",
 		"SheepShearingDropsMixin",
+		"VillagerLoanDeathMixin",
 		"VillagerMakeLoveMixin",
 		"VillagerInteractionMixin",
 		"MerchantMenuMixin",
@@ -16,6 +17,7 @@
 		"LivingEntityFoodAgeMixin",
 		"PlayerFoodAgeMixin",
 		"MobFoodAgeMixin",
+		"MobShearsEquipmentMixin",
 		"RecipeManagerFoodAgeMixin",
 		"MobAccessor"
 	],

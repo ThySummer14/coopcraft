@@ -19,6 +19,6 @@ public final class SettlementFood {
 	/** Assigned stock, including malformed cargo, must never become an ordinary settlement ration. */
 	public static int points(ItemStack stack) {
 		return stack == null || stack.isEmpty() || SettlementFoodAge.isMarked(stack)
-			|| SettlementShearingCargo.isMarked(stack) ? 0 : points(stack.getItem());
+			|| SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack) ? 0 : points(stack.getItem());
 	}
 }

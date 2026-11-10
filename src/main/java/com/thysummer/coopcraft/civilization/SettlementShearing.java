@@ -10,6 +10,7 @@ import java.util.function.BooleanSupplier;
 import com.thysummer.coopcraft.CoopCraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
@@ -34,6 +35,8 @@ final class SettlementShearing {
 		Object actorIdentity();
 		boolean activeAdultUnique();
 		ItemStack mainHand();
+		default ItemStack offHand() { return ItemStack.EMPTY; }
+		default ResourceLocation dimension() { return null; }
 		long time();
 		Target target(UUID sheep);
 		double distanceSquared(Target target);
@@ -71,11 +74,11 @@ final class SettlementShearing {
 		BlockPos position() { return sheep().blockPosition(); }
 	}
 
-	private static boolean actorAllowed(SettlementSavedData data, Settlement camp, UUID actor, Probe probe) {
+	private static boolean actorAllowed(SettlementSavedData data, Settlement camp, UUID actor, Probe probe, boolean requireTool) {
 		if (data == null || camp == null || actor == null || probe == null || probe.currentData() != data
 			|| !data.canonicalSettlement(camp) || !data.isMember(camp, actor) || data.stockpileBindingToken(camp) == null
 			|| data.shearingPermitsBlocked() || data.protectedAreas().blocked() || !probe.activeAdultUnique()
-			|| !usableTool(probe.mainHand())) return false;
+			|| (requireTool && !usableTool(probe.mainHand(), probe.dimension(), camp.id(), actor))) return false;
 		var simulation = data.simulationOf(camp).orElse(null);
 		if (simulation != null && simulation.survivalEnabled()) {
 			String id = simulation.residentId(actor).orElse(null);
@@ -88,10 +91,11 @@ final class SettlementShearing {
 		return SettlementSimulationService.hasGatherTime(data, camp, actor);
 	}
 
-	private static boolean usableTool(ItemStack tool) {
+	private static boolean usableTool(ItemStack tool, ResourceLocation dimension, UUID camp, UUID actor) {
 		return tool != null && !tool.isEmpty() && tool.getCount() == 1 && tool.is(Items.SHEARS)
 			&& !SettlementWorkbenchCargo.isMarked(tool) && !SettlementShearingCargo.isMarked(tool)
-			&& !ConstructionSupply.isMarked(tool);
+			&& !ConstructionSupply.isMarked(tool)
+			&& (!SettlementShearsLoan.isMarked(tool) || SettlementShearsLoan.ownedBy(tool, dimension, camp, actor));
 	}
 
 	private static boolean targetAllowed(SettlementSavedData data, Settlement camp,
@@ -105,8 +109,126 @@ final class SettlementShearing {
 			&& !SettlementShearingCommands.protectedBox(data.protectedAreas(), target.box());
 	}
 
+	/** Read-only eligibility: never installs synthetic shears and never claims a sheep lease. */
+	static boolean hasBorrowCandidate(SettlementSavedData data, Settlement camp, UUID actor, Probe probe, BooleanSupplier demand) {
+		if (demand == null || !demand.getAsBoolean() || !borrowerAllowed(data, camp, actor, probe)) return false;
+		Object entity = probe.actorIdentity(), member = data.memberIdentity(actor), binding = data.stockpileBindingToken(camp);
+		SimpleContainer bag = probe.inventory();
+		for (var permit : data.shearingPermitsOf(camp).stream().limit(SettlementShearingPermits.MAX_PER_SETTLEMENT).toList()) {
+			if (!data.shearingLeases().available(permit.sheepId(), actor, probe.time())) continue;
+			Target target = probe.target(permit.sheepId());
+			if (!targetAllowed(data, camp, permit, target, probe) || !borrowCapacity(probe.inventory(), camp, permit)) continue;
+			if (!demand.getAsBoolean() || !borrowerAllowed(data, camp, actor, probe)) return false;
+			Target current = probe.target(permit.sheepId());
+			if (current != null && current.identity() == target.identity() && targetAllowed(data, camp, permit, current, probe)
+				&& demand.getAsBoolean() && borrowerAllowed(data, camp, actor, probe)
+				&& probe.actorIdentity() == entity && probe.inventory() == bag && data.memberIdentity(actor) == member
+				&& data.stockpileBindingToken(camp) == binding
+				&& data.shearingLeases().available(permit.sheepId(), actor, probe.time())) return true;
+		}
+		return false;
+	}
+
+	private static boolean borrowerAllowed(SettlementSavedData data, Settlement camp, UUID actor, Probe probe) {
+		return actorAllowed(data, camp, actor, probe, false) && probe.mainHand() != null && probe.mainHand().isEmpty()
+			&& !SettlementShearsLoan.isMarked(probe.offHand()) && probe.inventory() != null
+			&& !probe.inventory().hasAnyMatching(SettlementShearsLoan::isMarked);
+	}
+
+	static boolean hasBorrowCandidate(ServerLevel level, SettlementSavedData data, Settlement camp,
+		Villager villager, BooleanSupplier demand) {
+		return level != null && villager != null && level.getServer().isSameThread()
+			&& hasBorrowCandidate(data, camp, villager.getUUID(), probe(level, data, camp, villager), demand);
+	}
+
+	/** A travel ticket, not a durable work grant. A stopped or invalid ticket cannot revive. */
+	static final class LoanTicket {
+		static final long MAX_AGE = 600;
+		final SettlementSavedData data;
+		final Settlement camp;
+		final UUID actor;
+		final Probe probe;
+		final SettlementShearsLoan.Hand hand;
+		final ResourceLocation dimension;
+		final BlockPos store;
+		final Object entity, member, binding;
+		final SimpleContainer inventory;
+		final SettlementSimulationState simulation;
+		final long modeVersion, created;
+		final boolean returning;
+		final ItemStack returningTool;
+		final BooleanSupplier storeCurrent, demand;
+		boolean cancelled;
+
+		private LoanTicket(SettlementSavedData data, Settlement camp, UUID actor, Probe probe,
+			SettlementShearsLoan.Hand hand, boolean returning, BooleanSupplier storeCurrent, BooleanSupplier demand) {
+			this.data = data; this.camp = camp; this.actor = actor; this.probe = probe; this.hand = hand;
+			this.returning = returning; this.storeCurrent = storeCurrent; this.demand = demand;
+			dimension = probe.dimension(); store = data.getStockpile(camp).orElse(null);
+			entity = probe.actorIdentity(); member = data.memberIdentity(actor); binding = data.stockpileBindingToken(camp);
+			inventory = probe.inventory(); simulation = data.simulationOf(camp).orElse(null);
+			modeVersion = simulation == null ? 0 : simulation.foodRequestModeVersion(); created = probe.time();
+			returningTool = returning ? hand.get() : null;
+		}
+	}
+
+	static LoanTicket prepareLoan(SettlementSavedData data, Settlement camp, UUID actor, Probe probe,
+		SettlementShearsLoan.Hand hand, boolean returning, BooleanSupplier storeCurrent, BooleanSupplier demand) {
+		if (data == null || camp == null || actor == null || probe == null || hand == null || storeCurrent == null) return null;
+		LoanTicket ticket = new LoanTicket(data, camp, actor, probe, hand, returning, storeCurrent, demand);
+		return validLoan(ticket) ? ticket : null;
+	}
+
+	static LoanTicket prepareLoan(ServerLevel level, SettlementSavedData data, Settlement camp, Villager villager,
+		SettlementShearsLoan.Hand hand, boolean returning, BooleanSupplier storeCurrent, BooleanSupplier demand) {
+		if (level == null || villager == null || !level.getServer().isSameThread()) return null;
+		return prepareLoan(data, camp, villager.getUUID(), probe(level, data, camp, villager), hand, returning, storeCurrent, demand);
+	}
+
+	private static boolean loanIdentityCurrent(LoanTicket t) {
+		long now = t.probe.time(), age = now - t.created;
+		return !t.cancelled && now >= t.created && age >= 0 && age < LoanTicket.MAX_AGE && t.dimension != null
+			&& t.dimension.equals(t.probe.dimension()) && t.probe.currentData() == t.data
+			&& t.data.canonicalSettlement(t.camp) && t.data.isMember(t.camp, t.actor)
+			&& t.member != null && t.data.memberIdentity(t.actor) == t.member
+			&& t.entity != null && t.probe.actorIdentity() == t.entity && t.probe.activeAdultUnique()
+			&& t.inventory != null && t.probe.inventory() == t.inventory
+			&& t.binding != null && t.data.stockpileBindingToken(t.camp) == t.binding
+			&& t.store != null && t.data.getStockpile(t.camp).filter(t.store::equals).isPresent()
+			&& t.data.simulationOf(t.camp).orElse(null) == t.simulation
+			&& (t.simulation == null || t.simulation.foodRequestModeVersion() == t.modeVersion)
+			&& t.storeCurrent.getAsBoolean();
+	}
+
+	static boolean validLoan(LoanTicket t) {
+		if (t == null || t.cancelled) return false;
+		boolean valid = false;
+		try {
+			// Return does not depend on wool demand, a sheep permit, gathering time or the original grant.
+			valid = loanIdentityCurrent(t) && (t.returning
+				? t.hand.get() == t.returningTool && SettlementShearsLoan.ownedBy(t.hand.get(), t.dimension, t.camp.id(), t.actor)
+				: t.hand.get() == t.probe.mainHand() && hasBorrowCandidate(t.data, t.camp, t.actor, t.probe, t.demand))
+				&& loanIdentityCurrent(t);
+			return valid;
+		} finally { if (!valid) cancelLoan(t); }
+	}
+
+	/** Core transfer temporarily detaches the source. The same captured loan remains the only allowed item. */
+	static boolean returnLoanAuthority(LoanTicket t) {
+		if (t == null || !t.returning || t.cancelled) return false;
+		boolean valid = false;
+		try {
+			valid = loanIdentityCurrent(t) && (t.hand.get() == t.returningTool || t.hand.get().isEmpty())
+				&& SettlementShearsLoan.ownedBy(t.returningTool, t.dimension, t.camp.id(), t.actor)
+				&& loanIdentityCurrent(t);
+			return valid;
+		} finally { if (!valid) cancelLoan(t); }
+	}
+
+	static void cancelLoan(LoanTicket ticket) { if (ticket != null) ticket.cancelled = true; }
+
 	static Session prepare(SettlementSavedData data, Settlement camp, UUID actor, Probe probe, BooleanSupplier demand) {
-		if (demand == null || !demand.getAsBoolean() || !actorAllowed(data, camp, actor, probe)) return null;
+		if (demand == null || !demand.getAsBoolean() || !actorAllowed(data, camp, actor, probe, true)) return null;
 		List<Choice> choices = new ArrayList<>();
 		// At most sixteen explicit UUID lookups. No broad animal query and no chunk load.
 		for (var permit : data.shearingPermitsOf(camp).stream().limit(SettlementShearingPermits.MAX_PER_SETTLEMENT).toList()) {
@@ -125,7 +247,7 @@ final class SettlementShearing {
 	}
 
 	private static boolean identityAllowed(Session s) {
-		return !s.consumed && actorAllowed(s.data, s.camp, s.actor, s.probe)
+		return !s.consumed && actorAllowed(s.data, s.camp, s.actor, s.probe, true)
 			&& s.probe.actorIdentity() == s.actorIdentity && s.probe.inventory() == s.inventory && s.member != null && s.data.memberIdentity(s.actor) == s.member
 			&& s.binding != null && s.data.stockpileBindingToken(s.camp) == s.binding
 			&& s.data.simulationOf(s.camp).orElse(null) == s.simulation
@@ -182,10 +304,18 @@ final class SettlementShearing {
 
 	/** Only a capacity probe. This synthetic stack is never inserted into the real bag or world. */
 	private static boolean capacity(Session s) {
-		SimpleContainer inventory = s.inventory;
+		return capacity(s.inventory, marked(s, new ItemStack(Items.WHITE_WOOL, 3)));
+	}
+
+	/** A fresh batch cannot merge with unrelated personal wool or a previous worker's cargo. */
+	private static boolean borrowCapacity(SimpleContainer inventory, Settlement camp, SettlementShearingPermits.Permit permit) {
+		return inventory != null && capacity(inventory, SettlementShearingCargo.mark(new ItemStack(Items.WHITE_WOOL, 3),
+			camp.id(), UUID.randomUUID(), permit.sheepId(), permit.id()));
+	}
+
+	private static boolean capacity(SimpleContainer inventory, ItemStack maximum) {
 		SimpleContainer planned = new SimpleContainer(inventory.getContainerSize());
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) planned.setItem(slot, inventory.getItem(slot).copy());
-		ItemStack maximum = marked(s, new ItemStack(Items.WHITE_WOOL, 3));
 		return !maximum.isEmpty() && planned.addItem(maximum).isEmpty();
 	}
 
@@ -302,7 +432,8 @@ final class SettlementShearing {
 			public void damageTool() {
 				if (villager.getMainHandItem() != session.tool || !ItemStack.matches(session.tool, session.toolSnapshot))
 					throw new IllegalStateException("Shear callback changed the captured main-hand tool; replacement left untouched");
-				session.tool.hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
+				SettlementShearsEquipment.allowClear(villager, session.tool,
+					() -> session.tool.hurtAndBreak(1, villager, EquipmentSlot.MAINHAND));
 			}
 			public void eventAndAnimation() {
 				sheep.gameEvent(GameEvent.SHEAR, villager);
@@ -355,6 +486,8 @@ final class SettlementShearing {
 				return dimensions > 0;
 			}
 			public ItemStack mainHand() { return villager.getMainHandItem(); }
+			public ItemStack offHand() { return villager.getOffhandItem(); }
+			public ResourceLocation dimension() { return level.dimension().location(); }
 			public long time() { return level.getGameTime(); }
 			public Target target(UUID id) {
 				if (!(level.getEntity(id) instanceof Sheep sheep)) return null;

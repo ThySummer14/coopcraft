@@ -118,7 +118,7 @@ class SettlementCargoRecoveryTest {
 			assertEquals(survival ? 1 : 0, source.countItem(Items.SWEET_BERRIES));
 			assertEquals(2, source.countItem(Items.BREAD)); assertEquals(1, source.countItem(Items.WOODEN_PICKAXE));
 			CompoundTag saved = recovery.save(new CompoundTag(), registries);
-			assertEquals(1, saved.getInt("DataVersion"));
+			assertEquals(2, saved.getInt("DataVersion"));
 			recovery = SettlementCargoRecovery.load(saved, registries);
 			assertEquals(saved, recovery.save(new CompoundTag(), registries));
 			SimpleContainer full = new SimpleContainer(new ItemStack(Items.DIRT, 64));
@@ -303,7 +303,7 @@ class SettlementCargoRecoveryTest {
 		CompoundTag oversized = valid.copy();
 		var stacks = oversized.getList("Records", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0)
 			.getList("Stacks", net.minecraft.nbt.Tag.TAG_COMPOUND);
-		while (stacks.size() <= 8) stacks.add(stacks.getCompound(0).copy());
+		while (stacks.size() <= 9) stacks.add(stacks.getCompound(0).copy());
 		assertUnavailablePreserved(oversized, dead);
 		CompoundTag malformed = valid.copy();
 		malformed.getList("Records", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0)

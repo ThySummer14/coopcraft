@@ -724,7 +724,7 @@
 	"coopcraft.command.settlement.shearing_limit": "Shearing consent limit reached (16 sheep per camp, 128 per dimension).",
 	"coopcraft.command.settlement.shearing_removed": "This camp’s shearing consent for the sheep was revoked.",
 	"coopcraft.command.settlement.shearing_not_found": "This camp has no shearing consent for this sheep.",
-	"coopcraft.command.settlement.shearing_saved": "Consent saved. Residents already holding shears may shear safely when a white bed needs wool. Sheep UUID: %s.",
+	"coopcraft.command.settlement.shearing_saved": "Consent saved. Residents with real shears may work safely when a white bed needs wool; empty-handed workers can borrow from the stockpile. Sheep UUID: %s.",
 	"coopcraft.command.settlement.shearing_status": "Camp %s: %s individual sheep consents saved; work also requires real main-hand shears, demand, and safety rechecks.",
 	"coopcraft.command.settlement.shearing_permit": "Sheep UUID: %s; authorizer: %s (stored record only, not current sheep availability).",
 	"coopcraft.command.settlement.shearing_nearby_header": "Nearby loaded sheep candidates (within 8 blocks of the actual player, up to 8 shown); candidates are not consent or proof of eligibility.",
@@ -732,7 +732,9 @@
 	"coopcraft.command.settlement.shearing_nearby_none": "No loaded sheep candidates nearby.",
 	"coopcraft.command.settlement.shearing_preview": "Camp %s (%s): preview repeat-shearing consent for sheep %s; current position: %s, %s, %s; not yet saved.",
 	"coopcraft.command.settlement.shearing_confirm_help": "Run /coop settlement shearing confirm within %s seconds; cancel with /coop settlement shearing cancel.",
-	"coopcraft.command.settlement.shearing_scope": "Consent covers repeated shearing of this sheep only, not killing, moving, breeding, offspring, or other sheep. Names, fences, and leads do not prove ownership. Shears are not automatically collected or equipped.",
+	"coopcraft.command.settlement.shearing_scope": "Consent covers repeated shearing of this sheep only, not killing, moving, breeding, offspring, or other sheep. Names, fences, and leads do not prove ownership. Empty-handed residents may borrow and return stockpile shears without replacing personal equipment.",
 	"coopcraft.command.settlement.shearing_help": "Candidates: /coop settlement shearing nearby; grant: preview <sheep_uuid> then confirm; revoke: revoke <sheep_uuid>.",
-	"coopcraft.interaction.action.shear_sheep": "Following a permitted white sheep and shearing with real shears"
+	"coopcraft.interaction.action.shear_sheep": "Following a permitted white sheep and shearing with real shears",
+	"coopcraft.interaction.action.borrow_shears": "Walking to the stockpile to borrow real shears",
+	"coopcraft.interaction.action.return_shears": "Returning borrowed shears"
 }

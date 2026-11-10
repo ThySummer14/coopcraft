@@ -90,8 +90,8 @@ class SettlementWorkbenchGoalWiringTest {
 		assertFalse(methods.get("withdrawItems").contains("SettlementStockpile.transferItem"));
 		for (String method : List.of("countCraftingItems", "transferCraftingItems", "removeItems", "isPolishedPickaxe"))
 			assertTrue(methods.get(method).contains("SettlementWorkbenchCargo.isMarked(stack)"));
-		assertTrue(methods.get("hasStonePickaxe").contains("if(SettlementWorkbenchCargo.isMarked(hand)||SettlementShearingCargo.isMarked(hand))returnfalse;"));
-		assertTrue(methods.get("hasStonePickaxe").contains("stack.is(Items.STONE_PICKAXE)&&!SettlementWorkbenchCargo.isMarked(stack)&&!SettlementShearingCargo.isMarked(stack)"));
+		assertTrue(methods.get("hasStonePickaxe").contains("if(SettlementWorkbenchCargo.isMarked(hand)||SettlementShearingCargo.isMarked(hand)||SettlementShearsLoan.isMarked(hand))returnfalse;"));
+		assertTrue(methods.get("hasStonePickaxe").contains("stack.is(Items.STONE_PICKAXE)&&!SettlementWorkbenchCargo.isMarked(stack)&&!SettlementShearingCargo.isMarked(stack)&&!SettlementShearsLoan.isMarked(stack)"));
 	}
 
 	private static String compact(Tree tree) {

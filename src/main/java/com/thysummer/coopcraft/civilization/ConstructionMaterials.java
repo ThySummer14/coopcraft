@@ -118,7 +118,7 @@ public final class ConstructionMaterials {
 		// Unknown construction markers are quarantined for every item, including legacy wood/stone.
 		// Other custom materials retain the legacy behavior; supported physical supply remains plain-only.
 		return !stack.isEmpty() && stack.is(item) && !ConstructionSupply.isMarked(stack)
-			&& !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack)
+			&& !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)
 			&& (!ConstructionSupply.supported(item) || ConstructionSupply.ordinary(stack));
 	}
 
