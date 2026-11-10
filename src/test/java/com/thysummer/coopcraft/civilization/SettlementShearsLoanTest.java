@@ -21,6 +21,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.CustomModelData;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
@@ -73,7 +74,7 @@ class SettlementShearsLoanTest {
 		stack.set(DataComponents.CUSTOM_NAME, Component.literal("Warehouse heirloom"));
 		stack.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("Keep its history"))));
 		stack.set(DataComponents.REPAIR_COST, 7);
-		stack.set(DataComponents.CUSTOM_MODEL_DATA, 42);
+		stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(42));
 		stack.enchant(registries.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.UNBREAKING), 3);
 		stack.enchant(registries.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(Enchantments.MENDING), 1);
 		CompoundTag history = new CompoundTag(); history.putInt("Uses", 19);
