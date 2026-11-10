@@ -49,7 +49,9 @@ class SettlementWorkbenchPickaxeGoalWiringTest {
 		for (String forbidden : List.of("availablePlain", "countPlain", "chooseRecipe", "getStockpile", "ConstructionPlanner", "role"))
 			assertFalse(demand.contains(forbidden), forbidden);
 		String prepare = methods.get("prepareWorkbenchCrafting");
-		assertTrue(prepare.contains("()->recipe==SettlementMaterialCrafting.Recipe.STONE_PICKAXE?firstPickaxeDemandStillNeeded():"));
+		// Grinding has a separate first branch; first-tool demand must still bypass construction demand.
+		assertTrue(prepare.contains("()->grinding?smoothStoneDemandStillNeeded():"
+			+ "recipe==SettlementMaterialCrafting.Recipe.STONE_PICKAXE?firstPickaxeDemandStillNeeded():"));
 		for (String gate : List.of("binding.valid()", "level.getBlockState(station).equals(stationState)",
 			"!villager.isNoAi()", "!shouldEat()", "meetingTicket==null", "!emergencyForage()", "SettlementMembershipClaims.resolve("))
 			assertTrue(prepare.contains(gate), gate);
