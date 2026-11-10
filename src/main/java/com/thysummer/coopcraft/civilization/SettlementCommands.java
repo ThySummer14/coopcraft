@@ -40,6 +40,7 @@ public final class SettlementCommands {
 
 	public static void register() {
 		SettlementForagingCommands.registerLifecycle();
+		SettlementShearingCommands.registerLifecycle();
 		SettlementGatheringCommands.registerLifecycle();
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
 			dispatcher.register(SettlementCommands.<CommandSourceStack>commandTree(source -> source.hasPermission(2), SettlementCommands::execute)));
@@ -64,6 +65,19 @@ public final class SettlementCommands {
 					.executes(ctx -> handler.run(ctx, "observations", operation))));
 		}
 		settlement.then(observations);
+		var shearing = LiteralArgumentBuilder.<S>literal("shearing")
+			.executes(ctx -> handler.run(ctx, "shearing", ""));
+		shearing.then(LiteralArgumentBuilder.<S>literal("nearby").executes(ctx -> handler.run(ctx, "shearing", "nearby")));
+		for (String operation : List.of("preview", "revoke")) {
+			shearing.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.then(RequiredArgumentBuilder.<S, String>argument("sheep_uuid", StringArgumentType.word())
+					.executes(ctx -> handler.run(ctx, "shearing", operation))));
+		}
+		for (String operation : List.of("confirm", "cancel")) {
+			shearing.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.executes(ctx -> handler.run(ctx, "shearing", operation)));
+		}
+		settlement.then(shearing);
 		var foraging = LiteralArgumentBuilder.<S>literal("foraging")
 			.executes(ctx -> handler.run(ctx, "foraging", ""));
 		foraging.then(LiteralArgumentBuilder.<S>literal("preview").requires(admin)
@@ -150,6 +164,7 @@ public final class SettlementCommands {
 		// Remnants remain at the death location even after the resident's membership is removed.
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
+		if (action.equals("shearing")) return SettlementShearingCommands.execute(context, option);
 		if (action.equals("foraging")) return SettlementForagingCommands.execute(context, option);
 		if (action.equals("gathering")) return SettlementGatheringCommands.execute(context, option);
 		SettlementSavedData data = SettlementSavedData.get(level);

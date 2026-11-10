@@ -323,7 +323,7 @@ class SettlementMealEvidencePersistenceTest {
 
 	private static Fixture reloadUnchanged(Fixture f) {
 		CompoundTag saved = f.data().save(new CompoundTag(), null);
-		assertEquals(23, saved.getInt("DataVersion"));
+		assertEquals(24, saved.getInt("DataVersion"));
 		List<SimulationEvent> events = f.events();
 		SettlementSavedData loaded = SettlementSavedData.load(saved, null);
 		Fixture restored = new Fixture(loaded, loaded.simulationOf(loaded.find(BlockPos.ZERO).orElseThrow()).orElseThrow());

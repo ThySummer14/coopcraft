@@ -88,7 +88,7 @@ class ConstructionCompatibilityTest {
 		assertEquals(1, advanced.nextIndex());
 		assertEquals(job.planFingerprint(), advanced.planFingerprint());
 		var saved = f.data().save(new CompoundTag(), null);
-		assertEquals(23, saved.getInt("DataVersion"));
+		assertEquals(24, saved.getInt("DataVersion"));
 		var loaded = SettlementSavedData.load(saved, null);
 		assertEquals(advanced, loaded.getConstructionJob(f.settlement()).orElseThrow());
 		assertEquals(saved, loaded.save(new CompoundTag(), null));

@@ -25,7 +25,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 23;
+	private static final int DATA_VERSION = 24;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
 		SettlementSavedData::new,
@@ -39,6 +39,7 @@ public final class SettlementSavedData extends SavedData {
 	private final Set<UUID> ambiguousSettlementIds = new LinkedHashSet<>();
 	private long membershipRevision;
 	private SettlementResourceObservations resourceObservations = new SettlementResourceObservations();
+	private SettlementShearingPermits shearingPermits = new SettlementShearingPermits();
 	private PlayerProtectedAreas protectedAreas = new PlayerProtectedAreas();
 	private SettlementGatheringAreas gatheringAreas = new SettlementGatheringAreas();
 	private SettlementForagingAreas foragingAreas = new SettlementForagingAreas();
@@ -101,6 +102,39 @@ public final class SettlementSavedData extends SavedData {
 		PlayerProtectedAreas.Update update = protectedAreas.remove(id, requesterId, operator);
 		if (update.status() == PlayerProtectedAreas.Status.REMOVED) {
 			protectedAreas = update.value();
+			setDirty();
+		}
+		return update.status();
+	}
+
+	public boolean shearingPermitsBlocked() { return shearingPermits.blocked(); }
+	public Object shearingRevision() { return shearingPermits.revision(); }
+	public Optional<SettlementShearingPermits.Permit> shearingPermitOf(UUID sheepId) { return shearingPermits.of(sheepId); }
+	public List<SettlementShearingPermits.Permit> shearingPermitsOf(Settlement camp) {
+		return canonicalSettlement(camp) ? shearingPermits.ofSettlement(camp.id()) : List.of();
+	}
+
+	/** Explicit grant/replacement only; entity authenticity and live safety belong to the caller. */
+	public SettlementShearingPermits.PermitResult permitShearing(Settlement camp, UUID authorizer, UUID sheepId) {
+		if (shearingPermits.blocked()) return new SettlementShearingPermits.PermitResult(
+			SettlementShearingPermits.Status.PRESERVED_UNSUPPORTED, null);
+		if (!canonicalSettlement(camp)) return new SettlementShearingPermits.PermitResult(
+			SettlementShearingPermits.Status.INVALID, null);
+		SettlementShearingPermits.Update update = shearingPermits.grant(camp.id(), authorizer, sheepId);
+		if (update.value() != shearingPermits) {
+			shearingPermits = update.value();
+			setDirty();
+		}
+		return new SettlementShearingPermits.PermitResult(update.status(), update.permit());
+	}
+
+	/** Revocation needs neither a loaded sheep nor a protection-free location. */
+	public SettlementShearingPermits.Status revokeShearing(Settlement camp, UUID sheepId) {
+		if (shearingPermits.blocked()) return SettlementShearingPermits.Status.PRESERVED_UNSUPPORTED;
+		if (!canonicalSettlement(camp)) return SettlementShearingPermits.Status.INVALID;
+		SettlementShearingPermits.Update update = shearingPermits.revoke(camp.id(), sheepId);
+		if (update.value() != shearingPermits) {
+			shearingPermits = update.value();
 			setDirty();
 		}
 		return update.status();
@@ -726,6 +760,9 @@ public final class SettlementSavedData extends SavedData {
 		tag.put("ResourceObservations", resourceObservations.save());
 		tag.put("GatheringAreas", gatheringAreas.save());
 		tag.put("ForagingAreas", foragingAreas.save());
+		Tag shearingTag = shearingPermits.save();
+		if (shearingTag == null) tag.remove("ShearingPermits");
+		else tag.put("ShearingPermits", shearingTag);
 		Tag protectionTag = protectedAreas.save();
 		if (protectionTag == null) tag.remove("PlayerProtectedAreas");
 		else tag.put("PlayerProtectedAreas", protectionTag);
@@ -782,6 +819,7 @@ public final class SettlementSavedData extends SavedData {
 		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
 		data.gatheringAreas = SettlementGatheringAreas.load(tag.get("GatheringAreas"));
 		data.foragingAreas = SettlementForagingAreas.load(tag.get("ForagingAreas"));
+		data.shearingPermits = SettlementShearingPermits.load(tag.get("ShearingPermits"), tag.get("DataVersion"));
 		data.protectedAreas = PlayerProtectedAreas.load(tag.get("PlayerProtectedAreas"), tag.get("DataVersion"));
 
 		ListTag settlementList = tag.getList("Settlements", ListTag.TAG_COMPOUND);

@@ -848,3 +848,10 @@ status和materials会同时显示保存的施工步骤数、蓝图ID、下一位
 `/coop settlement gathering` 只读查看本营许可。OP2先站在中心用 `gathering preview <wood|stone|both> <1..8>`，核对材料与全高度方形后 `gathering confirm`；`cancel` 放弃预览，`revoke` 撤销。wood仅普通橡木原木，stone仅石头/圆石，both是合集。包括当前和今后玩家放置的同类方块，保护区优先；不要把“来源UNKNOWN”误解为天然。
 
 旧档默认无许可，人工标记不变。村民仍从有限观察候选选择、在12格内作业，不会扫描整个许可区。候选满额或暂不可见不等于采空。任务身份、取消、库存及持久化边界见[安全木石采集](safe-material-gathering.md)。
+
+
+## 逐羊剪毛许可（自动动作尚未启用）
+
+使用 `/coop settlement shearing` 查看本营许可，`nearby` 只读显示玩家8格内最多8条已加载候选。OP2用 `preview <sheep_uuid>` 查看精确羊与营地，随后 `confirm` 保存，`cancel` 放弃预览；`revoke <sheep_uuid>` 撤销本营许可，羊不在场也可撤销。真实玩家、当前羊实例和保护区在确认前重验，禁止远程或跨维度伪位置授权。
+
+这只保存逐羊的剪毛使用许可，不验证所有权，不授权杀羊/搬运/繁殖或后代，且本轮不会执行剪毛、生成羊毛或消耗剪刀。新旧存档和边界详见[逐羊剪毛许可](livestock-shearing.md)。
