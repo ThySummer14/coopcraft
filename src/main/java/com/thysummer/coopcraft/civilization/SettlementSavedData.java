@@ -72,6 +72,10 @@ public final class SettlementSavedData extends SavedData {
 
 	SettlementFoodRequests foodRequests() { return foodRequests; }
 
+	// Ephemeral teaching coordination; deliberately never serialized or marked dirty.
+	private final SettlementTeachingSessions<SettlementAutonomousTeaching.Session> teachingSessions = new SettlementTeachingSessions<>();
+	SettlementTeachingSessions<SettlementAutonomousTeaching.Session> teachingSessions() { return teachingSessions; }
+
 	private final Map<UUID, SettlementSimulationState> simulations = new LinkedHashMap<>();
 
 	public static SettlementSavedData get(ServerLevel level) {

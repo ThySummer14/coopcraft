@@ -59,6 +59,7 @@ public final class Civilization {
 			if (entity instanceof Villager villager) {
 				VillagerWorkGoal.cancelMeetingInvitation(villager);
 				VillagerWorkGoal.cancelShearingOnUnload(villager);
+				SettlementAutonomousTeaching.cancelOnUnload(villager);
 			}
 		});
 		ServerEntityEvents.ENTITY_LOAD.register((entity, world) -> {

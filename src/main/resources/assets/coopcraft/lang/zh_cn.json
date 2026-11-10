@@ -783,5 +783,8 @@
 	"coopcraft.simulation.detail.teacher": "教师",
 	"coopcraft.simulation.detail.learner": "学徒",
 	"coopcraft.simulation.detail.teaching_cost": "双方工时代价",
-	"coopcraft.simulation.teaching_cost.next_settled_day": "每人1小时社会工时，下次日结后生效"
+	"coopcraft.simulation.teaching_cost.next_settled_day": "每人1小时社会工时，下次日结后生效",
+	"coopcraft.interaction.action.attend_lesson": "结伴前往工作台学习",
+	"coopcraft.interaction.action.lesson_waiting": "在工作台旁等候教学伙伴",
+	"coopcraft.interaction.action.lesson_learning": "与同营伙伴共同学习工艺"
 }

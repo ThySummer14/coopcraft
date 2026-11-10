@@ -70,7 +70,11 @@ final class SettlementTeachingScene {
 	}
 
 	static boolean residentReady(ServerLevel level, SettlementSavedData data, Settlement camp, BlockPos station, Villager villager) {
-		if (station == null || villager.level() != level || level.getEntity(villager.getUUID()) != villager
+		return station != null && near(villager.distanceToSqr(station.getCenter())) && residentBodyReady(level, data, camp, villager);
+	}
+
+	static boolean residentBodyReady(ServerLevel level, SettlementSavedData data, Settlement camp, Villager villager) {
+		if (villager.level() != level || level.getEntity(villager.getUUID()) != villager
 			|| !residentAllowed(villager.isAlive(), villager.isRemoved(), villager.isBaby(),
 				villager.getHealth(), villager.getMaxHealth(), villager.isSleeping(), villager.isTrading(),
 				villager.isNoAi(), villager.isPassenger(), villager.getTarget() != null,
@@ -79,7 +83,6 @@ final class SettlementTeachingScene {
 					|| villager.getBrain().hasMemoryValue(MemoryModuleType.HURT_BY)
 					|| villager.getBrain().hasMemoryValue(MemoryModuleType.NEAREST_HOSTILE))
 			|| !available(level, villager.blockPosition()) || !bounds(level, villager.getBoundingBox())
-			|| !near(villager.distanceToSqr(station.getCenter()))
 			|| !SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()), level.dimension(), data, camp)) return false;
 		Person person = person(data, camp, villager.getUUID());
 		return person != null && person.isAlive() && person.health() == 100
@@ -112,7 +115,7 @@ final class SettlementTeachingScene {
 			&& !sleeping && !trading && !noAi && !passenger && !target && !urgent;
 	}
 	static boolean near(double squared) { return Double.isFinite(squared) && squared >= 0 && squared <= 16; }
-	private static boolean available(ServerLevel level, BlockPos pos) {
+	static boolean available(ServerLevel level, BlockPos pos) {
 		return !level.isOutsideBuildHeight(pos) && level.getWorldBorder().isWithinBounds(pos)
 			&& level.isLoaded(pos) && level.isPositionEntityTicking(pos);
 	}
