@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.Objects;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 public final class NormSystem {
@@ -24,6 +25,7 @@ public final class NormSystem {
 	private final SimulationConfig config;
 	private final Integer defaultBaseAllowance;
 	private ToIntFunction<Person> opinionSelfishnessProvider = person -> 50;
+	private Predicate<Person> opinionGenerosityProvider = person -> false;
 	private final Set<String> chargedSupervision = new LinkedHashSet<>();
 	private final Map<String, Integer> commonAllocations = new HashMap<>();
 	private long lastPropagationDay = Long.MIN_VALUE;
@@ -54,6 +56,11 @@ public final class NormSystem {
 	 */
 	public void setOpinionSelfishnessProvider(ToIntFunction<Person> provider) {
 		opinionSelfishnessProvider = Objects.requireNonNull(provider, "provider");
+	}
+
+	/** Read-only saved-personality lookup; legacy standalone opinions ignore this provider. */
+	public void setOpinionGenerosityProvider(Predicate<Person> provider) {
+		opinionGenerosityProvider = Objects.requireNonNull(provider, "provider");
 	}
 
 	/**
@@ -211,7 +218,7 @@ public final class NormSystem {
 
 	public enum ProposalFactorKind {
 		NEIGHBOR_REQUESTS, PERSONAL_HUNGER, HOUSEHOLD_HUNGER, GRIEVANCE, PROPOSER_TRUST,
-		HOUSEHOLD_SURPLUS, LARGE_ALLOCATION, COMMUNITY_RESERVE, SELFISHNESS
+		HOUSEHOLD_SURPLUS, LARGE_ALLOCATION, COMMUNITY_RESERVE, SELFISHNESS, GENEROSITY
 	}
 
 	public record ProposalFactor(ProposalFactorKind kind, double contribution) {}
@@ -978,11 +985,24 @@ public final class NormSystem {
 			factors.add(new ProposalFactor(ProposalFactorKind.COMMUNITY_RESERVE, -10 * direction));
 		}
 		double relevantBenefit = personalBenefit + householdBenefit;
+		double selfishAdjustment = 0;
 		if (relevantBenefit != 0) {
 			int selfishness = Math.max(0, Math.min(100, opinionSelfishnessProvider.applyAsInt(person)));
-			double adjustment = Math.max(-5, Math.min(5, (selfishness - 50) / 250.0 * relevantBenefit));
-			if (adjustment != 0) factors.add(new ProposalFactor(ProposalFactorKind.SELFISHNESS, adjustment));
+			selfishAdjustment = Math.max(-5, Math.min(5, (selfishness - 50) / 250.0 * relevantBenefit));
 		}
+		// Weight an existing mutual-aid consideration using model-observed needs, not
+		// an assertion that this resident knows any named neighbor's request.
+		double generousAdjustment = direction != 0 && person.knowsNorm(NEIGHBOR_REQUESTS)
+			&& camp.stream().anyMatch(member -> !member.id().equals(person.id())
+				&& !member.householdId().equals(person.householdId())
+				&& (!care || member.needsCare()) && member.hunger() > config.foodAccessThreshold())
+			&& opinionGenerosityProvider.test(person) ? 3 * direction : 0;
+		double personalityMagnitude = Math.abs(selfishAdjustment) + Math.abs(generousAdjustment);
+		double personalityScale = personalityMagnitude > 5 ? 5 / personalityMagnitude : 1;
+		if (selfishAdjustment != 0) factors.add(new ProposalFactor(ProposalFactorKind.SELFISHNESS,
+			selfishAdjustment * personalityScale));
+		if (generousAdjustment != 0) factors.add(new ProposalFactor(ProposalFactorKind.GENEROSITY,
+			generousAdjustment * personalityScale));
 		double score = 35;
 		for (ProposalFactor factor : factors) score += factor.contribution();
 		NormProposal.Position position = score >= 55 ? NormProposal.Position.SUPPORT

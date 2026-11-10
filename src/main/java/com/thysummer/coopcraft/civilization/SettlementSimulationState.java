@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.ToIntFunction;
+import java.util.function.Function;
 
 import com.thysummer.coopcraft.civilization.simulation.Camp;
 import com.thysummer.coopcraft.civilization.simulation.EventType;
@@ -95,12 +95,21 @@ public final class SettlementSimulationState {
 	}
 
 	/** Bind only from the owning SavedData; standalone simulations retain neutral opinions. */
-	void bindOpinionSelfishness(ToIntFunction<UUID> memberSelfishness) {
+	void bindOpinionPersonality(Function<UUID, VillagerPersonality> memberPersonality) {
 		norms.setOpinionSelfishnessProvider(person -> {
-			UUID resident = residentUuids.get(person);
-			return resident != null && person.id().equals(residentIds.get(resident))
-				? memberSelfishness.applyAsInt(resident) : 50;
+			VillagerPersonality personality = opinionPersonality(person, memberPersonality);
+			return personality != null ? personality.selfishness() : 50;
 		});
+		norms.setOpinionGenerosityProvider(person -> {
+			VillagerPersonality personality = opinionPersonality(person, memberPersonality);
+			return personality != null && personality.traits().contains(VillagerTrait.GENEROUS);
+		});
+	}
+
+	private VillagerPersonality opinionPersonality(Person person, Function<UUID, VillagerPersonality> memberPersonality) {
+		UUID resident = residentUuids.get(person);
+		return resident != null && person.id().equals(residentIds.get(resident))
+			? memberPersonality.apply(resident) : null;
 	}
 
 	public StorageOwner campOwner() {

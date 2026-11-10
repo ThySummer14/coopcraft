@@ -76,9 +76,10 @@ final class VillagerMeetingInquiry {
 			.sorted(Comparator.comparingDouble((NormSystem.ProposalFactor factor) -> Math.abs(factor.contribution())).reversed()
 				.thenComparing(NormSystem.ProposalFactor::kind))
 			.limit(3).toList());
-		// Keep the small personality adjustment visible without displacing stronger situational reasons.
-		opinion.factors().stream().filter(factor -> factor.kind() == NormSystem.ProposalFactorKind.SELFISHNESS
-			&& factor.contribution() != 0 && !prominent.contains(factor)).findFirst().ifPresent(prominent::add);
+		// Keep both bounded personality adjustments visible without displacing stronger situational reasons.
+		opinion.factors().stream().filter(factor -> (factor.kind() == NormSystem.ProposalFactorKind.SELFISHNESS
+			|| factor.kind() == NormSystem.ProposalFactorKind.GENEROSITY)
+			&& factor.contribution() != 0 && !prominent.contains(factor)).forEach(prominent::add);
 		if (prominent.isEmpty()) return message("factors_none");
 		MutableComponent result = Component.empty();
 		for (NormSystem.ProposalFactor factor : prominent) {

@@ -818,5 +818,6 @@
 	"coopcraft.interaction.meeting.inquiry.factor_selfishness": "Personal weighting of household hunger interests",
 	"coopcraft.interaction.meeting.inquiry.factor_weight": "%s%s",
 	"coopcraft.interaction.meeting.inquiry.factor_positive": "+",
-	"coopcraft.interaction.meeting.inquiry.factor_negative": "−"
+	"coopcraft.interaction.meeting.inquiry.factor_negative": "−",
+	"coopcraft.interaction.meeting.inquiry.factor_generosity": "Generosity toward hunger in other households"
 }

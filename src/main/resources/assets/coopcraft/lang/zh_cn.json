@@ -818,5 +818,6 @@
 	"coopcraft.interaction.meeting.inquiry.factor_selfishness": "个性对家庭饥饿利益的权重",
 	"coopcraft.interaction.meeting.inquiry.factor_weight": "%s%s",
 	"coopcraft.interaction.meeting.inquiry.factor_positive": "＋",
-	"coopcraft.interaction.meeting.inquiry.factor_negative": "－"
+	"coopcraft.interaction.meeting.inquiry.factor_negative": "－",
+	"coopcraft.interaction.meeting.inquiry.factor_generosity": "慷慨对他家饥饿需求的关切"
 }

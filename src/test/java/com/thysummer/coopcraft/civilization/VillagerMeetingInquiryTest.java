@@ -332,6 +332,33 @@ class VillagerMeetingInquiryTest {
 		assertEquals(1, VillagerMeetingInquiry.factors(duplicate).getSiblings().size());
 	}
 
+	@Test
+	void bothBoundedPersonalityEffectsRemainVisibleWithoutDuplicatingProminentOnes() {
+		var context = List.of(
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.PERSONAL_HUNGER, 15),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.NEIGHBOR_REQUESTS, 15),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.HOUSEHOLD_HUNGER, 10));
+		for (double sign : List.of(-1.0, 1.0)) {
+			var factors = new ArrayList<>(context);
+			factors.add(new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.SELFISHNESS, -sign * 3.125));
+			factors.add(new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.GENEROSITY, sign * 1.875));
+			Component rendered = VillagerMeetingInquiry.factors(new NormSystem.ProposalOpinion(UNDECIDED, 40, factors));
+			assertEquals(9, rendered.getSiblings().size(), "Three situational plus two personality factors, with four separators");
+			Set<String> shown = keys(List.of(rendered));
+			assertTrue(shown.contains(PREFIX + "factor_selfishness"));
+			assertTrue(shown.contains(PREFIX + "factor_generosity"));
+			Component generosity = rendered.getSiblings().getLast();
+			assertEquals(PREFIX + "factor_generosity", key(assertInstanceOf(Component.class, argument(generosity, 0))));
+			assertEquals(PREFIX + (sign > 0 ? "factor_positive" : "factor_negative"),
+				key(assertInstanceOf(Component.class, argument(generosity, 1))));
+		}
+		var prominent = new NormSystem.ProposalOpinion(UNDECIDED, 38, List.of(
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.GENEROSITY, 3),
+			new NormSystem.ProposalFactor(NormSystem.ProposalFactorKind.SELFISHNESS, 0)));
+		assertEquals(1, VillagerMeetingInquiry.factors(prominent).getSiblings().size());
+		assertFalse(keys(List.of(VillagerMeetingInquiry.factors(prominent))).contains(PREFIX + "factor_selfishness"));
+	}
+
 	private static void collect(List<Component> all, List<Component> lines) {
 		assertFalse(lines.isEmpty());
 		assertTrue(lines.size() <= 4);

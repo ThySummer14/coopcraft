@@ -399,12 +399,12 @@ public final class SettlementSavedData extends SavedData {
 
 	/** Read the current authoritative member, never the UUID-generated fallback. */
 	private void bindOpinionPersonality(Settlement settlement, SettlementSimulationState state) {
-		state.bindOpinionSelfishness(resident -> {
+		state.bindOpinionPersonality(resident -> {
 			if (settlements.get(settlement.center()) != settlement
-					|| simulations.get(settlement.id()) != state) return 50;
+					|| simulations.get(settlement.id()) != state) return null;
 			SettlementMember member = members.get(resident);
 			return member != null && member.settlementId().equals(settlement.id())
-				? member.personality().selfishness() : 50;
+				? member.personality() : null;
 		});
 	}
 
