@@ -786,5 +786,7 @@
 	"coopcraft.simulation.teaching_cost.next_settled_day": "每人1小时社会工时，下次日结后生效",
 	"coopcraft.interaction.action.attend_lesson": "结伴前往工作台学习",
 	"coopcraft.interaction.action.lesson_waiting": "在工作台旁等候教学伙伴",
-	"coopcraft.interaction.action.lesson_learning": "与同营伙伴共同学习工艺"
+	"coopcraft.interaction.action.lesson_learning": "与同营伙伴共同学习工艺",
+	"coopcraft.interaction.action.collect_torch_materials": "前往公仓领取火把的燃料与木棍",
+	"coopcraft.interaction.action.workbench_torches": "在工作台用携带材料制作火把"
 }

@@ -15,7 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Server-thread-only, single-use plank, door, bed and wool batches. Tickets never own items or survive reload. */
+/** Server-thread-only, single-use supported workbench batches. Tickets never own items or survive reload. */
 final class SettlementWorkbenchCrafting {
 	private SettlementWorkbenchCrafting() { }
 
@@ -99,16 +99,25 @@ final class SettlementWorkbenchCrafting {
 		List<ItemStack> inputs = SettlementWorkbenchCargo.inputs(camp.id(), t.batch, t.recipe);
 		SimpleContainer bag = pickupPreview(t, inventory, inputs);
 		if (bag == null) return fail(t);
+		// Only the legacy plank log or one missing torch stick may leave abstract stock.
+		// Check every other ingredient and physical export space before beginning any transfer.
+		Item exportItem = exportItem(t);
+		boolean missingExport = false;
+		SimpleContainer exportPreview = copy(stockpile);
 		for (ItemStack input : inputs) {
-			if (SettlementMaterialCrafting.countPlain(stockpile, input.getItem()) < input.getCount()
-				&& (!canExport(t) || SettlementMaterialCrafting.availablePlain(stockpile, t.state, Items.OAK_LOG) < 1)) return fail(t);
+			if (SettlementMaterialCrafting.countPlain(stockpile, input.getItem()) >= input.getCount()) continue;
+			if (input.getItem() != exportItem || !canExport(t)
+				|| SettlementMaterialCrafting.availablePlain(stockpile, t.state, exportItem) < input.getCount()
+				|| SettlementStockpile.insert(exportPreview, new ItemStack(exportItem, 1)) != 1) return fail(t);
+			missingExport = true;
 		}
 		// Begin immediately before the physical withdrawal/export, never while waiting or walking.
 		t.attempt = SettlementSimulationService.beginCrafting(data, camp, actor, t.recipe.id(),
 			t.recipe.output(), t.recipe.count());
-		if (t.recipe == Recipe.PLANKS && SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_LOG) < 1) {
+		if (missingExport) {
+			ResourceType type = exportItem == Items.OAK_LOG ? ResourceType.WOOD : ResourceType.STICK;
 			for (var batch : t.state.world().batchesAt(t.state.campOwner())) {
-				if (batch.resourceType() != ResourceType.WOOD) continue;
+				if (batch.resourceType() != type) continue;
 				int exported = MinecraftStockpileAdapter.exportToContainer(t.state.world(), t.state.campOwner(),
 					batch.batchId(), 1, stockpile, t.state.residentId(actor).map(List::of).orElse(List.of()),
 					Map.of("source", "minecraft_material_crafting", "activity", "craft", "recipe", t.recipe.id(),
@@ -154,7 +163,13 @@ final class SettlementWorkbenchCrafting {
 	static void cancel(Ticket ticket) { if (ticket != null) ticket.used = true; }
 	private static boolean fail(Ticket ticket) { cancel(ticket); return false; }
 	private static boolean canExport(Ticket t) {
-		return t.recipe == Recipe.PLANKS && t.state != null && t.state.survivalEnabled() && t.state.productionEnabled();
+		return exportItem(t) != null && t.state != null && t.state.survivalEnabled() && t.state.productionEnabled();
+	}
+
+	private static Item exportItem(Ticket t) {
+		if (t.recipe == Recipe.PLANKS) return Items.OAK_LOG;
+		if (t.recipe == Recipe.TORCH_COAL || t.recipe == Recipe.TORCH_CHARCOAL) return Items.STICK;
+		return null;
 	}
 
 	private static boolean hasExactInputs(Ticket t, Container inventory) {

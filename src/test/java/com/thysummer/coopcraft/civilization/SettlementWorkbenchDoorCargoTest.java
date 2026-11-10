@@ -66,7 +66,8 @@ class SettlementWorkbenchDoorCargoTest {
 		assertFalse(SettlementWorkbenchCargo.matchesInput(output, CAMP, BATCH, Recipe.DOOR));
 		for (int count = 1; count <= 6; count++)
 			assertTrue(SettlementWorkbenchCargo.matchesInput(input.copyWithCount(count), CAMP, BATCH, Recipe.DOOR));
-		for (Recipe recipe : Recipe.values()) assertEquals(recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL, SettlementWorkbenchCargo.supported(recipe));
+		for (Recipe recipe : Recipe.values()) assertEquals(recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
+				|| recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL, SettlementWorkbenchCargo.supported(recipe));
 		assertFalse(SettlementWorkbenchCargo.supported(null));
 		assertThrows(IllegalArgumentException.class, () -> SettlementWorkbenchCargo.input(CAMP, BATCH, Recipe.BED));
 	}

@@ -804,7 +804,7 @@ public class VillagerWorkGoal extends Goal {
 				);
 				case POLISH_PICKAXE -> craftPolishedPickaxe();
 				case GRIND_SMOOTH_STONE -> grindSmoothStone();
-				case ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL -> { return; }
+				case ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -902,6 +902,11 @@ public class VillagerWorkGoal extends Goal {
 		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.WOOL) {
 			workbenchTicket = prepareWorkbenchCrafting();
 			return workbenchTicket == null ? null : Action.COLLECT_WOOL_MATERIALS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_COAL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_TORCH_MATERIALS;
 		}
 		if (currentMaterialRecipe != null) {
 			return Action.CRAFT_MATERIALS;
@@ -1002,7 +1007,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isWorkbenchAction() {
-		return isCollectWorkbenchAction() || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL;
+		return isCollectWorkbenchAction() || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL || action == Action.WORKBENCH_TORCHES;
 	}
 
 	/** The live sheep position, not the originally selected block, drives both travel and work. */
@@ -1055,7 +1060,7 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isCollectWorkbenchAction() {
-		return action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS || action == Action.COLLECT_WOOL_MATERIALS;
+		return action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS || action == Action.COLLECT_WOOL_MATERIALS || action == Action.COLLECT_TORCH_MATERIALS;
 	}
 
 	private void cancelWorkbenchCrafting() {
@@ -1067,7 +1072,8 @@ public class VillagerWorkGoal extends Goal {
 	private SettlementWorkbenchCrafting.Ticket prepareWorkbenchCrafting() {
 		SettlementMaterialCrafting.Recipe recipe = currentMaterialRecipe;
 		if (recipe != SettlementMaterialCrafting.Recipe.PLANKS && recipe != SettlementMaterialCrafting.Recipe.DOOR
-			&& recipe != SettlementMaterialCrafting.Recipe.BED && recipe != SettlementMaterialCrafting.Recipe.WOOL) return null;
+			&& recipe != SettlementMaterialCrafting.Recipe.BED && recipe != SettlementMaterialCrafting.Recipe.WOOL
+			&& recipe != SettlementMaterialCrafting.Recipe.TORCH_COAL && recipe != SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL) return null;
 		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
 		SettlementSavedData data = settlementData();
 		Settlement camp = settlement;
@@ -1097,6 +1103,7 @@ public class VillagerWorkGoal extends Goal {
 				&& plans.equals(planIds.stream().map(BlueprintManager::get).toList())
 				&& demands.equals(ConstructionPlanner.materialDemands(data, camp))
 				&& (recipe == SettlementMaterialCrafting.Recipe.WOOL ? woolDemandStillNeeded(level, data, camp, demands)
+					: isTorchRecipe(recipe) ? torchDemandStillNeeded(demands, SettlementStockpile.getStockpile(level, data, camp))
 					: recipe == SettlementMaterialCrafting.Recipe.BED ? bedDemandStillNeeded(level, data, camp, demands)
 					: recipe == SettlementMaterialCrafting.Recipe.PLANKS
 					? plankDemandStillNeeded(level, data, camp, demands) : doorDemandStillNeeded(level, data, camp, demands)));
@@ -1146,6 +1153,17 @@ public class VillagerWorkGoal extends Goal {
 		return SettlementWoolSupply.nextBedNeedsWool(demands, stockpile, data.simulationOf(camp).orElse(null));
 	}
 
+	private static boolean isTorchRecipe(SettlementMaterialCrafting.Recipe recipe) {
+		return recipe == SettlementMaterialCrafting.Recipe.TORCH_COAL || recipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL;
+	}
+
+	/** Check remaining public output demand even after the last fuel and stick leave the store. */
+	static boolean torchDemandStillNeeded(List<Map<Item, Integer>> demands, Container stockpile) {
+		if (stockpile == null) return false;
+		int torches = SettlementMaterialCrafting.countPlain(stockpile, Items.TORCH);
+		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.TORCH, 0) > torches);
+	}
+
 	private void tickWorkbenchCrafting() {
 		// start and direct tick both use the same final live gates before resolving the store.
 		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) { stop(); return; }
@@ -1158,6 +1176,7 @@ public class VillagerWorkGoal extends Goal {
 			if (!SettlementWorkbenchCrafting.pickup(workbenchTicket, settlementData(), settlement,
 				villager.getUUID(), villager.getInventory(), stockpile, () -> isTargetValid() && atCargoStore())) { stop(); return; }
 			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.WOOL ? Action.WORKBENCH_WOOL
+				: isTorchRecipe(workbenchTicket.recipe()) ? Action.WORKBENCH_TORCHES
 				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.BED ? Action.WORKBENCH_BEDS
 				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.DOOR
 				? Action.WORKBENCH_DOORS : Action.WORKBENCH_PLANKS;
@@ -1241,6 +1260,8 @@ public class VillagerWorkGoal extends Goal {
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.DOOR
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.BED
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.WOOL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_COAL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL
 			|| chooseMaterialRecipe() != currentMaterialRecipe) {
 			return;
 		}
@@ -1508,7 +1529,10 @@ public class VillagerWorkGoal extends Goal {
 		if (isWorkbenchAction()) return workbenchTicket != null
 			&& target.equals(isCollectWorkbenchAction() ? workbenchTicket.store() : workbenchTicket.station())
 			&& workbenchTicket.collected() == !isCollectWorkbenchAction()
-			&& workbenchTicket.recipe() == ((action == Action.COLLECT_BED_MATERIALS || action == Action.WORKBENCH_BEDS)
+			&& ((action != Action.COLLECT_TORCH_MATERIALS && action != Action.WORKBENCH_TORCHES)
+				|| isTorchRecipe(currentMaterialRecipe))
+			&& workbenchTicket.recipe() == ((action == Action.COLLECT_TORCH_MATERIALS || action == Action.WORKBENCH_TORCHES)
+				? currentMaterialRecipe : (action == Action.COLLECT_BED_MATERIALS || action == Action.WORKBENCH_BEDS)
 				? SettlementMaterialCrafting.Recipe.BED : (action == Action.COLLECT_WOOL_MATERIALS || action == Action.WORKBENCH_WOOL)
 				? SettlementMaterialCrafting.Recipe.WOOL : (action == Action.COLLECT_DOOR_MATERIALS || action == Action.WORKBENCH_DOORS)
 				? SettlementMaterialCrafting.Recipe.DOOR : SettlementMaterialCrafting.Recipe.PLANKS)
@@ -2176,6 +2200,8 @@ public class VillagerWorkGoal extends Goal {
 		WORKBENCH_BEDS("workbench_beds"),
 		COLLECT_WOOL_MATERIALS("collect_wool_materials"),
 		WORKBENCH_WOOL("workbench_wool"),
+		COLLECT_TORCH_MATERIALS("collect_torch_materials"),
+		WORKBENCH_TORCHES("workbench_torches"),
 		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),

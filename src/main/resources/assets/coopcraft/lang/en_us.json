@@ -786,5 +786,7 @@
 	"coopcraft.simulation.teaching_cost.next_settled_day": "One social hour each, effective after the next day settlement",
 	"coopcraft.interaction.action.attend_lesson": "Travelling to the workbench for a lesson",
 	"coopcraft.interaction.action.lesson_waiting": "Waiting for the lesson partner at the workbench",
-	"coopcraft.interaction.action.lesson_learning": "Learning a craft together at the workbench"
+	"coopcraft.interaction.action.lesson_learning": "Learning a craft together at the workbench",
+	"coopcraft.interaction.action.collect_torch_materials": "Collecting fuel and sticks for torches at the communal store",
+	"coopcraft.interaction.action.workbench_torches": "Making torches from carried materials at the workbench"
 }
