@@ -52,6 +52,16 @@ final class SettlementFoodSharing {
 		}
 		return points;
 	}
+	static boolean hasSpareRation(SettlementSavedData data, Settlement camp, UUID giver, SimpleContainer bag) {
+		long spare = ordinaryFoodPoints(bag) - SettlementFoodCargo.retainedFoodPoints(data, camp, giver);
+		if (spare <= 0) return false;
+		for (int slot = 0; slot < bag.getContainerSize(); slot++) {
+			ItemStack stack = bag.getItem(slot);
+			if (SettlementPersonalMeal.ordinary(stack) && spare >= SettlementFood.points(stack.getItem())) return true;
+		}
+		return false;
+	}
+
 	private static boolean eligible(SettlementSavedData data, Settlement camp, UUID giver, SimpleContainer giverBag,
 		UUID recipient, SimpleContainer recipientBag) {
 		return data != null && camp != null && giver != null && recipient != null && !giver.equals(recipient)

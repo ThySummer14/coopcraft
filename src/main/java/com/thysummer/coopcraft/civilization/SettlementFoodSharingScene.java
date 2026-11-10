@@ -5,7 +5,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.npc.Villager;
 
-/** Loaded, stationary adult contact. Neither participant searches for a path or a warehouse. */
+/** Loaded, stationary adult contact, also used after an independently reserved short delivery. */
 final class SettlementFoodSharingScene {
 	private SettlementFoodSharingScene() { }
 	static final class Session {
@@ -31,13 +31,15 @@ final class SettlementFoodSharingScene {
 		return pair != null && valid(pair.value) ? pair.value : null;
 	}
 	static Session poll(Villager giver, SettlementSavedData data, Settlement camp) {
-		if (!(giver.level() instanceof ServerLevel level) || !bodyReady(level, data, camp, giver)) return null;
+		if (!(giver.level() instanceof ServerLevel level) || !bodyReady(level, data, camp, giver)
+			|| !SettlementFoodDeliveryScene.hasSurplus(data, camp, giver)
+			|| SettlementFoodDeliveryScene.reserved(giver, data)) return null;
 		var registry = data.foodSharingSessions(); long now = level.getGameTime();
 		if (registry.find(giver.getUUID(), now) != null || !registry.attempt(giver.getUUID(), now)) return null;
 		int checked = 0;
 		for (Villager recipient : level.getEntitiesOfClass(Villager.class, giver.getBoundingBox().inflate(2.5))) {
 			if (++checked > 16) break;
-			if (recipient == giver || registry.find(recipient.getUUID(), now) != null
+			if (recipient == giver || SettlementFoodDeliveryScene.reserved(recipient, data) || registry.find(recipient.getUUID(), now) != null
 				|| !registry.attempt(recipient.getUUID(), now) || !bodyReady(level, data, camp, recipient)
 				|| !contact(level, giver, recipient)) continue;
 			var from = giver.position(); var to = recipient.position();
@@ -55,6 +57,24 @@ final class SettlementFoodSharingScene {
 		}
 		return null;
 	}
+	/** Called while delivery still owns both endpoints, never through a fresh global poll. */
+	static Session receiveDelivery(Villager giver, Villager recipient, SettlementSavedData data, Settlement camp) {
+		if (!(giver.level() instanceof ServerLevel level) || !bodyReady(level, data, camp, giver)
+			|| !bodyReady(level, data, camp, recipient) || !contact(level, giver, recipient)) return null;
+		var from = giver.position(); var to = recipient.position();
+		var fromBag = giver.getInventory(); var toBag = recipient.getInventory();
+		var ticket = SettlementFoodSharing.prepare(data, camp, giver.getUUID(), fromBag, recipient.getUUID(), toBag,
+			() -> giver.getInventory() == fromBag && recipient.getInventory() == toBag
+				&& giver.position().equals(from) && recipient.position().equals(to)
+				&& bodyReady(level, data, camp, giver) && bodyReady(level, data, camp, recipient)
+				&& contact(level, giver, recipient));
+		if (ticket == null) return null;
+		Session session = new Session(level, data, camp, giver, recipient, ticket);
+		session.pair = data.foodSharingSessions().reserve(giver.getUUID(), recipient.getUUID(), level.getGameTime(), session);
+		if (session.pair != null) return session;
+		SettlementFoodSharing.cancel(ticket); return null;
+	}
+
 	static boolean valid(Session s) {
 		if (s == null) return false;
 		boolean valid = s.data.foodSharingSessions().active(s.pair, s.level.getGameTime()) && SettlementFoodSharing.valid(s.ticket);
@@ -83,6 +103,7 @@ final class SettlementFoodSharingScene {
 		if (s != null) { s.data.foodSharingSessions().cancel(s.pair); SettlementFoodSharing.cancel(s.ticket); }
 	}
 	static void cancelOnUnload(Villager resident) {
+		SettlementFoodDeliveryScene.cancelResident(resident);
 		if (resident.level() instanceof ServerLevel level) {
 			var registry = SettlementSavedData.get(level).foodSharingSessions();
 			var pair = registry.find(resident.getUUID(), level.getGameTime());

@@ -67,6 +67,8 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
 	private final SettlementFoodRequests foodRequests = new SettlementFoodRequests();
 	// Ephemeral adult sharing; no NBT or dirty tracking.
+	private final SettlementFoodDeliveryReservations<SettlementFoodDeliveryScene.Delivery> foodDeliveryReservations = new SettlementFoodDeliveryReservations<>();
+	SettlementFoodDeliveryReservations<SettlementFoodDeliveryScene.Delivery> foodDeliveryReservations() { return foodDeliveryReservations; }
 	private final SettlementFoodSharingSessions<SettlementFoodSharingScene.Session> foodSharingSessions = new SettlementFoodSharingSessions<>();
 	SettlementFoodSharingSessions<SettlementFoodSharingScene.Session> foodSharingSessions() { return foodSharingSessions; }
 	// Ephemeral child-care coordination; no NBT or dirty tracking.
@@ -531,6 +533,7 @@ public final class SettlementSavedData extends SavedData {
 
 	public void removeMember(UUID villagerId) {
 		foodSharingSessions.cancelResident(villagerId);
+		foodDeliveryReservations.cancelResident(villagerId);
 		proposalConversationSessions.cancelResident(villagerId);
 		foodRequests.cancelResident(villagerId);
 		childCareClaims.cancelResident(villagerId);
