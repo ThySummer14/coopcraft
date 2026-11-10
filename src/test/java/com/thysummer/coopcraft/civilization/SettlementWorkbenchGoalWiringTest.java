@@ -79,8 +79,11 @@ class SettlementWorkbenchGoalWiringTest {
 	@Test
 	void allLegacyMaterialConsumersAndToolsRespectMarkerQuarantine() throws Exception {
 		var methods = methods();
-		for (String method : List.of("canGrindSmoothStone", "grindSmoothStone"))
-			assertTrue(methods.get(method).contains("!SettlementWorkbenchCargo.isMarked(stack)"));
+		assertFalse(methods.containsKey("grindSmoothStone"));
+		assertTrue(methods.get("smoothStoneDemandStillNeeded").contains("!SettlementWorkbenchCargo.isMarked(hand)"));
+		assertTrue(methods.get("canGrindSmoothStone").contains("SettlementMaterialCrafting.availablePlain("));
+		assertFalse(methods.get("smoothStoneDemandStillNeeded").contains("hasStonePickaxe("));
+		assertFalse(methods.get("tickWorkbenchCrafting").contains("withdrawItems("));
 		for (String method : List.of("availableItems", "withdrawItems")) {
 			assertFalse(methods.get(method).contains(".countItem("));
 			assertTrue(methods.get(method).contains("countCraftingItems("));

@@ -46,9 +46,9 @@ final class SettlementWorkbenchCrafting {
 			this.demand = demand;
 			member = data.memberIdentity(actor);
 			storeToken = data.stockpileBindingToken(camp);
-			stationToken = data.craftingStationBindingToken(camp);
+			stationToken = stationToken(data, camp, recipe);
 			store = data.getStockpile(camp).orElseThrow();
-			station = data.getCraftingStation(camp).orElseThrow();
+			station = SettlementWorkbenchCrafting.station(data, camp, recipe).orElseThrow();
 			state = data.simulationOf(camp).orElse(null);
 			modeVersion = state == null ? 0 : state.foodRequestModeVersion();
 		}
@@ -56,6 +56,14 @@ final class SettlementWorkbenchCrafting {
 		BlockPos station() { return station; }
 		boolean collected() { return collected; }
 		Recipe recipe() { return recipe; }
+	}
+
+	private static java.util.Optional<BlockPos> station(SettlementSavedData data, Settlement camp, Recipe recipe) {
+		return recipe == Recipe.SMOOTH_STONE ? data.getGrindingStation(camp) : data.getCraftingStation(camp);
+	}
+
+	private static Object stationToken(SettlementSavedData data, Settlement camp, Recipe recipe) {
+		return recipe == Recipe.SMOOTH_STONE ? data.grindingStationBindingToken(camp) : data.craftingStationBindingToken(camp);
 	}
 
 	/** Read-only: neither reserves supplies nor starts a provenance attempt. */
@@ -70,7 +78,7 @@ final class SettlementWorkbenchCrafting {
 		if (!SettlementWorkbenchCargo.supported(recipe)) return null;
 		if (data == null || camp == null || actor == null || inventory == null || worldValid == null
 			|| demandStillNeeded == null || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
-			|| data.getStockpile(camp).isEmpty() || data.getCraftingStation(camp).isEmpty()) return null;
+			|| data.getStockpile(camp).isEmpty() || station(data, camp, recipe).isEmpty()) return null;
 		// Clear existing physical custody first, including malformed/future markers.
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			if (SettlementWorkbenchCargo.isMarked(inventory.getItem(slot))) return null;
@@ -88,7 +96,7 @@ final class SettlementWorkbenchCrafting {
 	}
 
 	private static boolean strictCallbacks(Ticket t) {
-		return t.recipe == Recipe.STONE_PICKAXE || t.recipe == Recipe.STICKS;
+		return t.recipe == Recipe.SMOOTH_STONE || t.recipe == Recipe.STONE_PICKAXE || t.recipe == Recipe.STICKS;
 	}
 
 	private static boolean currentIdentity(Ticket t, SettlementSavedData data, Settlement camp, UUID actor, Container inventory) {
@@ -100,9 +108,9 @@ final class SettlementWorkbenchCrafting {
 		if (t == null || t.data != data || t.camp != camp || !t.actor.equals(actor)
 			|| t.inventory != inventory || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
 			|| t.member != data.memberIdentity(actor) || t.storeToken != data.stockpileBindingToken(camp)
-			|| t.stationToken != data.craftingStationBindingToken(camp)
+			|| t.stationToken != stationToken(data, camp, t.recipe)
 			|| !data.getStockpile(camp).filter(t.store::equals).isPresent()
-			|| !data.getCraftingStation(camp).filter(t.station::equals).isPresent()
+			|| !station(data, camp, t.recipe).filter(t.station::equals).isPresent()
 			|| data.simulationOf(camp).orElse(null) != t.state) return false;
 		// Material authority changes invalidate even when toggled off and back on. Skills remain runtime optional.
 		if (t.state != null && t.state.foodRequestModeVersion() != t.modeVersion) return false;
@@ -208,7 +216,8 @@ final class SettlementWorkbenchCrafting {
 
 	private static boolean canExport(Ticket t, Item item) {
 		if (t.state == null || !t.state.survivalEnabled() || !t.state.productionEnabled()) return false;
-		return ((t.recipe == Recipe.PLANKS || t.recipe == Recipe.STICKS) && item == Items.OAK_LOG)
+		return (t.recipe == Recipe.SMOOTH_STONE && item == Items.COBBLESTONE)
+			|| ((t.recipe == Recipe.PLANKS || t.recipe == Recipe.STICKS) && item == Items.OAK_LOG)
 			|| ((t.recipe == Recipe.TORCH_COAL || t.recipe == Recipe.TORCH_CHARCOAL) && item == Items.STICK)
 			|| (t.recipe == Recipe.STONE_PICKAXE && (item == Items.COBBLESTONE || item == Items.STICK));
 	}

@@ -31,7 +31,7 @@ public final class SettlementWorkbenchCargo {
 		return custom != null && custom.copyTag().contains(KEY);
 	}
 
-	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.STICKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
+	public static boolean supported(Recipe recipe) { return recipe == Recipe.SMOOTH_STONE || recipe == Recipe.PLANKS || recipe == Recipe.STICKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
 		|| recipe == Recipe.STONE_PICKAXE || recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL; }
 
 	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
@@ -65,8 +65,8 @@ public final class SettlementWorkbenchCargo {
 
 	private static ItemStack stamp(UUID camp, UUID batch, Phase phase, Recipe recipe, ItemStack stack) {
 		CompoundTag tag = new CompoundTag();
-		// Keep the original PLANKS encoding byte-for-byte compatible; other recipes are explicit V2.
-		tag.putInt("Version", recipe == Recipe.PLANKS ? 1 : 2);
+		// Preserve V1 planks and existing V2 recipes. Grinding uses its own strict V3 encoding.
+		tag.putInt("Version", recipe == Recipe.PLANKS ? 1 : recipe == Recipe.SMOOTH_STONE ? 3 : 2);
 		if (recipe != Recipe.PLANKS) tag.putString("Recipe", recipe.name());
 		tag.putUUID("Settlement", camp); tag.putUUID("Batch", batch);
 		tag.putString("Phase", phase.name());
@@ -101,6 +101,11 @@ public final class SettlementWorkbenchCargo {
 				default -> null;
 			};
 			if (recipe == null) return null;
+		} else if (tag.getInt("Version") == 3) {
+			// A dedicated encoding must not reinterpret formerly unknown V2 recipe cargo.
+			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)
+				|| !tag.getString("Recipe").equals("SMOOTH_STONE")) return null;
+			recipe = Recipe.SMOOTH_STONE;
 		} else return null;
 		Phase phase = switch (tag.getString("Phase")) {
 			case "INPUT" -> Phase.INPUT;

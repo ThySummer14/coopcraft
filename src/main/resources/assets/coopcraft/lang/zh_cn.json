@@ -95,6 +95,7 @@
 	"coopcraft.interaction.action.craft_first_workbench": "在公仓旁徒手准备首个工作台",
 	"coopcraft.interaction.action.craft_materials": "制作公共建筑材料",
 	"coopcraft.interaction.action.polish": "打磨石镐",
+	"coopcraft.interaction.action.collect_grinding_materials": "前往公仓领取磨制圆石",
 	"coopcraft.interaction.action.grind": "磨制平滑石",
 	"coopcraft.interaction.blocker.child": "儿童由家庭照料",
 	"coopcraft.interaction.blocker.no_stockpile": "聚落还没有公仓",

@@ -290,7 +290,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
 		VillagerWorkGoal polishGoal = new VillagerWorkGoal(villager);
 		for (int batch = 0; batch < 3; batch++) {
-			runWorkshopAction(helper, polishGoal, "grind", GRINDING_STATION);
+			runGrindingAction(helper, polishGoal, villager);
 			helper.assertValueEqual(1, villager.getInventory().countItem(Items.SMOOTH_STONE), "Each grind must leave one real product in the backpack");
 			deliverCargoAtStore(helper, data, settlement, villager, chest, 1);
 			helper.assertValueEqual(batch + 1, chest.countItem(Items.SMOOTH_STONE), "Each explicit service delivery adds one real smooth stone");
@@ -565,7 +565,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		try {
 			villager.setNoAi(false); // The production route correctly rejects disabled workers.
 			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(CRAFTING_TABLE);
-			villager.setPos(store.getX() + 0.5, store.getY() + 1, store.getZ() + 0.5);
+			placeAtCargoFace(helper, villager, store);
 			helper.assertTrue(goal.canUse(), "First pickaxe must select physical warehouse pickup");
 			helper.assertValueEqual("collect_pickaxe_materials", goal.status().action(), "Select the first-tool pickup action");
 			helper.assertValueEqual(store, goal.status().target(), "Pick up only at the registered warehouse");
@@ -575,7 +575,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertTrue(villager.getMainHandItem().isEmpty(), "Pickup must not manufacture or equip the tool");
 			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Carry the actual three stone");
 			helper.assertValueEqual(2, villager.getInventory().countItem(Items.STICK), "Carry the actual two sticks");
-			villager.setPos(station.getX() + 0.5, station.getY() + 1, station.getZ() + 0.5);
+			placeAtCargoFace(helper, villager, station);
 			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
 			helper.assertFalse(goal.canContinueToUse(), "The arrived workbench batch must finish in its work budget");
 			helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Equip the one completed actual tool");
@@ -593,7 +593,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		try {
 			villager.setNoAi(false);
 			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(CRAFTING_TABLE);
-			villager.setPos(store.getX() + 0.5, store.getY() + 1, store.getZ() + 0.5);
+			placeAtCargoFace(helper, villager, store);
 			helper.assertTrue(goal.canUse(), "Stick demand must select public warehouse pickup");
 			helper.assertValueEqual("collect_stick_inputs", goal.status().action(), "Select stick inputs");
 			helper.assertValueEqual(store, goal.status().target(), "Collect at the real warehouse");
@@ -602,7 +602,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertValueEqual(station, goal.status().target(), "Use the bound table");
 			helper.assertValueEqual(1, villager.getInventory().countItem(Items.OAK_LOG), "Carry the one real log");
 			helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK), "Pickup cannot manufacture sticks");
-			villager.setPos(station.getX() + 0.5, station.getY() + 1, station.getZ() + 0.5);
+			placeAtCargoFace(helper, villager, station);
 			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
 			helper.assertFalse(goal.canContinueToUse(), "Finish one arrived stick batch within the work budget");
 			helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK), "One log produces eight real sticks");
@@ -611,6 +611,44 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			villager.setNoAi(noAi);
 			villager.setPos(original.x, original.y, original.z);
 		}
+	}
+
+	/** Explicit arrivals verify custody stages; this fixture does not exercise navigation. */
+	private static void runGrindingAction(GameTestHelper helper, VillagerWorkGoal goal, Villager villager) {
+		var original = villager.position();
+		boolean noAi = villager.isNoAi();
+		ItemStack originalTool = villager.getMainHandItem().copy();
+		try {
+			villager.setNoAi(false);
+			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(GRINDING_STATION);
+			placeAtCargoFace(helper, villager, store);
+			helper.assertTrue(goal.canUse(), "Grinding demand must select public warehouse pickup");
+			helper.assertValueEqual("collect_grinding_materials", goal.status().action(), "Select grinding inputs");
+			helper.assertValueEqual(store, goal.status().target(), "Collect at the real warehouse");
+			goal.start();
+			helper.assertValueEqual("grind", goal.status().action(), "Carry inputs to the stonecutter");
+			helper.assertValueEqual(station, goal.status().target(), "Use the bound stonecutter");
+			helper.assertValueEqual(1, villager.getInventory().countItem(Items.COBBLESTONE), "Carry the one real cobblestone");
+			helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Pickup cannot manufacture smooth stone");
+			placeAtCargoFace(helper, villager, station);
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			helper.assertFalse(goal.canContinueToUse(), "Finish one arrived grinding batch within the work budget");
+			helper.assertValueEqual(1, villager.getInventory().countItem(Items.SMOOTH_STONE), "One cobblestone produces one real smooth stone");
+			helper.assertTrue(ItemStack.matches(originalTool, villager.getMainHandItem()), "Grinding preserves every tool component and durability");
+		} finally {
+			goal.stop();
+			villager.setNoAi(noAi);
+			villager.setPos(original.x, original.y, original.z);
+		}
+	}
+
+	/** Explicit, safe same-height arrival. These fixtures do not test pathfinding. */
+	private static void placeAtCargoFace(GameTestHelper helper, Villager villager, BlockPos target) {
+		BlockPos feet = target.east();
+		helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+		helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+		villager.setPos(feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5);
 	}
 
 	private static void runWorkshopAction(GameTestHelper helper, VillagerWorkGoal goal, String action, BlockPos station) {

@@ -107,7 +107,7 @@ class SettlementShearsLoanGoalWiringTest {
 
 	@Test void loanMarkersAreExcludedFromLegacyCraftingAndAutomaticPickaxeEquip() throws Exception {
 		var methods = methods("VillagerWorkGoal");
-		for (String name : List.of("canGrindSmoothStone", "grindSmoothStone",
+		for (String name : List.of("smoothStoneDemandStillNeeded",
 			"isPolishedPickaxe", "hasStonePickaxe", "countCraftingItems", "transferCraftingItems", "removeItems")) {
 			assertFalse(calls(named(methods, name), "SettlementShearsLoan.isMarked").isEmpty(), name);
 		}

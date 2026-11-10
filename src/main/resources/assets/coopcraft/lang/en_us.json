@@ -95,6 +95,7 @@
 	"coopcraft.interaction.action.craft_first_workbench": "Handcrafting the first workbench beside the communal store",
 	"coopcraft.interaction.action.craft_materials": "Crafting communal building supplies",
 	"coopcraft.interaction.action.polish": "Polishing a stone pickaxe",
+	"coopcraft.interaction.action.collect_grinding_materials": "Collecting cobblestone for grinding",
 	"coopcraft.interaction.action.grind": "Grinding smooth stone",
 	"coopcraft.interaction.blocker.child": "Children are cared for by their household",
 	"coopcraft.interaction.blocker.no_stockpile": "The settlement has no stockpile yet",
