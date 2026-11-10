@@ -41,6 +41,8 @@ class SettlementProtectedHarvestWiringTest {
 			if (!worldMethod(method) || method.getParameters().stream().noneMatch(p -> p.getName().contentEquals("data"))) continue;
 			String name = method.getName().toString();
 			if (!List.of("validTarget", "harvest", "findRipeBush", "findRipe").contains(name)) continue;
+			// Compatibility wrappers are checked separately; inspect all five actual world adapters here.
+			if (service.equals("SettlementCropHarvest") && cropPermissionWrapper(method)) continue;
 			String position = method.getParameters().stream().anyMatch(p -> p.getName().contentEquals("position")) ? "position" : "pos";
 			var delegates = invocations(method, name);
 			assertEquals(1, delegates.size(), service + "." + name);
@@ -58,6 +60,37 @@ class SettlementProtectedHarvestWiringTest {
 		}
 		assertEquals(5, checked, "Gathering/crop continuation and harvest, plus the crop finder");
 		assertBerryPermissionWiring();
+	}
+
+	@Test void cropCompatibilityWrappersOnlyCapturePermissionAndForwardTheSameArguments() throws Exception {
+		var wrappers = methods("SettlementCropHarvest").stream()
+			.filter(SettlementProtectedHarvestWiringTest::cropPermissionWrapper).toList();
+		assertEquals(2, wrappers.size(), "Both legacy world entry points must capture fresh permission");
+		for (MethodTree wrapper : wrappers) {
+			String name = wrapper.getName().toString();
+			List<String> forwarded = name.equals("harvest")
+				? List.of("level", "data", "settlement", "villager", "pos")
+				: List.of("level", "data", "settlement", "pos");
+			assertEquals(forwarded, wrapper.getParameters().stream().map(p -> p.getName().toString()).toList());
+			assertEquals(1, wrapper.getBody().getStatements().size(), "No work before or after forwarding");
+			ReturnTree returned = assertInstanceOf(ReturnTree.class, wrapper.getBody().getStatements().getFirst());
+			MethodInvocationTree delegate = assertInstanceOf(MethodInvocationTree.class, returned.getExpression());
+			assertEquals(name, delegate.getMethodSelect().toString());
+			assertEquals(forwarded.size() + 1, delegate.getArguments().size());
+			assertEquals(forwarded, arguments(delegate).subList(0, forwarded.size()));
+			MethodInvocationTree capture = assertInstanceOf(MethodInvocationTree.class, delegate.getArguments().getLast());
+			assertEquals("capturePermission", capture.getMethodSelect().toString());
+			assertEquals(List.of("data", "settlement", "pos"), arguments(capture));
+			List<String> calls = new ArrayList<>();
+			new TreeScanner<Void, Void>() {
+				@Override public Void visitMethodInvocation(MethodInvocationTree call, Void unused) {
+					calls.add(call.getMethodSelect().toString());
+					return super.visitMethodInvocation(call, unused);
+				}
+			}.scan(wrapper.getBody(), null);
+			assertEquals(List.of(name, "capturePermission"), calls,
+				"Wrappers must neither access the world nor replace actor, caller data or position");
+		}
 	}
 
 	@Test void gatheringAndBerryWorldMutationsRecheckLiveDimensionInsideTheirCallbacks() throws Exception {
@@ -228,8 +261,15 @@ class SettlementProtectedHarvestWiringTest {
 	private static boolean worldMethod(MethodTree method) {
 		return !method.getParameters().isEmpty() && method.getParameters().getFirst().getType().toString().equals("ServerLevel");
 	}
+	private static boolean cropPermissionWrapper(MethodTree method) {
+		return worldMethod(method)
+			&& ((method.getName().contentEquals("validTarget") && method.getParameters().size() == 4)
+				|| (method.getName().contentEquals("harvest") && method.getParameters().size() == 5));
+	}
 	private static MethodTree worldHarvest(String service) throws Exception {
 		return methods(service).stream().filter(method -> worldMethod(method) && method.getName().contentEquals("harvest"))
+			.filter(method -> !service.equals("SettlementCropHarvest")
+				|| method.getParameters().stream().anyMatch(parameter -> parameter.getType().toString().equals("Permission")))
 			.findFirst().orElseThrow();
 	}
 	private static Tree unparenthesized(Tree tree) {
