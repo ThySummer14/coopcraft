@@ -820,5 +820,14 @@
 	"coopcraft.interaction.meeting.inquiry.factor_positive": "+",
 	"coopcraft.interaction.meeting.inquiry.factor_negative": "−",
 	"coopcraft.interaction.meeting.inquiry.factor_generosity": "Generosity toward hunger in other households",
-	"coopcraft.interaction.action.feed_child": "Bringing food to a child"
+	"coopcraft.interaction.action.feed_child": "Bringing food to a child",
+	"coopcraft.interaction.action.tell_proposal": "Telling a distribution proposal",
+	"coopcraft.interaction.action.hear_proposal": "Hearing a distribution proposal",
+	"coopcraft.simulation.detail.conversation_speaker": "Speaker: %s",
+	"coopcraft.simulation.detail.conversation_listener": "Listener: %s",
+	"coopcraft.simulation.detail.conversation_proposal": "Proposal ID: %s",
+	"coopcraft.simulation.detail.conversation_source": "Original proposal event: %s",
+	"coopcraft.simulation.detail.conversation_confidence": "Received confidence: %s",
+	"coopcraft.simulation.detail.conversation_cost": "Social time cost: %s",
+	"coopcraft.simulation.conversation_cost.next_settled_day": "Each participant: 1 social hour, labor cost at the next settled day"
 }

@@ -38,6 +38,11 @@ public final class SettlementChildCareClaims {
 		return advance(now) && current(lease);
 	}
 
+	/** Active roles only: another social activity need not wait for a care retry cooldown. */
+	public boolean claimed(UUID resident, long now) {
+		return advance(now) && resident != null && residents.containsKey(resident);
+	}
+
 	public boolean available(UUID resident, long now) {
 		return advance(now) && resident != null && free(resident);
 	}

@@ -82,6 +82,10 @@ public final class SettlementSavedData extends SavedData {
 	private final SettlementCouncilSessions<SettlementAutonomousMeetings.Session> councilSessions = new SettlementCouncilSessions<>();
 	SettlementCouncilSessions<SettlementAutonomousMeetings.Session> councilSessions() { return councilSessions; }
 
+	// Ephemeral in-person proposal conversations; never serialized or marked dirty.
+	private final SettlementProposalConversationSessions<SettlementProposalConversation.Session> proposalConversationSessions = new SettlementProposalConversationSessions<>();
+	SettlementProposalConversationSessions<SettlementProposalConversation.Session> proposalConversationSessions() { return proposalConversationSessions; }
+
 	private final Map<UUID, SettlementSimulationState> simulations = new LinkedHashMap<>();
 
 	public static SettlementSavedData get(ServerLevel level) {
@@ -523,6 +527,7 @@ public final class SettlementSavedData extends SavedData {
 	}
 
 	public void removeMember(UUID villagerId) {
+		proposalConversationSessions.cancelResident(villagerId);
 		foodRequests.cancelResident(villagerId);
 		childCareClaims.cancelResident(villagerId);
 		boolean changed = members.remove(villagerId) != null;

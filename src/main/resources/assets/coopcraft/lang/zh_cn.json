@@ -820,5 +820,14 @@
 	"coopcraft.interaction.meeting.inquiry.factor_positive": "＋",
 	"coopcraft.interaction.meeting.inquiry.factor_negative": "－",
 	"coopcraft.interaction.meeting.inquiry.factor_generosity": "慷慨对他家饥饿需求的关切",
-	"coopcraft.interaction.action.feed_child": "送食照料幼儿"
+	"coopcraft.interaction.action.feed_child": "送食照料幼儿",
+	"coopcraft.interaction.action.tell_proposal": "转述分配提案",
+	"coopcraft.interaction.action.hear_proposal": "听取分配提案",
+	"coopcraft.simulation.detail.conversation_speaker": "讲述者：%s",
+	"coopcraft.simulation.detail.conversation_listener": "听者：%s",
+	"coopcraft.simulation.detail.conversation_proposal": "提案编号：%s",
+	"coopcraft.simulation.detail.conversation_source": "原始提案事件：%s",
+	"coopcraft.simulation.detail.conversation_confidence": "接收置信度：%s",
+	"coopcraft.simulation.detail.conversation_cost": "社会工时：%s",
+	"coopcraft.simulation.conversation_cost.next_settled_day": "双方各1小时社会工时，在下次日结体现劳动代价"
 }

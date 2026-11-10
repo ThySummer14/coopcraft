@@ -113,6 +113,138 @@ public final class NormSystem {
 		}
 	}
 
+	/** One local conversation, not a global propagation pass. The adapter verifies physical attendance. */
+	public static final class ProposalNoticePlan {
+		private final NormSystem owner;
+		private final long day;
+		private final Person speaker;
+		private final Person listener;
+		private final String campId;
+		private final NormProposal proposal;
+		private final int rounds;
+		private final SocialInformation information;
+		private boolean consumed;
+
+		private ProposalNoticePlan(NormSystem owner, Person speaker, Person listener,
+			NormProposal proposal, SocialInformation information) {
+			this.owner = owner;
+			this.day = owner.world.day();
+			this.speaker = speaker;
+			this.listener = listener;
+			this.campId = speaker.campId();
+			this.proposal = proposal;
+			this.rounds = proposal.rounds();
+			this.information = information;
+		}
+
+		public String proposalId() { return proposal.proposalId(); }
+		public String informationId() { return information.informationId(); }
+		public long sourceEventId() { return information.sourceEventId(); }
+		public String speakerId() { return speaker.id(); }
+		public String listenerId() { return listener.id(); }
+	}
+
+	public record ProposalNoticeResult(String status, String proposalId, String informationId,
+		long sourceEventId, long sharedEventId) {
+		public boolean shared() { return status.equals("shared"); }
+	}
+
+	/** Read-only deterministic selection from this speaker's current knowledge only. */
+	public Optional<ProposalNoticePlan> prepareProposalNotice(Person speaker, Person listener) {
+		if (!noticeParticipants(speaker, listener)) return Optional.empty();
+		for (SocialInformation information : speaker.information().stream()
+			.sorted(Comparator.comparing(SocialInformation::informationId)).toList()) {
+			NormProposal proposal = world.proposal(information.objectId()).orElse(null);
+			if (proposal == null) continue;
+			ProposalNoticePlan plan = new ProposalNoticePlan(this, speaker, listener, proposal, information);
+			if (validProposalNotice(plan)) return Optional.of(plan);
+		}
+		return Optional.empty();
+	}
+
+	/** Recheck the original objects and exact source notice, never substitute another notice. */
+	public boolean validProposalNotice(ProposalNoticePlan plan) {
+		return plan != null && plan.owner == this && !plan.consumed && plan.day == world.day()
+			&& noticeParticipants(plan.speaker, plan.listener)
+			&& plan.campId.equals(plan.speaker.campId())
+			&& plan.campId.equals(plan.proposal.campId())
+			&& world.proposal(plan.proposalId()).orElse(null) == plan.proposal
+			&& plan.proposal.status() == NormProposal.Status.OPEN
+			&& plan.proposal.rounds() == plan.rounds && plan.rounds < MAX_DELIBERATION_ROUNDS
+			&& plan.proposal.knownBy().contains(plan.speakerId())
+			&& !plan.proposal.knownBy().contains(plan.listenerId())
+			&& !plan.listener.knowsInformation(plan.informationId())
+			&& plan.listener.information().stream().noneMatch(info -> info.kind() == SocialInformation.Kind.NORM_PROPOSAL
+				&& info.objectId().equals(plan.proposalId()))
+			&& plan.speaker.information(plan.informationId()).orElse(null) == plan.information
+			&& validNoticeSource(plan.information, plan.proposal);
+	}
+
+	/** Commit exactly one notice and one social hour each. Evidence cannot override provenance. */
+	public ProposalNoticeResult shareProposalNotice(ProposalNoticePlan plan, Map<String, String> evidence) {
+		if (!validProposalNotice(plan)) {
+			if (plan != null && plan.owner == this) plan.consumed = true;
+			return new ProposalNoticeResult("invalid", "", "", 0, 0);
+		}
+		SocialInformation propagated = plan.information.propagate(world.day(), plan.speakerId());
+		Map<String, String> context = new LinkedHashMap<>(Map.copyOf(evidence));
+		context.put("informationId", plan.informationId());
+		context.put("proposalId", plan.proposalId());
+		context.put("sourceEventId", Long.toString(plan.sourceEventId()));
+		context.put("kind", plan.information.kind().name());
+		context.put("confidence", Double.toString(plan.information.confidence()));
+		context.put("receivedConfidence", Double.toString(propagated.confidence()));
+		context.put("hoursPerParticipant", "1");
+		context.put("costTiming", "next_settled_day");
+		context.put("campId", plan.campId);
+		plan.consumed = true;
+		long eventId = world.recordSocialEvent(EventType.INFORMATION_SHARED,
+			List.of(plan.speakerId(), plan.listenerId()), context, List.of(plan.sourceEventId()));
+		learn(plan.listener, propagated);
+		plan.speaker.addSocialHours(1);
+		plan.listener.addSocialHours(1);
+		return new ProposalNoticeResult("shared", plan.proposalId(), plan.informationId(), plan.sourceEventId(), eventId);
+	}
+
+	private boolean noticeParticipants(Person speaker, Person listener) {
+		return speaker != null && listener != null && speaker != listener
+			&& canonicalNoticeParticipant(speaker) && canonicalNoticeParticipant(listener)
+			&& speaker.canMakeDecisions() && listener.canMakeDecisions()
+			&& speaker.campId().equals(listener.campId())
+			&& speaker.socialHours() < 6 && listener.socialHours() < 6
+			&& (listener.trustIn(speaker.id()) >= 20 || speaker.trustIn(listener.id()) >= 20);
+	}
+
+	private boolean canonicalNoticeParticipant(Person person) {
+		try {
+			return world.person(person.id()) == person;
+		} catch (IllegalArgumentException absentPerson) {
+			return false;
+		}
+	}
+
+	private boolean validNoticeSource(SocialInformation information, NormProposal proposal) {
+		if (information.kind() != SocialInformation.Kind.NORM_PROPOSAL || information.confidence() < 0.5
+			|| !information.objectId().equals(proposal.proposalId())
+			|| !information.subjectId().equals(proposal.proposerId())
+			|| information.learnedDay() < proposal.proposedDay() || information.learnedDay() > world.day()
+			|| proposal.proposedDay() > world.day()) return false;
+		SimulationEvent origin = world.ledger().event(proposal.originEventId()).orElse(null);
+		if (origin == null || origin.day() > proposal.proposedDay()
+			|| (origin.type() != EventType.SHARE_REFUSED && origin.type() != EventType.SHORTAGE_CONFLICT)) return false;
+		// originEventId is the precipitating refusal/shortage, not the later NORM_PROPOSED event.
+		return world.ledger().event(information.sourceEventId()).filter(event ->
+			event.type() == EventType.NORM_PROPOSED && event.day() == proposal.proposedDay()
+			&& event.actors().equals(List.of(proposal.proposerId()))
+			&& event.inputs().isEmpty() && event.outputs().isEmpty()
+			&& event.causalLinks().equals(List.of(proposal.originEventId()))
+			&& proposal.proposalId().equals(event.context().get("proposalId"))
+			&& proposal.normId().equals(event.context().get("normId"))
+			&& Integer.toString(proposal.allocationUnitCap()).equals(event.context().get("cap"))
+			&& Integer.toString(proposal.revision()).equals(event.context().get("revision")))
+			.isPresent();
+	}
+
 	public void propagateInformation() {
 		if (lastPropagationDay == world.day()) {
 			return;

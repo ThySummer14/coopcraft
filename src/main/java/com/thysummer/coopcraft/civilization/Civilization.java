@@ -400,6 +400,11 @@ public final class Civilization {
 		String resourceType = flows.stream().findFirst().map(flow -> flow.resourceType().name()).orElse("NONE");
 		long quantity = flows.stream().mapToLong(ResourceFlow::quantity).sum();
 		List<SettlementOverviewPayload.SimulationEventDetail> details = new ArrayList<>();
+		if (ProposalConversationEventDetails.isConversation(event)) {
+			// Marked malformed evidence must never fall through to current proposal state.
+			return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType,
+				quantity, ProposalConversationEventDetails.project(event, actor -> residentName(level, actor)));
+		}
 		if (TeachingEventDetails.isFieldLesson(event)) {
 			return new SettlementOverviewPayload.SimulationEventInfo(event.day(), event.type().name(), resourceType,
 				quantity, TeachingEventDetails.project(event, actor -> residentName(level, actor)));

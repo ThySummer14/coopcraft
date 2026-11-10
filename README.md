@@ -199,3 +199,5 @@ OP先用 `/coop settlement gathering preview wood 4` 预览，再 `confirm` 确�
 - **土豆田扩种**：明确逐格许可后，居民可用默认实物模式下留粮后的普通土豆播种，成熟后接既有采收复种。不会自动开垦或消耗抽象食物，见[安全播种](docs/surplus-potato-sowing.md)。
 
 - **成人送食照料幼儿**：默认实物模式下，空闲成人可将留粮后的普通浆果或土豆带到附近饥饿幼儿身边，连续接触后消耗1件真实余粮。幼儿已有自行进食不受锁定，见[幼儿送食照料](docs/child-food-care.md)。
+
+- **仓旁提案转述**：survival与norms开启后，附近空闲成人可当面讲述自己知道的分配提案；双方连续在场才更新听者知识并支付社会工时，后续意见与会议仍按原规则处理。见[现场消息传播](docs/field-proposal-conversation.md)。

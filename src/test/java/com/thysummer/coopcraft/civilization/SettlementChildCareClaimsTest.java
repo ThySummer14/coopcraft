@@ -21,6 +21,18 @@ class SettlementChildCareClaimsTest {
 		assertTrue(claims.active(lease, 10));
 	}
 
+	@Test void activeRoleInspectionExcludesReleasedCooldownAndExpiresSafely() {
+		var claims = new SettlementChildCareClaims();
+		var lease = claims.claim(id(1), id(2), 0);
+		assertTrue(claims.claimed(id(1), 0)); assertTrue(claims.claimed(id(2), 0));
+		assertFalse(claims.claimed(id(3), 0)); assertFalse(claims.claimed(null, 0));
+		claims.release(lease, 1);
+		assertFalse(claims.claimed(id(1), 1)); assertFalse(claims.available(id(1), 1));
+		var next = claims.claim(id(1), id(2), 101); assertNotNull(next);
+		assertFalse(claims.claimed(id(2), 501)); assertFalse(claims.available(id(2), 501));
+		assertFalse(claims.claimed(id(1), 500)); // reversal cancels rather than reviving an old role
+	}
+
 	@Test void expiryReleasesBothButKeepsShortCooldown() {
 		var claims = new SettlementChildCareClaims();
 		var lease = claims.claim(id(1), id(2), 0);
