@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 
+import com.thysummer.coopcraft.civilization.SettlementMaterialCrafting.Recipe;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
@@ -12,7 +13,7 @@ import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Server-thread-only, single-use plank batches. Tickets never own items or survive reload. */
+/** Server-thread-only, single-use plank and door batches. Tickets never own items or survive reload. */
 final class SettlementWorkbenchCrafting {
 	private SettlementWorkbenchCrafting() { }
 
@@ -21,6 +22,7 @@ final class SettlementWorkbenchCrafting {
 		private final Settlement camp;
 		private final UUID actor;
 		private final Container inventory;
+		private final Recipe recipe;
 		private final Object member, storeToken, stationToken;
 		private final BlockPos store, station;
 		private final SettlementSimulationState state;
@@ -31,7 +33,8 @@ final class SettlementWorkbenchCrafting {
 		private SettlementSimulationService.CraftingAttempt attempt;
 
 		private Ticket(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
-			BooleanSupplier worldValid, BooleanSupplier demand) {
+			Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demand) {
+			this.recipe = recipe;
 			this.data = data;
 			this.camp = camp;
 			this.actor = actor;
@@ -49,11 +52,19 @@ final class SettlementWorkbenchCrafting {
 		BlockPos store() { return store; }
 		BlockPos station() { return station; }
 		boolean collected() { return collected; }
+		Recipe recipe() { return recipe; }
 	}
 
 	/** Read-only: neither reserves supplies nor starts a provenance attempt. */
 	static Ticket prepare(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
 		BooleanSupplier worldValid, BooleanSupplier demandStillNeeded) {
+		return prepare(data, camp, actor, inventory, Recipe.PLANKS, worldValid, demandStillNeeded);
+	}
+
+	/** Demand checks remaining product need, never whether the withdrawn ingredients remain in the store. */
+	static Ticket prepare(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
+		Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demandStillNeeded) {
+		if (recipe != Recipe.PLANKS && recipe != Recipe.DOOR) return null;
 		if (data == null || camp == null || actor == null || inventory == null || worldValid == null
 			|| demandStillNeeded == null || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
 			|| data.getStockpile(camp).isEmpty() || data.getCraftingStation(camp).isEmpty()) return null;
@@ -61,7 +72,7 @@ final class SettlementWorkbenchCrafting {
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			if (SettlementWorkbenchCargo.isMarked(inventory.getItem(slot))) return null;
 		}
-		Ticket ticket = new Ticket(data, camp, actor, inventory, worldValid, demandStillNeeded);
+		Ticket ticket = new Ticket(data, camp, actor, inventory, recipe, worldValid, demandStillNeeded);
 		return valid(ticket, data, camp, actor, inventory) ? ticket : null;
 	}
 
@@ -75,13 +86,7 @@ final class SettlementWorkbenchCrafting {
 			|| data.simulationOf(camp).orElse(null) != t.state) return false;
 		// Material authority changes invalidate even when toggled off and back on. Skills remain runtime optional.
 		if (t.state != null && t.state.foodRequestModeVersion() != t.modeVersion) return false;
-		if (t.collected) {
-			int inputs = 0;
-			for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-				if (SettlementWorkbenchCargo.matchesInput(inventory.getItem(slot), camp.id(), t.batch)) inputs++;
-			}
-			if (inputs != 1) return false;
-		}
+		if (t.collected && !hasExactInputs(t, inventory)) return false;
 		return t.worldValid.getAsBoolean() && t.demand.getAsBoolean();
 	}
 
@@ -89,35 +94,36 @@ final class SettlementWorkbenchCrafting {
 		Container stockpile, BooleanSupplier atStore) {
 		if (!valid(t, data, camp, actor, inventory) || t.collected || stockpile == null
 			|| stockpile == inventory || atStore == null || !atStore.getAsBoolean()) return fail(t);
-		ItemStack input = SettlementWorkbenchCargo.input(camp.id(), t.batch);
-		ItemStack output = SettlementWorkbenchCargo.output(camp.id(), t.batch);
-		SimpleContainer bag = copy(inventory);
-		if (SettlementStockpile.insert(bag, input) != 1
-			|| !SettlementPersonalCrafting.canCraft(bag,
-				stack -> SettlementWorkbenchCargo.matchesInput(stack, camp.id(), t.batch), ItemStack.EMPTY, output)) return fail(t);
-		int slot = plainLog(stockpile);
-		if (slot < 0 && (!canExport(t) || SettlementMaterialCrafting.availablePlain(stockpile, t.state, Items.OAK_LOG) < 1)) return fail(t);
+		ItemStack input = SettlementWorkbenchCargo.input(camp.id(), t.batch, t.recipe);
+		SimpleContainer bag = pickupPreview(t, inventory, input);
+		if (bag == null) return fail(t);
+		if (SettlementMaterialCrafting.countPlain(stockpile, input.getItem()) < input.getCount()
+			&& (!canExport(t) || SettlementMaterialCrafting.availablePlain(stockpile, t.state, Items.OAK_LOG) < 1)) return fail(t);
 		// Begin immediately before the physical withdrawal/export, never while waiting or walking.
-		t.attempt = SettlementSimulationService.beginCrafting(data, camp, actor, "material_planks", Items.OAK_PLANKS, 4);
-		if (slot < 0) {
+		t.attempt = SettlementSimulationService.beginCrafting(data, camp, actor, t.recipe.id(),
+			t.recipe.output(), t.recipe.count());
+		if (t.recipe == Recipe.PLANKS && SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_LOG) < 1) {
 			for (var batch : t.state.world().batchesAt(t.state.campOwner())) {
 				if (batch.resourceType() != ResourceType.WOOD) continue;
 				int exported = MinecraftStockpileAdapter.exportToContainer(t.state.world(), t.state.campOwner(),
 					batch.batchId(), 1, stockpile, t.state.residentId(actor).map(List::of).orElse(List.of()),
-					Map.of("source", "minecraft_material_crafting", "activity", "craft", "recipe", "material_planks",
+					Map.of("source", "minecraft_material_crafting", "activity", "craft", "recipe", t.recipe.id(),
 						"villagerId", actor.toString()));
 				if (exported > 0) { data.setDirty(); break; }
 			}
-			slot = plainLog(stockpile);
 		}
-		if (slot < 0 || !valid(t, data, camp, actor, inventory) || !atStore.getAsBoolean()) return fail(t);
-		// Standard non-reentrant containers only. Both complete results are previewed before either is changed.
-		bag = copy(inventory);
-		if (SettlementStockpile.insert(bag, input) != 1
-			|| !SettlementPersonalCrafting.canCraft(bag,
-				stack -> SettlementWorkbenchCargo.matchesInput(stack, camp.id(), t.batch), ItemStack.EMPTY, output)) return fail(t);
+		if (!valid(t, data, camp, actor, inventory) || !atStore.getAsBoolean()) return fail(t);
+		// Standard non-reentrant containers only. Preview both complete results before changing either.
+		bag = pickupPreview(t, inventory, input);
+		if (bag == null) return fail(t);
 		SimpleContainer store = copy(stockpile);
-		if (store.removeItem(slot, 1).getCount() != 1) return fail(t);
+		int remaining = input.getCount();
+		for (int slot = 0; slot < store.getContainerSize() && remaining > 0; slot++) {
+			ItemStack stack = store.getItem(slot);
+			if (!stack.isEmpty() && stack.is(input.getItem()) && stack.getComponentsPatch().isEmpty())
+				remaining -= store.removeItem(slot, Math.min(remaining, stack.getCount())).getCount();
+		}
+		if (remaining != 0) return fail(t);
 		apply(stockpile, store);
 		apply(inventory, bag);
 		SettlementSimulationService.sealCraftingInputs(t.attempt);
@@ -131,9 +137,9 @@ final class SettlementWorkbenchCrafting {
 		if (!valid(t, data, camp, actor, inventory) || !t.collected || atStation == null
 			|| !atStation.getAsBoolean()) return fail(t);
 		t.used = true;
-		if (!SettlementPersonalCrafting.craft(inventory,
-			stack -> SettlementWorkbenchCargo.matchesInput(stack, camp.id(), t.batch),
-			SettlementWorkbenchCargo.output(camp.id(), t.batch))) return false;
+		SimpleContainer result = craftPreview(t, inventory);
+		if (result == null) return false;
+		apply(inventory, result);
 		SettlementSimulationService.recordCrafting(data, camp, actor, t.attempt);
 		data.setDirty();
 		return true;
@@ -142,14 +148,39 @@ final class SettlementWorkbenchCrafting {
 	static void cancel(Ticket ticket) { if (ticket != null) ticket.used = true; }
 	private static boolean fail(Ticket ticket) { cancel(ticket); return false; }
 	private static boolean canExport(Ticket t) {
-		return t.state != null && t.state.survivalEnabled() && t.state.productionEnabled();
+		return t.recipe == Recipe.PLANKS && t.state != null && t.state.survivalEnabled() && t.state.productionEnabled();
 	}
-	private static int plainLog(Container container) {
-		for (int slot = 0; slot < container.getContainerSize(); slot++) {
-			ItemStack stack = container.getItem(slot);
-			if (!stack.isEmpty() && stack.is(Items.OAK_LOG) && stack.getComponentsPatch().isEmpty()) return slot;
+
+	private static boolean hasExactInputs(Ticket t, Container inventory) {
+		int count = 0;
+		int required = t.recipe.ingredients().values().iterator().next();
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			ItemStack stack = inventory.getItem(slot);
+			if (!SettlementWorkbenchCargo.isMarked(stack)) continue;
+			if (!SettlementWorkbenchCargo.matchesInput(stack, t.camp.id(), t.batch, t.recipe)) return false;
+			count += stack.getCount();
+			if (count > required) return false;
 		}
-		return -1;
+		return count == required;
+	}
+
+	private static SimpleContainer pickupPreview(Ticket t, Container inventory, ItemStack input) {
+		SimpleContainer bag = copy(inventory);
+		if (SettlementStockpile.insert(bag, input) != input.getCount() || craftPreview(t, bag) == null) return null;
+		return bag;
+	}
+
+	/** Work only on a copy: insufficient/duplicated custody or output restrictions keep every real input. */
+	private static SimpleContainer craftPreview(Ticket t, Container inventory) {
+		if (!hasExactInputs(t, inventory)) return null;
+		SimpleContainer result = copy(inventory);
+		for (int slot = 0; slot < result.getContainerSize(); slot++) {
+			ItemStack stack = result.getItem(slot);
+			if (SettlementWorkbenchCargo.matchesInput(stack, t.camp.id(), t.batch, t.recipe))
+				result.removeItem(slot, stack.getCount());
+		}
+		ItemStack output = SettlementWorkbenchCargo.output(t.camp.id(), t.batch, t.recipe);
+		return SettlementStockpile.insert(result, output) == output.getCount() ? result : null;
 	}
 	private static SimpleContainer copy(Container source) {
 		SimpleContainer result = new SimpleContainer(source.getContainerSize()) {

@@ -698,5 +698,7 @@
 	"coopcraft.workbench_cargo.reserved": "工作台生产货物：材料或产物用途保留",
 	"coopcraft.workbench_cargo.return_to_source": "由本营居民送回公仓；未知格式保留，不自动使用",
 	"coopcraft.interaction.action.collect_plank_materials": "前往公仓领取木板制作原料",
-	"coopcraft.interaction.action.workbench_planks": "在工作台用携带原木制作木板"
+	"coopcraft.interaction.action.workbench_planks": "在工作台用携带原木制作木板",
+	"coopcraft.interaction.action.collect_door_materials": "前往公仓领取橡木门制作原料",
+	"coopcraft.interaction.action.workbench_doors": "在工作台用携带木板制作橡木门"
 }

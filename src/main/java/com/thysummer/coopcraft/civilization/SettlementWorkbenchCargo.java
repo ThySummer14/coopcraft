@@ -4,22 +4,24 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import com.thysummer.coopcraft.civilization.SettlementMaterialCrafting.Recipe;
+
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 
-/** Physical custody for one plain oak log -> four oak planks, never an abstract resource credit. */
+/** Physical custody for supported plain-item workbench batches, never an abstract resource credit. */
 public final class SettlementWorkbenchCargo {
 	public static final String KEY = "coopcraft_workbench_cargo";
-	private static final Set<String> FIELDS = Set.of("Version", "Settlement", "Batch", "Phase");
+	private static final Set<String> V1_FIELDS = Set.of("Version", "Settlement", "Batch", "Phase");
+	private static final Set<String> V2_FIELDS = Set.of("Version", "Settlement", "Batch", "Phase", "Recipe");
 	private SettlementWorkbenchCargo() { }
 
 	public enum Phase { INPUT, OUTPUT, UNKNOWN }
-	private record Stamp(UUID camp, UUID batch, Phase phase) { }
+	private record Stamp(UUID camp, UUID batch, Phase phase, Recipe recipe) { }
 
 	/** Presence, not validity: future and malformed cargo must never pass ordinary material handling. */
 	public static boolean isMarked(ItemStack stack) {
@@ -28,17 +30,26 @@ public final class SettlementWorkbenchCargo {
 		return custom != null && custom.copyTag().contains(KEY);
 	}
 
-	public static ItemStack input(UUID camp, UUID batch) { return create(camp, batch, Phase.INPUT); }
-	public static ItemStack output(UUID camp, UUID batch) { return create(camp, batch, Phase.OUTPUT); }
+	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.DOOR; }
 
-	private static ItemStack create(UUID camp, UUID batch, Phase phase) {
+	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
+	public static ItemStack output(UUID camp, UUID batch) { return output(camp, batch, Recipe.PLANKS); }
+	public static ItemStack input(UUID camp, UUID batch, Recipe recipe) { return create(camp, batch, Phase.INPUT, recipe); }
+	public static ItemStack output(UUID camp, UUID batch, Recipe recipe) { return create(camp, batch, Phase.OUTPUT, recipe); }
+
+	private static ItemStack create(UUID camp, UUID batch, Phase phase, Recipe recipe) {
 		Objects.requireNonNull(camp); Objects.requireNonNull(batch);
+		if (!supported(recipe)) throw new IllegalArgumentException("Unsupported workbench recipe: " + recipe);
 		CompoundTag tag = new CompoundTag();
-		tag.putInt("Version", 1); tag.putUUID("Settlement", camp); tag.putUUID("Batch", batch);
+		// Keep the original PLANKS encoding byte-for-byte compatible; DOOR requires an explicit recipe.
+		tag.putInt("Version", recipe == Recipe.PLANKS ? 1 : 2);
+		if (recipe != Recipe.PLANKS) tag.putString("Recipe", recipe.name());
+		tag.putUUID("Settlement", camp); tag.putUUID("Batch", batch);
 		tag.putString("Phase", phase.name());
 		CompoundTag root = new CompoundTag(); root.put(KEY, tag);
-		ItemStack stack = new ItemStack(phase == Phase.INPUT ? Items.OAK_LOG : Items.OAK_PLANKS,
-			phase == Phase.INPUT ? 1 : 4);
+		var ingredient = recipe.ingredients().entrySet().iterator().next();
+		ItemStack stack = new ItemStack(phase == Phase.INPUT ? ingredient.getKey() : recipe.output(),
+			phase == Phase.INPUT ? ingredient.getValue() : recipe.count());
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
 		return stack;
 	}
@@ -49,21 +60,35 @@ public final class SettlementWorkbenchCargo {
 		CompoundTag root = custom.copyTag();
 		if (!root.getAllKeys().equals(Set.of(KEY)) || !root.contains(KEY, Tag.TAG_COMPOUND)) return null;
 		CompoundTag tag = root.getCompound(KEY);
-		if (!tag.getAllKeys().equals(FIELDS) || !tag.contains("Version", Tag.TAG_INT) || tag.getInt("Version") != 1
+		if (!tag.contains("Version", Tag.TAG_INT)
 			|| !tag.hasUUID("Settlement") || !tag.hasUUID("Batch") || !tag.contains("Phase", Tag.TAG_STRING)) return null;
+		Recipe recipe;
+		if (tag.getInt("Version") == 1) {
+			if (!tag.getAllKeys().equals(V1_FIELDS)) return null;
+			recipe = Recipe.PLANKS;
+		} else if (tag.getInt("Version") == 2) {
+			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)) return null;
+			recipe = switch (tag.getString("Recipe")) {
+				case "PLANKS" -> Recipe.PLANKS;
+				case "DOOR" -> Recipe.DOOR;
+				default -> null;
+			};
+			if (recipe == null) return null;
+		} else return null;
 		Phase phase = switch (tag.getString("Phase")) {
 			case "INPUT" -> Phase.INPUT;
 			case "OUTPUT" -> Phase.OUTPUT;
 			default -> Phase.UNKNOWN;
 		};
-		if (phase == Phase.UNKNOWN || (phase == Phase.INPUT
-			? !stack.is(Items.OAK_LOG) || stack.getCount() != 1
-			: !stack.is(Items.OAK_PLANKS) || stack.getCount() < 1 || stack.getCount() > 4)) return null;
+		var ingredient = recipe.ingredients().entrySet().iterator().next();
+		if (phase == Phase.UNKNOWN || stack.getCount() < 1 || (phase == Phase.INPUT
+			? !stack.is(ingredient.getKey()) || stack.getCount() > ingredient.getValue()
+			: !stack.is(recipe.output()) || stack.getCount() > recipe.count())) return null;
 		// Reject unrelated component patches, including explicit removal of an item's default component.
 		ItemStack expected = new ItemStack(stack.getItem());
 		expected.set(DataComponents.CUSTOM_DATA, custom);
 		if (!expected.getComponentsPatch().equals(stack.getComponentsPatch())) return null;
-		return new Stamp(tag.getUUID("Settlement"), tag.getUUID("Batch"), phase);
+		return new Stamp(tag.getUUID("Settlement"), tag.getUUID("Batch"), phase, recipe);
 	}
 
 	public static Phase phase(ItemStack stack) {
@@ -71,9 +96,20 @@ public final class SettlementWorkbenchCargo {
 		return stamp == null ? Phase.UNKNOWN : stamp.phase();
 	}
 
-	public static boolean matchesInput(ItemStack stack, UUID camp, UUID batch) {
+	public static Recipe recipe(ItemStack stack) {
 		Stamp stamp = read(stack);
-		return stamp != null && stamp.phase() == Phase.INPUT && stamp.camp().equals(camp) && stamp.batch().equals(batch);
+		return stamp == null ? null : stamp.recipe();
+	}
+
+	public static boolean matchesInput(ItemStack stack, UUID camp, UUID batch) {
+		return matchesInput(stack, camp, batch, Recipe.PLANKS);
+	}
+
+	/** Matches identity and valid partial custody; the caller must enforce the full batch total. */
+	public static boolean matchesInput(ItemStack stack, UUID camp, UUID batch, Recipe recipe) {
+		Stamp stamp = read(stack);
+		return stamp != null && stamp.phase() == Phase.INPUT && stamp.recipe() == recipe
+			&& stamp.camp().equals(camp) && stamp.batch().equals(batch);
 	}
 
 	private static boolean returnable(ItemStack stack, UUID camp) {

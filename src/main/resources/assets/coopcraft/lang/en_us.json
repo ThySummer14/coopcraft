@@ -698,5 +698,7 @@
 	"coopcraft.workbench_cargo.reserved": "Workbench cargo: reserved materials or products",
 	"coopcraft.workbench_cargo.return_to_source": "Return through a resident of the source camp; unknown formats stay untouched",
 	"coopcraft.interaction.action.collect_plank_materials": "Collecting plank materials at the communal store",
-	"coopcraft.interaction.action.workbench_planks": "Crafting carried logs into planks at the workbench"
+	"coopcraft.interaction.action.workbench_planks": "Crafting carried logs into planks at the workbench",
+	"coopcraft.interaction.action.collect_door_materials": "Collecting oak door materials at the communal store",
+	"coopcraft.interaction.action.workbench_doors": "Crafting carried planks into oak doors at the workbench"
 }

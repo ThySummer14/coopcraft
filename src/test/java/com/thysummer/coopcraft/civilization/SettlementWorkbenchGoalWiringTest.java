@@ -35,7 +35,7 @@ class SettlementWorkbenchGoalWiringTest {
 		String tick = methods.get("tickWorkbenchCrafting");
 		assertBefore(tick, "!isTargetValid()", "SettlementStockpile.getStockpile(");
 		assertBefore(tick, "if(!atCargoStore())", "SettlementStockpile.getStockpile(");
-		assertBefore(tick, "SettlementWorkbenchCrafting.pickup(", "action=Action.WORKBENCH_PLANKS;");
+		assertBefore(tick, "SettlementWorkbenchCrafting.pickup(", "?Action.WORKBENCH_DOORS:Action.WORKBENCH_PLANKS;");
 		assertBefore(tick, "target=workbenchTicket.station();progress=0;travelTicks=0;return;", "if(++progress<duration)return;");
 		assertTrue(tick.contains("workDuration(CRAFT_TICKS,VillagerPersonality.WorkType.CRAFT)"));
 		assertTrue(tick.contains("SettlementWorkbenchCrafting.finish("));
