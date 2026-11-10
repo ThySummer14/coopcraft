@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -30,26 +31,45 @@ public final class SettlementWorkbenchCargo {
 		return custom != null && custom.copyTag().contains(KEY);
 	}
 
-	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.DOOR; }
+	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED; }
 
 	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
 	public static ItemStack output(UUID camp, UUID batch) { return output(camp, batch, Recipe.PLANKS); }
-	public static ItemStack input(UUID camp, UUID batch, Recipe recipe) { return create(camp, batch, Phase.INPUT, recipe); }
-	public static ItemStack output(UUID camp, UUID batch, Recipe recipe) { return create(camp, batch, Phase.OUTPUT, recipe); }
+	/** Single-input compatibility API; multi-input batches must use inputs(). */
+	public static ItemStack input(UUID camp, UUID batch, Recipe recipe) {
+		validate(camp, batch, recipe);
+		if (recipe.ingredients().size() != 1)
+			throw new IllegalArgumentException("Multi-input workbench recipe requires inputs(): " + recipe);
+		return inputs(camp, batch, recipe).getFirst();
+	}
 
-	private static ItemStack create(UUID camp, UUID batch, Phase phase, Recipe recipe) {
+	/** Complete physical inputs for one batch; each stack carries the same batch identity. */
+	public static List<ItemStack> inputs(UUID camp, UUID batch, Recipe recipe) {
+		validate(camp, batch, recipe);
+		return recipe.ingredients().entrySet().stream()
+			.map(ingredient -> stamp(camp, batch, Phase.INPUT, recipe,
+				new ItemStack(ingredient.getKey(), ingredient.getValue())))
+			.toList();
+	}
+
+	public static ItemStack output(UUID camp, UUID batch, Recipe recipe) {
+		validate(camp, batch, recipe);
+		return stamp(camp, batch, Phase.OUTPUT, recipe, new ItemStack(recipe.output(), recipe.count()));
+	}
+
+	private static void validate(UUID camp, UUID batch, Recipe recipe) {
 		Objects.requireNonNull(camp); Objects.requireNonNull(batch);
 		if (!supported(recipe)) throw new IllegalArgumentException("Unsupported workbench recipe: " + recipe);
+	}
+
+	private static ItemStack stamp(UUID camp, UUID batch, Phase phase, Recipe recipe, ItemStack stack) {
 		CompoundTag tag = new CompoundTag();
-		// Keep the original PLANKS encoding byte-for-byte compatible; DOOR requires an explicit recipe.
+		// Keep the original PLANKS encoding byte-for-byte compatible; other recipes are explicit V2.
 		tag.putInt("Version", recipe == Recipe.PLANKS ? 1 : 2);
 		if (recipe != Recipe.PLANKS) tag.putString("Recipe", recipe.name());
 		tag.putUUID("Settlement", camp); tag.putUUID("Batch", batch);
 		tag.putString("Phase", phase.name());
 		CompoundTag root = new CompoundTag(); root.put(KEY, tag);
-		var ingredient = recipe.ingredients().entrySet().iterator().next();
-		ItemStack stack = new ItemStack(phase == Phase.INPUT ? ingredient.getKey() : recipe.output(),
-			phase == Phase.INPUT ? ingredient.getValue() : recipe.count());
 		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(root));
 		return stack;
 	}
@@ -71,6 +91,7 @@ public final class SettlementWorkbenchCargo {
 			recipe = switch (tag.getString("Recipe")) {
 				case "PLANKS" -> Recipe.PLANKS;
 				case "DOOR" -> Recipe.DOOR;
+				case "BED" -> Recipe.BED;
 				default -> null;
 			};
 			if (recipe == null) return null;
@@ -80,9 +101,9 @@ public final class SettlementWorkbenchCargo {
 			case "OUTPUT" -> Phase.OUTPUT;
 			default -> Phase.UNKNOWN;
 		};
-		var ingredient = recipe.ingredients().entrySet().iterator().next();
+		int inputLimit = recipe.ingredients().getOrDefault(stack.getItem(), 0);
 		if (phase == Phase.UNKNOWN || stack.getCount() < 1 || (phase == Phase.INPUT
-			? !stack.is(ingredient.getKey()) || stack.getCount() > ingredient.getValue()
+			? stack.getCount() > inputLimit
 			: !stack.is(recipe.output()) || stack.getCount() > recipe.count())) return null;
 		// Reject unrelated component patches, including explicit removal of an item's default component.
 		ItemStack expected = new ItemStack(stack.getItem());

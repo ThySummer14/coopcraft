@@ -700,5 +700,7 @@
 	"coopcraft.interaction.action.collect_plank_materials": "前往公仓领取木板制作原料",
 	"coopcraft.interaction.action.workbench_planks": "在工作台用携带原木制作木板",
 	"coopcraft.interaction.action.collect_door_materials": "前往公仓领取橡木门制作原料",
-	"coopcraft.interaction.action.workbench_doors": "在工作台用携带木板制作橡木门"
+	"coopcraft.interaction.action.workbench_doors": "在工作台用携带木板制作橡木门",
+	"coopcraft.interaction.action.collect_bed_materials": "前往公仓领取白床制作原料",
+	"coopcraft.interaction.action.workbench_beds": "在工作台用携带羊毛和木板制作白床"
 }

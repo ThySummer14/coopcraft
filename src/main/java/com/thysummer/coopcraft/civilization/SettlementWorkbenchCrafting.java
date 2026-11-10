@@ -1,5 +1,6 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -10,10 +11,11 @@ import com.thysummer.coopcraft.civilization.simulation.ResourceType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.Container;
 import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/** Server-thread-only, single-use plank and door batches. Tickets never own items or survive reload. */
+/** Server-thread-only, single-use plank, door and bed batches. Tickets never own items or survive reload. */
 final class SettlementWorkbenchCrafting {
 	private SettlementWorkbenchCrafting() { }
 
@@ -64,7 +66,7 @@ final class SettlementWorkbenchCrafting {
 	/** Demand checks remaining product need, never whether the withdrawn ingredients remain in the store. */
 	static Ticket prepare(SettlementSavedData data, Settlement camp, UUID actor, Container inventory,
 		Recipe recipe, BooleanSupplier worldValid, BooleanSupplier demandStillNeeded) {
-		if (recipe != Recipe.PLANKS && recipe != Recipe.DOOR) return null;
+		if (!SettlementWorkbenchCargo.supported(recipe)) return null;
 		if (data == null || camp == null || actor == null || inventory == null || worldValid == null
 			|| demandStillNeeded == null || !data.canonicalSettlement(camp) || !data.isMember(camp, actor)
 			|| data.getStockpile(camp).isEmpty() || data.getCraftingStation(camp).isEmpty()) return null;
@@ -94,11 +96,13 @@ final class SettlementWorkbenchCrafting {
 		Container stockpile, BooleanSupplier atStore) {
 		if (!valid(t, data, camp, actor, inventory) || t.collected || stockpile == null
 			|| stockpile == inventory || atStore == null || !atStore.getAsBoolean()) return fail(t);
-		ItemStack input = SettlementWorkbenchCargo.input(camp.id(), t.batch, t.recipe);
-		SimpleContainer bag = pickupPreview(t, inventory, input);
+		List<ItemStack> inputs = SettlementWorkbenchCargo.inputs(camp.id(), t.batch, t.recipe);
+		SimpleContainer bag = pickupPreview(t, inventory, inputs);
 		if (bag == null) return fail(t);
-		if (SettlementMaterialCrafting.countPlain(stockpile, input.getItem()) < input.getCount()
-			&& (!canExport(t) || SettlementMaterialCrafting.availablePlain(stockpile, t.state, Items.OAK_LOG) < 1)) return fail(t);
+		for (ItemStack input : inputs) {
+			if (SettlementMaterialCrafting.countPlain(stockpile, input.getItem()) < input.getCount()
+				&& (!canExport(t) || SettlementMaterialCrafting.availablePlain(stockpile, t.state, Items.OAK_LOG) < 1)) return fail(t);
+		}
 		// Begin immediately before the physical withdrawal/export, never while waiting or walking.
 		t.attempt = SettlementSimulationService.beginCrafting(data, camp, actor, t.recipe.id(),
 			t.recipe.output(), t.recipe.count());
@@ -114,16 +118,18 @@ final class SettlementWorkbenchCrafting {
 		}
 		if (!valid(t, data, camp, actor, inventory) || !atStore.getAsBoolean()) return fail(t);
 		// Standard non-reentrant containers only. Preview both complete results before changing either.
-		bag = pickupPreview(t, inventory, input);
+		bag = pickupPreview(t, inventory, inputs);
 		if (bag == null) return fail(t);
 		SimpleContainer store = copy(stockpile);
-		int remaining = input.getCount();
-		for (int slot = 0; slot < store.getContainerSize() && remaining > 0; slot++) {
-			ItemStack stack = store.getItem(slot);
-			if (!stack.isEmpty() && stack.is(input.getItem()) && stack.getComponentsPatch().isEmpty())
-				remaining -= store.removeItem(slot, Math.min(remaining, stack.getCount())).getCount();
+		for (ItemStack input : inputs) {
+			int remaining = input.getCount();
+			for (int slot = 0; slot < store.getContainerSize() && remaining > 0; slot++) {
+				ItemStack stack = store.getItem(slot);
+				if (!stack.isEmpty() && stack.is(input.getItem()) && stack.getComponentsPatch().isEmpty())
+					remaining -= store.removeItem(slot, Math.min(remaining, stack.getCount())).getCount();
+			}
+			if (remaining != 0) return fail(t);
 		}
-		if (remaining != 0) return fail(t);
 		apply(stockpile, store);
 		apply(inventory, bag);
 		SettlementSimulationService.sealCraftingInputs(t.attempt);
@@ -152,22 +158,22 @@ final class SettlementWorkbenchCrafting {
 	}
 
 	private static boolean hasExactInputs(Ticket t, Container inventory) {
-		int count = 0;
-		int required = t.recipe.ingredients().values().iterator().next();
+		Map<Item, Integer> counts = new HashMap<>();
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
 			if (!SettlementWorkbenchCargo.isMarked(stack)) continue;
 			if (!SettlementWorkbenchCargo.matchesInput(stack, t.camp.id(), t.batch, t.recipe)) return false;
-			count += stack.getCount();
-			if (count > required) return false;
+			int count = counts.merge(stack.getItem(), stack.getCount(), Integer::sum);
+			if (count > t.recipe.ingredients().getOrDefault(stack.getItem(), 0)) return false;
 		}
-		return count == required;
+		return counts.equals(t.recipe.ingredients());
 	}
 
-	private static SimpleContainer pickupPreview(Ticket t, Container inventory, ItemStack input) {
+	private static SimpleContainer pickupPreview(Ticket t, Container inventory, List<ItemStack> inputs) {
 		SimpleContainer bag = copy(inventory);
-		if (SettlementStockpile.insert(bag, input) != input.getCount() || craftPreview(t, bag) == null) return null;
-		return bag;
+		for (ItemStack input : inputs)
+			if (SettlementStockpile.insert(bag, input) != input.getCount()) return null;
+		return craftPreview(t, bag) == null ? null : bag;
 	}
 
 	/** Work only on a copy: insufficient/duplicated custody or output restrictions keep every real input. */

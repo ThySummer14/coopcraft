@@ -617,7 +617,7 @@ public class VillagerWorkGoal extends Goal {
 				);
 				case POLISH_PICKAXE -> craftPolishedPickaxe();
 				case GRIND_SMOOTH_STONE -> grindSmoothStone();
-				case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS -> { return; }
+				case ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS -> { return; }
 				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
 			}
 			if (action == Action.EAT && isTargetValid()) {
@@ -699,6 +699,10 @@ public class VillagerWorkGoal extends Goal {
 			workbenchTicket = prepareWorkbenchCrafting();
 			return workbenchTicket == null ? null : Action.COLLECT_DOOR_MATERIALS;
 		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.BED) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_BED_MATERIALS;
+		}
 		if (currentMaterialRecipe != null) {
 			return Action.CRAFT_MATERIALS;
 		}
@@ -708,11 +712,11 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isWorkbenchAction() {
-		return isCollectWorkbenchAction() || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS;
+		return isCollectWorkbenchAction() || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS;
 	}
 
 	private boolean isCollectWorkbenchAction() {
-		return action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS;
+		return action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS;
 	}
 
 	private void cancelWorkbenchCrafting() {
@@ -723,7 +727,8 @@ public class VillagerWorkGoal extends Goal {
 
 	private SettlementWorkbenchCrafting.Ticket prepareWorkbenchCrafting() {
 		SettlementMaterialCrafting.Recipe recipe = currentMaterialRecipe;
-		if (recipe != SettlementMaterialCrafting.Recipe.PLANKS && recipe != SettlementMaterialCrafting.Recipe.DOOR) return null;
+		if (recipe != SettlementMaterialCrafting.Recipe.PLANKS && recipe != SettlementMaterialCrafting.Recipe.DOOR
+			&& recipe != SettlementMaterialCrafting.Recipe.BED) return null;
 		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
 		SettlementSavedData data = settlementData();
 		Settlement camp = settlement;
@@ -752,7 +757,8 @@ public class VillagerWorkGoal extends Goal {
 				&& projects.equals(ConstructionPlanner.projects(data, camp))
 				&& plans.equals(planIds.stream().map(BlueprintManager::get).toList())
 				&& demands.equals(ConstructionPlanner.materialDemands(data, camp))
-				&& (recipe == SettlementMaterialCrafting.Recipe.PLANKS
+				&& (recipe == SettlementMaterialCrafting.Recipe.BED ? bedDemandStillNeeded(level, data, camp, demands)
+					: recipe == SettlementMaterialCrafting.Recipe.PLANKS
 					? plankDemandStillNeeded(level, data, camp, demands) : doorDemandStillNeeded(level, data, camp, demands)));
 	}
 
@@ -784,6 +790,15 @@ public class VillagerWorkGoal extends Goal {
 		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.OAK_DOOR, 0) > doors);
 	}
 
+	/** Recheck public construction beds, not ingredients already carried by the worker. */
+	private boolean bedDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		long beds = ConstructionMaterials.available(stockpile, data.simulationOf(camp).orElse(null), Items.WHITE_BED);
+		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.WHITE_BED, 0) > beds);
+	}
+
 	private void tickWorkbenchCrafting() {
 		// start and direct tick both use the same final live gates before resolving the store.
 		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) { stop(); return; }
@@ -795,7 +810,8 @@ public class VillagerWorkGoal extends Goal {
 			Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
 			if (!SettlementWorkbenchCrafting.pickup(workbenchTicket, settlementData(), settlement,
 				villager.getUUID(), villager.getInventory(), stockpile, () -> isTargetValid() && atCargoStore())) { stop(); return; }
-			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.DOOR
+			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.BED ? Action.WORKBENCH_BEDS
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.DOOR
 				? Action.WORKBENCH_DOORS : Action.WORKBENCH_PLANKS;
 			target = workbenchTicket.station();
 			progress = 0;
@@ -875,6 +891,7 @@ public class VillagerWorkGoal extends Goal {
 		// Recheck shortages and the pinned plan after travel/work, including a data-pack reload.
 		if (currentMaterialRecipe == null || currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS
 			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.DOOR
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.BED
 			|| chooseMaterialRecipe() != currentMaterialRecipe) {
 			return;
 		}
@@ -1136,7 +1153,8 @@ public class VillagerWorkGoal extends Goal {
 		if (isWorkbenchAction()) return workbenchTicket != null
 			&& target.equals(isCollectWorkbenchAction() ? workbenchTicket.store() : workbenchTicket.station())
 			&& workbenchTicket.collected() == !isCollectWorkbenchAction()
-			&& workbenchTicket.recipe() == ((action == Action.COLLECT_DOOR_MATERIALS || action == Action.WORKBENCH_DOORS)
+			&& workbenchTicket.recipe() == ((action == Action.COLLECT_BED_MATERIALS || action == Action.WORKBENCH_BEDS)
+				? SettlementMaterialCrafting.Recipe.BED : (action == Action.COLLECT_DOOR_MATERIALS || action == Action.WORKBENCH_DOORS)
 				? SettlementMaterialCrafting.Recipe.DOOR : SettlementMaterialCrafting.Recipe.PLANKS)
 			&& SettlementWorkbenchCrafting.valid(workbenchTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
 		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
@@ -1793,6 +1811,8 @@ public class VillagerWorkGoal extends Goal {
 		WORKBENCH_PLANKS("workbench_planks"),
 		COLLECT_DOOR_MATERIALS("collect_door_materials"),
 		WORKBENCH_DOORS("workbench_doors"),
+		COLLECT_BED_MATERIALS("collect_bed_materials"),
+		WORKBENCH_BEDS("workbench_beds"),
 		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
 		BUILD("build"),
 		POLISH_PICKAXE("polish"),
