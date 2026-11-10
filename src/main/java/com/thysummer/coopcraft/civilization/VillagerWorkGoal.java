@@ -55,6 +55,10 @@ public class VillagerWorkGoal extends Goal {
 	private final SettlementCargoApproach.Cooldown teachingCooldown = new SettlementCargoApproach.Cooldown();
 	private BlockPos teachingPathTarget;
 	private BlockPos selectedGatherTarget;
+	private SettlementMaterialScouting.Session scoutingSession;
+	private final SettlementMaterialScouting.Cooldown scoutingCooldown = new SettlementMaterialScouting.Cooldown();
+	private net.minecraft.world.level.pathfinder.Path scoutingPath;
+	private BlockPos scoutingLegStart;
 	private List<SettlementMaterialGathering.Choice> materialCandidates = List.of();
 	private SettlementMaterialGathering.Ticket materialTicket;
 	private SettlementMaterialLeases materialRegistry;
@@ -115,6 +119,7 @@ public class VillagerWorkGoal extends Goal {
 		try {
 			// Selection is a boundary, never a licence to interrupt a valid current job.
 			if (action != null && isTargetValid()) return true;
+			cancelScouting();
 			if (action == Action.COLLECT_STONE_PICKAXE) publicPickaxeCooldown.defer(villager.level().getGameTime());
 			cancelChildCare(); cancelSowing();
 			cropPermission = null;
@@ -241,13 +246,14 @@ public class VillagerWorkGoal extends Goal {
 			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
 			progress = 0;
 			return action != null;
-		} catch (RuntimeException | Error failure) { cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public boolean canContinueToUse() {
 		try {
 			refreshMeetingInvitation();
+			if (action == Action.SCOUT_MATERIAL_AREA && !scoutingValid()) { cancelScouting(); return false; }
 			if (action == Action.COLLECT_STONE_PICKAXE && !isTargetValid()) {
 				publicPickaxeCooldown.defer(villager.level().getGameTime()); cancelPublicPickaxeCollection(); return false;
 			}
@@ -273,9 +279,9 @@ public class VillagerWorkGoal extends Goal {
 				cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); return false;
 			}
 			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
-			if (!continuing) { cancelChildCare(); cancelSowing(); releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); }
+			if (!continuing) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); }
 			return continuing;
-		} catch (RuntimeException | Error failure) { cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
@@ -283,7 +289,8 @@ public class VillagerWorkGoal extends Goal {
 		try {
 			progress = 0;
 			travelTicks = 0;
-			if (isProposalConversationAction()) { villager.getNavigation().stop(); tickProposalConversation(); }
+			if (action == Action.SCOUT_MATERIAL_AREA) { villager.getNavigation().stop(); tickScouting(); }
+			else if (isProposalConversationAction()) { villager.getNavigation().stop(); tickProposalConversation(); }
 			else if (action == Action.DISCUSS_COUNCIL) { villager.getNavigation().stop(); tickAutonomousMeeting(); }
 			else if (action == Action.ATTEND_LESSON) { villager.getNavigation().stop(); tickTeaching(); }
 			else if (isShearsLoanAction()) { villager.getNavigation().stop(); tickShearsLoan(); }
@@ -296,11 +303,12 @@ public class VillagerWorkGoal extends Goal {
 			else if (action == Action.FEED_CHILD) { villager.getNavigation().stop(); tickChildCare(); }
 			else if (action == Action.SOW_POTATO) { villager.getNavigation().stop(); tickSowing(); }
 			else navigateToTarget();
-		} catch (RuntimeException | Error failure) { cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
+		cancelScouting();
 		cancelProposalConversation();
 		cancelChildCare(); cancelSowing();
 		cropPermission = null;
@@ -1140,6 +1148,7 @@ public class VillagerWorkGoal extends Goal {
 	public void tick() {
 		try {
 			refreshMeetingInvitation();
+			if (action == Action.SCOUT_MATERIAL_AREA) { tickScouting(); return; }
 			if (isProposalConversationAction()) { tickProposalConversation(); return; }
 			if (action == Action.DISCUSS_COUNCIL) { tickAutonomousMeeting(); return; }
 			if (action == Action.ATTEND_LESSON) { tickTeaching(); return; }
@@ -1218,7 +1227,7 @@ public class VillagerWorkGoal extends Goal {
 				return;
 			}
 			stop();
-		} catch (RuntimeException | Error failure) { cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+		} catch (RuntimeException | Error failure) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
@@ -1318,7 +1327,117 @@ public class VillagerWorkGoal extends Goal {
 		}
 		if (hasReturnCargo()) return null;
 		selectedGatherTarget = chooseGatherTarget();
-		return selectedGatherTarget == null ? null : Action.GATHER;
+		return selectedGatherTarget != null ? Action.GATHER : prepareScouting() ? Action.SCOUT_MATERIAL_AREA : null;
+	}
+
+	private boolean scoutingBodyReady(ServerLevel level) {
+		return publicPickaxeBodyReady(level) && settlement != null
+			&& settlementData().needsOf(settlement, villager.getUUID()).satiety() > SettlementNeeds.HUNGRY_AT && !shouldEat() && !emergencyForage() && meetingTicket == null
+			&& !hasReturnCargo() && !hasTeachingCustody() && !hasAnyShearsLoan()
+			&& !ConstructionSupply.hasAny(villager.getInventory())
+			&& !villager.getInventory().hasAnyMatching(SettlementWorkbenchCargo::isMarked);
+	}
+
+	private boolean scoutingDemand(SettlementGatheringAreas.Area area) {
+		if (area == null) return false;
+		return area.mode().permits(SettlementResourceObservations.Kind.OAK_LOG)
+				&& (needsConstructionLogs() || role == WorkRole.WOODCUTTER || needsSticks())
+			|| area.mode().permits(SettlementResourceObservations.Kind.STONE)
+				&& (role == WorkRole.MINER || needsCobblestone());
+	}
+
+	private boolean prepareScouting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null
+			|| !scoutingCooldown.ready(level.getGameTime()) || !scoutingBodyReady(level)) return false;
+		SettlementSavedData data = settlementData();
+		if (!scoutingDemand(data.gatheringAreaOf(settlement).orElse(null)) || !data.canObserveResource(settlement)) return false;
+		scoutingCooldown.defer(level.getGameTime());
+		scoutingSession = new SettlementMaterialScouting.Session(data, settlement, villager.getUUID(), villager.blockPosition(), level.getGameTime());
+		if (!scoutingValid()) { cancelScouting(); return false; }
+		return true;
+	}
+
+	private SettlementMaterialScouting.Probe scoutingProbe(ServerLevel level) {
+		return new SettlementMaterialScouting.Probe() {
+			public boolean inBounds(BlockPos pos) { return settlement != null && SettlementMaterialScouting.withinCamp(pos, settlement)
+				&& !level.isOutsideBuildHeight(pos) && level.getWorldBorder().isWithinBounds(pos); }
+			public boolean loaded(BlockPos pos) { return level.isLoaded(pos); }
+			public boolean ticking(BlockPos pos) { return level.isPositionEntityTicking(pos); }
+			public boolean blocked(BlockPos pos) { return settlementData().isResidentModificationBlocked(pos); }
+			public BlockState state(BlockPos pos) { return level.getBlockState(pos); }
+		};
+	}
+
+	private boolean scoutingAuthority(ServerLevel level) {
+		var session = scoutingSession;
+		if (session == null || session.camp != settlement
+			|| !session.valid(settlementData(), scoutingBodyReady(level), level.getGameTime())) return false;
+		var probe = SettlementMaterialGathering.probe(level, session.data, session.camp, villager);
+		var simulation = session.data.simulationOf(session.camp).orElse(null);
+		if (simulation != null && simulation.survivalEnabled()) {
+			String id = simulation.residentId(villager.getUUID()).orElse(null);
+			if (id == null) return false;
+			try {
+				var person = simulation.world().person(id);
+				if (!person.isAlive() || !person.campId().equals(simulation.campOwner().id())) return false;
+			} catch (IllegalArgumentException missingPerson) { return false; }
+		}
+		if (!scoutingDemand(session.area) || session.data.isResidentModificationBlocked(
+			session.area.centerX() - session.area.radius(), session.area.centerZ() - session.area.radius(),
+			session.area.centerX() + session.area.radius(), session.area.centerZ() + session.area.radius())) return false;
+		return probe.activeAdult() && SettlementSimulationService.hasGatherTime(session.data, session.camp, villager.getUUID());
+	}
+
+	private boolean scoutingValid() {
+		if (!(villager.level() instanceof ServerLevel level) || !scoutingAuthority(level)) return false;
+		var session = scoutingSession;
+		if (villager.blockPosition().getY() != session.height
+			|| !SettlementMaterialScouting.safe(villager.blockPosition(), scoutingProbe(level))) return false;
+		// Existing candidates win even when this trip has not reached its waypoint. No new scan or reservation.
+		if (chooseGatherTarget() != null) return false;
+		if (scoutingPath != null && (!SettlementMaterialScouting.onLeg(villager.blockPosition(), scoutingLegStart, target)
+			|| villager.getNavigation().getPath() != scoutingPath || !scoutingPathSafe(level, scoutingPath))) return false;
+		return scoutingAuthority(level);
+	}
+
+	private boolean scoutingPathSafe(ServerLevel level, net.minecraft.world.level.pathfinder.Path path) {
+		if (path.getNodeCount() > SettlementMaterialScouting.STEP + 2) return false;
+		List<BlockPos> nodes = new ArrayList<>();
+		for (int i = 0; i < path.getNodeCount(); i++) nodes.add(path.getNodePos(i));
+		return SettlementMaterialScouting.pathSafe(nodes, scoutingLegStart, target, scoutingProbe(level));
+	}
+
+	private void tickScouting() {
+		if (!(villager.level() instanceof ServerLevel level) || !scoutingValid()) { stop(); return; }
+		BlockPos from = villager.blockPosition();
+		BlockPos next = SettlementMaterialScouting.waypoint(from, scoutingSession.area);
+		if (next.equals(from)) {
+			villager.getNavigation().stop(); scoutingPath = null;
+			scoutingSession.observe(level.getGameTime());
+			return;
+		}
+		if (scoutingPath != null) {
+			if (!villager.getNavigation().isDone()) return;
+			if (!from.equals(target)) { stop(); return; }
+			scoutingPath = null;
+		}
+		if (!scoutingSession.attemptPath() || !navigationSearchRegionLoaded()
+			|| !SettlementMaterialScouting.safe(next, scoutingProbe(level)) || !scoutingAuthority(level)) { stop(); return; }
+		scoutingLegStart = from; target = next;
+		var path = villager.getNavigation().createPath(next, 0);
+		if (path == null || !path.canReach() || !scoutingPathSafe(level, path) || !scoutingAuthority(level)) { stop(); return; }
+		scoutingPath = path;
+		if (!villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())
+			|| !scoutingValid()) { stop(); }
+	}
+
+	private void cancelScouting() {
+		if (scoutingSession != null) {
+			scoutingSession.cancel(); scoutingCooldown.defer(villager.level().getGameTime());
+			scoutingSession = null; scoutingPath = null; scoutingLegStart = null;
+			villager.getNavigation().stop();
+		}
+		if (action == Action.SCOUT_MATERIAL_AREA) { action = null; target = null; }
 	}
 
 	private boolean isShearsLoanAction() { return action == Action.BORROW_SHEARS || action == Action.RETURN_SHEARS; }
@@ -1698,6 +1817,7 @@ public class VillagerWorkGoal extends Goal {
 		if (action == null || settlement == null) {
 			return null;
 		}
+		if (action == Action.SCOUT_MATERIAL_AREA) return villager.blockPosition();
 		if (action == Action.COLLECT_STONE_PICKAXE) return publicPickaxeTicket == null ? null : publicPickaxeTicket.store();
 		if (isWorkbenchAction()) {
 			return workbenchTicket == null ? null : isCollectWorkbenchAction()
@@ -1941,6 +2061,7 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
+		if (action == Action.SCOUT_MATERIAL_AREA) return scoutingValid();
 		if (isProposalConversationAction()) return proposalConversationValid();
 		if (action == Action.DISCUSS_COUNCIL) return autonomousMeetingValid();
 		if (action == Action.ATTEND_LESSON) return teachingValid();
@@ -2694,6 +2815,7 @@ public class VillagerWorkGoal extends Goal {
 		COLLECT_BUILD_SUPPLY("collect_build_supply"),
 		RETURN_BUILD_SUPPLY("return_build_supply"),
 		GATHER("gather"),
+		SCOUT_MATERIAL_AREA("scout_material_area"),
 		FORAGE("forage"),
 		HARVEST_CROP("harvest_crop"),
 		SOW_POTATO("sow_potato"),

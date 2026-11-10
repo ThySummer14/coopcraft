@@ -39,6 +39,11 @@ final class SettlementResourceObservations {
 	private Tag preserved;
 
 	boolean blocked() { return preserved != null; }
+	/** Capacity only; never removes records or lifts coordinate suppression. */
+	boolean hasCapacity(UUID settlement) {
+		var found = records.get(settlement);
+		return !blocked() && size < MAX_PER_DIMENSION && (found == null || found.size() < MAX_PER_SETTLEMENT);
+	}
 	List<Observation> of(UUID settlement) {
 		var found = records.get(settlement);
 		return found == null ? List.of() : List.copyOf(found.values());

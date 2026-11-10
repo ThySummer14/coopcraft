@@ -832,5 +832,6 @@
 	"coopcraft.simulation.conversation_cost.next_settled_day": "Each participant: 1 social hour, labor cost at the next settled day",
 	"coopcraft.interaction.action.collect_pickaxe_materials": "Collecting cobblestone and sticks for a first stone pickaxe",
 	"coopcraft.interaction.action.workbench_pickaxe": "Making a first stone pickaxe from carried materials at the workbench",
-	"coopcraft.interaction.action.collect_stone_pickaxe": "Collecting an existing plain stone pickaxe from the communal store"
+	"coopcraft.interaction.action.collect_stone_pickaxe": "Collecting an existing plain stone pickaxe from the communal store",
+	"coopcraft.interaction.action.scout_material_area": "Scouting permitted material area"
 }

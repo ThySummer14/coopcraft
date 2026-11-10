@@ -584,6 +584,9 @@ public final class SettlementSavedData extends SavedData {
 	}
 	SettlementResourceDiscovery resourceDiscovery() { return resourceDiscovery; }
 	boolean resourceObservationsBlocked() { return resourceObservations.blocked(); }
+	boolean canObserveResource(Settlement settlement) {
+		return canonicalSettlement(settlement) && resourceObservations.hasCapacity(settlement.id());
+	}
 	List<SettlementResourceObservations.Observation> resourceObservationsOf(Settlement settlement) {
 		return resourceObservations.of(settlement.id());
 	}
