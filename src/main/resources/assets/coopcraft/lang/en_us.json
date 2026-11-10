@@ -86,6 +86,7 @@
 	"coopcraft.interaction.action.gather": "Gathering marked resources",
 	"coopcraft.interaction.action.forage": "Foraging sweet berries",
 	"coopcraft.interaction.action.build": "Building",
+	"coopcraft.interaction.action.eat_personal": "Eating carried food",
 	"coopcraft.interaction.action.eat": "Heading to the stockpile to eat",
 	"coopcraft.interaction.action.craft": "Crafting tools",
 	"coopcraft.interaction.action.craft_first_workbench": "Handcrafting the first workbench beside the communal store",
