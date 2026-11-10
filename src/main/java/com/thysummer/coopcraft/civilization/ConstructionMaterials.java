@@ -116,7 +116,7 @@ public final class ConstructionMaterials {
 
 	private static boolean usable(ItemStack stack, Item item) {
 		// Unknown construction markers are quarantined for every item, including legacy wood/stone.
-		// Ordinary custom materials retain the legacy behavior; door/bed pickup remains plain-only.
+		// Other custom materials retain the legacy behavior; supported physical supply remains plain-only.
 		return !stack.isEmpty() && stack.is(item) && !ConstructionSupply.isMarked(stack)
 			&& (!ConstructionSupply.supported(item) || ConstructionSupply.ordinary(stack));
 	}

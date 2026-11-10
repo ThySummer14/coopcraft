@@ -565,7 +565,7 @@
 	"coopcraft.food_age.cargo_only": "文明食品货物：暂停原版食用、分享和种植",
 	"coopcraft.food_age.return_to_source": "请送回来源聚落公仓；不能用于原版配方",
 	"coopcraft.interaction.blocker.cargo_food_unavailable": "日期食物暂不能验收：请检查生产/生存开关、来源与过期状态；货物仍在背包",
-	"coopcraft.interaction.action.collect_build_supply": "到公仓领取本步门床材料",
+	"coopcraft.interaction.action.collect_build_supply": "到公仓领取本步的一件建材",
 	"coopcraft.interaction.action.return_build_supply": "将失效施工余料搬回公仓",
 	"coopcraft.interaction.blocker.construction_invalid_job_id": "暂停：工程身份字段损坏，未自动重建",
 	"coopcraft.command.settlement.construction_adopt_invalid_job_id": "工程身份字段损坏，无法认领图纸；原存档内容已保留。",

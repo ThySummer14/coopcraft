@@ -26,7 +26,7 @@ public final class ConstructionSupply {
 	private static final Set<String> FIELDS = Set.of("Version", "Dimension", "Settlement", "Actor", "Job", "Index", "Plan", "Item");
 	private ConstructionSupply() { }
 
-	public static boolean supported(Item item) { return item == Items.OAK_DOOR || item == Items.WHITE_BED; }
+	public static boolean supported(Item item) { return item == Items.OAK_PLANKS || item == Items.OAK_DOOR || item == Items.WHITE_BED; }
 
 	/** Even unknown versions and malformed markers remain quarantined. */
 	public static boolean isMarked(ItemStack stack) {

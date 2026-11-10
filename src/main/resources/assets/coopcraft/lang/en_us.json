@@ -565,7 +565,7 @@
 	"coopcraft.food_age.cargo_only": "Settlement food cargo: vanilla eating, sharing and planting are paused",
 	"coopcraft.food_age.return_to_source": "Return to the source settlement stockpile; unavailable for vanilla recipes",
 	"coopcraft.interaction.blocker.cargo_food_unavailable": "Dated food cannot be accepted: check production/survival modes, source and expiry; cargo remains carried",
-	"coopcraft.interaction.action.collect_build_supply": "Collecting one door or bed from the communal store",
+	"coopcraft.interaction.action.collect_build_supply": "Collecting one construction item from the communal store",
 	"coopcraft.interaction.action.return_build_supply": "Returning an unused construction item to the communal store",
 	"coopcraft.interaction.blocker.construction_invalid_job_id": "Paused: the construction instance ID is malformed and was not replaced",
 	"coopcraft.command.settlement.construction_adopt_invalid_job_id": "The construction instance ID is malformed. Plan adoption was refused; the original data was retained.",

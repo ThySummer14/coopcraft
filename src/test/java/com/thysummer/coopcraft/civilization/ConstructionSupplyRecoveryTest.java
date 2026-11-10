@@ -50,7 +50,8 @@ class ConstructionSupplyRecoveryTest {
 		var claims = SettlementMembershipClaims.resolve(List.of(
 			new SettlementMembershipClaims.Source(Level.OVERWORLD, memberships)), Level.OVERWORLD, actor);
 		var instruction = new ConstructionInstruction(BlockPos.ZERO,
-			(item == Items.OAK_DOOR ? Blocks.OAK_DOOR : Blocks.WHITE_BED).defaultBlockState(), item, true);
+			(item == Items.OAK_PLANKS ? Blocks.OAK_PLANKS : item == Items.OAK_DOOR ? Blocks.OAK_DOOR : Blocks.WHITE_BED)
+				.defaultBlockState(), item, true);
 		var job = new ConstructionJob(ResourceLocation.parse("coopcraft:recovery_test"), PLACE, 0, "recovery-plan-v1");
 		return new Fixture(actor, camp.id(), claims, simulation, job, instruction);
 	}
@@ -83,8 +84,8 @@ class ConstructionSupplyRecoveryTest {
 		return loaded;
 	}
 
-	@Test void actualDoorAndBedPickupSurviveDeathSavePartialFullAndRepeatedRecovery() {
-		for (Item item : List.of(Items.OAK_DOOR, Items.WHITE_BED)) {
+	@Test void actualPlankDoorAndBedPickupSurviveDeathSavePartialFullAndRepeatedRecovery() {
+		for (Item item : List.of(Items.OAK_PLANKS, Items.OAK_DOOR, Items.WHITE_BED)) {
 			for (boolean survival : List.of(false, true)) {
 				Fixture fixture = fixture(item, survival);
 				SimpleContainer bag = new SimpleContainer(8);
@@ -92,6 +93,7 @@ class ConstructionSupplyRecoveryTest {
 				bag.setItem(1, new ItemStack(Items.COBBLESTONE, 3));
 				bag.setItem(2, new ItemStack(Items.OAK_DOOR, 2));
 				bag.setItem(3, new ItemStack(Items.WHITE_BED));
+				bag.setItem(4, new ItemStack(Items.OAK_PLANKS, 2));
 				CompoundTag simulationBefore = fixture.simulation().save();
 				var recovery = new SettlementCargoRecovery();
 				assertEquals(4, capture(fixture, recovery, bag));
@@ -99,6 +101,7 @@ class ConstructionSupplyRecoveryTest {
 				assertTrue(bag.getItem(1).isEmpty());
 				assertEquals(2, bag.getItem(2).getCount());
 				assertEquals(1, bag.getItem(3).getCount());
+				assertEquals(2, bag.getItem(4).getCount());
 				assertEquals(0, capture(fixture, recovery, bag));
 				recovery = roundTrip(recovery);
 				SimpleContainer fullPlayer = new SimpleContainer(new ItemStack(Items.DIRT, 64));
@@ -198,8 +201,8 @@ class ConstructionSupplyRecoveryTest {
 		assertEquals(0, roundTrip(recovery).recover(fixture.actor(), nextPlayer, () -> true).moved());
 	}
 
-	@Test void publicStoreAvailabilityCountsOnlyOrdinaryDoorAndBedStacks() {
-		for (Item item : List.of(Items.OAK_DOOR, Items.WHITE_BED)) {
+	@Test void publicStoreAvailabilityCountsOnlyOrdinaryPlankDoorAndBedStacks() {
+		for (Item item : List.of(Items.OAK_PLANKS, Items.OAK_DOOR, Items.WHITE_BED)) {
 			Fixture fixture = fixture(item, true);
 			SimpleContainer bag = new SimpleContainer(8);
 			ItemStack paid = pickup(fixture, bag);
