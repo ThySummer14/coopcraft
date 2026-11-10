@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SettlementShearsLoanGoalWiringTest {
 	@Test void borrowingIsSelectedBeforePickaxeEquipOrCraftAndRequiresSafeRecoveryAndNoCargo() throws Exception {
 		var methods = methods("VillagerWorkGoal"); String choose = named(methods, "chooseAction").toString();
-		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("canCraftPickaxe()"));
+		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("prepareFirstPickaxeCrafting()"));
 		assertTrue(choose.indexOf("prepareShearsLoan(false)") < choose.indexOf("canCraftSticks()"));
 		String prepare = named(methods, "prepareShearsLoan").toString();
 		assertTrue(prepare.contains("!returning")); assertTrue(prepare.contains("SettlementCargoRecovery.get(level).available()"));

@@ -32,7 +32,7 @@ public final class SettlementWorkbenchCargo {
 	}
 
 	public static boolean supported(Recipe recipe) { return recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
-		|| recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL; }
+		|| recipe == Recipe.STONE_PICKAXE || recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL; }
 
 	public static ItemStack input(UUID camp, UUID batch) { return input(camp, batch, Recipe.PLANKS); }
 	public static ItemStack output(UUID camp, UUID batch) { return output(camp, batch, Recipe.PLANKS); }
@@ -90,6 +90,7 @@ public final class SettlementWorkbenchCargo {
 		} else if (tag.getInt("Version") == 2) {
 			if (!tag.getAllKeys().equals(V2_FIELDS) || !tag.contains("Recipe", Tag.TAG_STRING)) return null;
 			recipe = switch (tag.getString("Recipe")) {
+				case "STONE_PICKAXE" -> Recipe.STONE_PICKAXE;
 				case "PLANKS" -> Recipe.PLANKS;
 				case "DOOR" -> Recipe.DOOR;
 				case "BED" -> Recipe.BED;
@@ -135,6 +136,23 @@ public final class SettlementWorkbenchCargo {
 		Stamp stamp = read(stack);
 		return stamp != null && stamp.phase() == Phase.INPUT && stamp.recipe() == recipe
 			&& stamp.camp().equals(camp) && stamp.batch().equals(batch);
+	}
+
+	/** Exact output identity; malformed or component-rich tools remain quarantined. */
+	public static boolean matchesOutput(ItemStack stack, UUID camp, UUID batch, Recipe recipe) {
+		Stamp stamp = read(stack);
+		return stamp != null && stamp.phase() == Phase.OUTPUT && stamp.recipe() == recipe
+			&& stamp.camp().equals(camp) && stamp.batch().equals(batch);
+	}
+
+	/** Detached preview only. Never removes a marker from an unrecognized/custom output. */
+	static ItemStack unmarkOutput(ItemStack stack) {
+		Stamp stamp = read(stack);
+		if (stamp == null || stamp.phase() != Phase.OUTPUT) return ItemStack.EMPTY;
+		ItemStack plain = stack.copy();
+		// read() requires the cargo marker to be the sole custom-data field.
+		plain.remove(DataComponents.CUSTOM_DATA);
+		return plain;
 	}
 
 	private static boolean returnable(ItemStack stack, UUID camp) {

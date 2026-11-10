@@ -246,11 +246,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			"Improved crafting skill must reduce real crafting duration"
 		);
 
-		helper.assertTrue(goal.canUse(), "Abstract stone and delivered real sticks must allow pickaxe crafting");
-		goal.start();
-		for (int tick = 0; tick < 240 && !villager.getMainHandItem().is(Items.STONE_PICKAXE) && goal.canContinueToUse(); tick++) {
-			goal.tick();
-		}
+		runFirstPickaxeAction(helper, goal, villager);
 
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The crafted pickaxe must remain a real held tool");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK),
@@ -426,7 +422,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 				data, settlement, chest, ResourceType.WILD_FRUIT, 3), "Import a real food reserve above one resident's target");
 		}
 		VillagerWorkGoal goal = new VillagerWorkGoal(villager);
-		runWorkshopAction(helper, goal, "craft", CRAFTING_TABLE);
+		runFirstPickaxeAction(helper, goal, villager);
 		helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "The first craft must equip a real stone pickaxe");
 		helper.assertTrue(chest.isEmpty() && villager.getInventory().isEmpty(), "The first pickaxe must consume all real inputs");
 		helper.assertValueEqual(0L, SettlementSimulationService.craftingResourceCount(data, settlement, Items.STICK),
@@ -564,6 +560,34 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 				villager.getInventory(), store, () -> villager.distanceToSqr(pos.getCenter()) <= 4).moved(),
 				"The explicit arrived service fixture must transfer exactly the real cargo");
 		} finally {
+			villager.setPos(original.x, original.y, original.z);
+		}
+	}
+
+	/** Explicit warehouse/table arrival fixture, not a navigation or full-game acceptance test. */
+	private static void runFirstPickaxeAction(GameTestHelper helper, VillagerWorkGoal goal, Villager villager) {
+		var original = villager.position();
+		boolean noAi = villager.isNoAi();
+		try {
+			villager.setNoAi(false); // The production route correctly rejects disabled workers.
+			BlockPos store = helper.absolutePos(CHEST), station = helper.absolutePos(CRAFTING_TABLE);
+			villager.setPos(store.getX() + 0.5, store.getY() + 1, store.getZ() + 0.5);
+			helper.assertTrue(goal.canUse(), "First pickaxe must select physical warehouse pickup");
+			helper.assertValueEqual("collect_pickaxe_materials", goal.status().action(), "Select the first-tool pickup action");
+			helper.assertValueEqual(store, goal.status().target(), "Pick up only at the registered warehouse");
+			goal.start();
+			helper.assertValueEqual("workbench_pickaxe", goal.status().action(), "A complete pickup must travel to the table");
+			helper.assertValueEqual(station, goal.status().target(), "Use the registered crafting table");
+			helper.assertTrue(villager.getMainHandItem().isEmpty(), "Pickup must not manufacture or equip the tool");
+			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Carry the actual three stone");
+			helper.assertValueEqual(2, villager.getInventory().countItem(Items.STICK), "Carry the actual two sticks");
+			villager.setPos(station.getX() + 0.5, station.getY() + 1, station.getZ() + 0.5);
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			helper.assertFalse(goal.canContinueToUse(), "The arrived workbench batch must finish in its work budget");
+			helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Equip the one completed actual tool");
+		} finally {
+			goal.stop();
+			villager.setNoAi(noAi);
 			villager.setPos(original.x, original.y, original.z);
 		}
 	}

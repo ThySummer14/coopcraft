@@ -27,7 +27,8 @@ public final class SettlementMaterialCrafting {
 		TORCH_COAL(Items.TORCH, 4, Items.COAL, 1, Items.STICK, 1),
 		TORCH_CHARCOAL(Items.TORCH, 4, Items.CHARCOAL, 1, Items.STICK, 1),
 		CAMPFIRE_COAL(Items.CAMPFIRE, 1, Items.OAK_LOG, 3, Items.STICK, 3, Items.COAL, 1),
-		CAMPFIRE_CHARCOAL(Items.CAMPFIRE, 1, Items.OAK_LOG, 3, Items.STICK, 3, Items.CHARCOAL, 1);
+		CAMPFIRE_CHARCOAL(Items.CAMPFIRE, 1, Items.OAK_LOG, 3, Items.STICK, 3, Items.CHARCOAL, 1),
+		STONE_PICKAXE(Items.STONE_PICKAXE, 1, Items.COBBLESTONE, 3, Items.STICK, 2);
 
 		private final Item output;
 		private final int count;
@@ -43,7 +44,7 @@ public final class SettlementMaterialCrafting {
 			this.ingredients = java.util.Collections.unmodifiableMap(ingredients);
 		}
 
-		public String id() { return "material_" + name().toLowerCase(java.util.Locale.ROOT); }
+		public String id() { return this == STONE_PICKAXE ? "stone_pickaxe" : "material_" + name().toLowerCase(java.util.Locale.ROOT); }
 		public Item output() { return output; }
 		public int count() { return count; }
 		public Map<Item, Integer> ingredients() { return ingredients; }
@@ -60,14 +61,14 @@ public final class SettlementMaterialCrafting {
 				continue;
 			}
 			for (Recipe recipe : Recipe.values()) {
-				if (recipe != Recipe.WOOL && recipe.output() == need.getKey()
+				if (recipe != Recipe.STONE_PICKAXE && recipe != Recipe.WOOL && recipe.output() == need.getKey()
 					&& preview(stockpile, state, recipe) != null) {
 					return Optional.of(recipe);
 				}
 			}
 			// Explicit raw-input intermediates keep dependency depth bounded at one.
 			for (Recipe recipe : Recipe.values()) {
-				if (recipe.output() != need.getKey()) { continue; }
+				if (recipe == Recipe.STONE_PICKAXE || recipe.output() != need.getKey()) { continue; }
 				for (Recipe prerequisite : List.of(Recipe.PLANKS, Recipe.STICKS)) {
 					if (recipe.ingredients().getOrDefault(prerequisite.output(), 0)
 						> countPlain(stockpile, prerequisite.output())
@@ -108,6 +109,7 @@ public final class SettlementMaterialCrafting {
 			+ availablePlain(stockpile, state, Items.STICK);
 		for (Map<Item, Integer> demand : demands) {
 			for (Recipe recipe : Recipe.values()) {
+				if (recipe == Recipe.STONE_PICKAXE) { continue; }
 				if (demand.getOrDefault(recipe.output(), 0) <= availableProduct(stockpile, state, recipe.output())) {
 					continue;
 				}
@@ -127,7 +129,7 @@ public final class SettlementMaterialCrafting {
 	/** Call on the server thread. Failed exports may leave real ingredients, never a half-consumed recipe. */
 	public static boolean craft(Container stockpile, SettlementSimulationState state, Recipe recipe,
 		UUID actor, Runnable dirtyCallback) {
-		if (stockpile == null || preview(stockpile, state, recipe) == null) {
+		if (recipe == Recipe.STONE_PICKAXE || stockpile == null || preview(stockpile, state, recipe) == null) {
 			return false;
 		}
 		for (Map.Entry<Item, Integer> input : recipe.ingredients().entrySet()) {

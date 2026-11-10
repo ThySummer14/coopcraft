@@ -62,7 +62,7 @@ class SettlementWorkbenchBedCargoTest {
 			SettlementWorkbenchCargo.inputs(CAMP, BATCH, Recipe.PLANKS).getFirst()));
 		for (Recipe recipe : Recipe.values()) {
 			assertEquals(recipe == Recipe.PLANKS || recipe == Recipe.DOOR || recipe == Recipe.BED || recipe == Recipe.WOOL
-				|| recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL,
+				|| recipe == Recipe.STONE_PICKAXE || recipe == Recipe.TORCH_COAL || recipe == Recipe.TORCH_CHARCOAL,
 				SettlementWorkbenchCargo.supported(recipe));
 			if (!SettlementWorkbenchCargo.supported(recipe))
 				assertThrows(IllegalArgumentException.class, () -> SettlementWorkbenchCargo.inputs(CAMP, BATCH, recipe));
