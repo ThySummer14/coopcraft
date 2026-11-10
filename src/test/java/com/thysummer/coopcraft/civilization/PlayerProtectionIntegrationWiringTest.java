@@ -92,7 +92,7 @@ class PlayerProtectionIntegrationWiringTest {
 		MethodTree find = methods.stream().filter(m -> m.getName().contentEquals("findRipeBerryBush")).findFirst().orElseThrow();
 		var findCalls = invocations(find, "SettlementForaging.findRipeBush");
 		assertEquals(1, findCalls.size());
-		assertEquals(List.of("level", "settlementData()", "origin"), findCalls.getFirst().getArguments().stream().map(Object::toString).toList());
+		assertEquals(List.of("level", "settlementData()", "settlement", "villager", "origin"), findCalls.getFirst().getArguments().stream().map(Object::toString).toList());
 		MethodTree returning = methods.stream().filter(m -> m.getName().contentEquals("returnSupplyJob")).findFirst().orElseThrow();
 		assertEquals(1, invocations(returning, "ConstructionSystem.returnSupplyJob").size());
 	}

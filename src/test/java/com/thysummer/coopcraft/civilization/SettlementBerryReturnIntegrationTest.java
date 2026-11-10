@@ -56,6 +56,8 @@ class SettlementBerryReturnIntegrationTest {
 
 		Fixture() {
 			data.registerMember(camp, ACTOR, 0);
+			assertEquals(SettlementForagingAreas.Status.CREATED,
+				data.permitForagingArea(camp, ACTOR, BlockPos.ZERO, 1).status());
 			data.setStockpile(camp, STORE);
 			state = data.getOrCreateSimulation(camp);
 			state.mapResident(ACTOR, false, 0);

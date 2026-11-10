@@ -45,6 +45,8 @@ public final class SettlementForagingGameTest implements FabricGameTest {
 		Villager villager = helper.spawn(EntityType.VILLAGER, RESIDENT);
 		villager.setNoAi(true);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
+		helper.assertTrue(data.permitForagingArea(settlement, villager.getUUID(), helper.absolutePos(BUSH), 1).status()
+			== SettlementForagingAreas.Status.CREATED, "The fixture explicitly permits berry foraging");
 		data.setSatiety(settlement, villager.getUUID(), 20);
 		if (simulation) {
 			SettlementSimulationService.setSurvivalEnabled(helper.getLevel(), data, settlement, true);

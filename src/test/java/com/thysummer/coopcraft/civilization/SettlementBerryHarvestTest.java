@@ -33,7 +33,7 @@ class SettlementBerryHarvestTest {
 
 	private static final class Attempt {
 		SettlementSavedData data = new SettlementSavedData();
-		final Settlement settlement = data.getOrCreate(BlockPos.ZERO, "Berries", 0);
+		Settlement settlement = data.getOrCreate(BlockPos.ZERO, "Berries", 0);
 		UUID actor = new UUID(24, 1);
 		final SimpleContainer inventory;
 		boolean adult = true, loaded = true, ticking = true, writeSucceeds = true;
@@ -51,6 +51,8 @@ class SettlementBerryHarvestTest {
 				}
 			};
 			data.registerMember(settlement, actor, 0);
+			assertEquals(SettlementForagingAreas.Status.CREATED,
+				data.permitForagingArea(settlement, actor, BlockPos.ZERO, 1).status());
 		}
 		SettlementSimulationState simulation() { return data.getOrCreateSimulation(settlement); }
 		void enableSimulation() {
@@ -335,6 +337,7 @@ class SettlementBerryHarvestTest {
 			CompoundTag saved = a.data.save(new CompoundTag(), null);
 			saved.getList("Simulations", Tag.TAG_COMPOUND).getCompound(0).putString("FoodClockId", "broken clock");
 			a.data = SettlementSavedData.load(saved, null);
+			a.settlement = a.data.find(BlockPos.ZERO).orElseThrow();
 			assertTrue(a.simulation().foodClockId().isEmpty());
 			assertEquals(survival ? 0 : 3, a.run(berries(3)));
 			assertEquals(survival ? 0 : 1, a.writes);
@@ -353,6 +356,7 @@ class SettlementBerryHarvestTest {
 			Tag cargo = a.inventory.getItem(0).save(registries);
 			CompoundTag saved = a.data.save(new CompoundTag(), null);
 			a.data = SettlementSavedData.load(saved, null);
+			a.settlement = a.data.find(BlockPos.ZERO).orElseThrow();
 			a.inventory.setItem(0, ItemStack.parse(registries, cargo).orElseThrow());
 			assertEquals(saved, a.data.save(new CompoundTag(), null));
 			assertEquals(cargo, a.inventory.getItem(0).save(registries));
@@ -376,6 +380,7 @@ class SettlementBerryHarvestTest {
 			assertEquals(1, a.inventory.countItem(Items.POISONOUS_POTATO));
 			for (int round = 0; round < 3; round++) {
 				CompoundTag saved = a.data.save(new CompoundTag(), null); a.data = SettlementSavedData.load(saved, null);
+				a.settlement = a.data.find(BlockPos.ZERO).orElseThrow();
 				assertEquals(saved, a.data.save(new CompoundTag(), null));
 				var state = a.data.simulationOf(a.settlement).orElse(null);
 				long abstractBerries = state == null ? 0 : state.world().inventoryTotals().getOrDefault(ResourceType.WILD_FRUIT, 0L);
@@ -441,6 +446,7 @@ class SettlementBerryHarvestTest {
 			for (int reload = 0; reload < 2; reload++) {
 				var saved = a.data.save(new CompoundTag(), null);
 				a.data = SettlementSavedData.load(saved, null);
+				a.settlement = a.data.find(BlockPos.ZERO).orElseThrow();
 				assertEquals(saved, a.data.save(new CompoundTag(), null));
 				assertEquals(FoodReserveTarget.HIGH, a.data.foodReserveTargetOf(a.settlement));
 				if (simulation) a.data.simulationOf(a.settlement).orElseThrow().world().assertConservation();

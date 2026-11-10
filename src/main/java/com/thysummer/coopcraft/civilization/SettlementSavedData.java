@@ -25,7 +25,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 public final class SettlementSavedData extends SavedData {
 	private static final String DATA_NAME = "coopcraft_settlements";
-	private static final int DATA_VERSION = 21;
+	private static final int DATA_VERSION = 22;
 	private static final double MERGE_RADIUS_SQUARED = 48.0 * 48.0;
 	private static final Factory<SettlementSavedData> FACTORY = new Factory<>(
 		SettlementSavedData::new,
@@ -40,6 +40,8 @@ public final class SettlementSavedData extends SavedData {
 	private long membershipRevision;
 	private SettlementResourceObservations resourceObservations = new SettlementResourceObservations();
 	private PlayerProtectedAreas protectedAreas = new PlayerProtectedAreas();
+	private SettlementForagingAreas foragingAreas = new SettlementForagingAreas();
+	private final SettlementForagingLeases foragingLeases = new SettlementForagingLeases();
 	private final SettlementResourceDiscovery resourceDiscovery = new SettlementResourceDiscovery();
 	private final Map<UUID, SettlementMember> members = new LinkedHashMap<>();
 	// Transient round-robin order; unrelated membership changes must not restart active sweeps.
@@ -99,6 +101,48 @@ public final class SettlementSavedData extends SavedData {
 			setDirty();
 		}
 		return update.status();
+	}
+
+	boolean foragingAreasBlocked() { return foragingAreas.blocked(); }
+	SettlementForagingLeases foragingLeases() { return foragingLeases; }
+
+	Optional<SettlementForagingAreas.Area> foragingAreaOf(Settlement settlement) {
+		return canonicalSettlement(settlement) ? foragingAreas.of(settlement.id()) : Optional.empty();
+	}
+
+	SettlementForagingAreas.PermitResult permitForagingArea(Settlement settlement, UUID authorizer,
+			BlockPos center, int radius) {
+		if (foragingAreas.blocked()) return new SettlementForagingAreas.PermitResult(
+			SettlementForagingAreas.Status.PRESERVED_UNSUPPORTED, null);
+		if (!canonicalSettlement(settlement) || !SettlementForagingAreas.validRange(settlement, center, radius)) {
+			return new SettlementForagingAreas.PermitResult(SettlementForagingAreas.Status.INVALID, null);
+		}
+		SettlementForagingAreas.Update update = foragingAreas.permit(settlement.id(), authorizer, center, radius);
+		if (update.status() == SettlementForagingAreas.Status.CREATED
+				|| update.status() == SettlementForagingAreas.Status.REPLACED) {
+			foragingAreas = update.value();
+			setDirty();
+		}
+		return new SettlementForagingAreas.PermitResult(update.status(), update.area());
+	}
+
+	SettlementForagingAreas.Status clearForagingArea(Settlement settlement) {
+		if (foragingAreas.blocked()) return SettlementForagingAreas.Status.PRESERVED_UNSUPPORTED;
+		if (!canonicalSettlement(settlement)) return SettlementForagingAreas.Status.INVALID;
+		SettlementForagingAreas.Update update = foragingAreas.revoke(settlement.id());
+		if (update.status() == SettlementForagingAreas.Status.REMOVED) {
+			foragingAreas = update.value();
+			setDirty();
+		}
+		return update.status();
+	}
+
+	/** A live permission check. A permit never overrides current player protection. */
+	boolean canHarvestBerries(Settlement settlement, BlockPos position) {
+		if (!canonicalSettlement(settlement) || position == null || protectedAreas.contains(position)) return false;
+		SettlementForagingAreas.Area area = foragingAreas.of(settlement.id()).orElse(null);
+		return area != null && area.contains(position)
+			&& SettlementForagingAreas.withinCamp(settlement, area.centerX(), area.centerZ(), area.radius());
 	}
 
 	public Optional<Settlement> find(BlockPos center) {
@@ -625,6 +669,7 @@ public final class SettlementSavedData extends SavedData {
 		}
 		tag.put("ResourceSites", resourceList);
 		tag.put("ResourceObservations", resourceObservations.save());
+		tag.put("ForagingAreas", foragingAreas.save());
 		Tag protectionTag = protectedAreas.save();
 		if (protectionTag == null) tag.remove("PlayerProtectedAreas");
 		else tag.put("PlayerProtectedAreas", protectionTag);
@@ -679,6 +724,7 @@ public final class SettlementSavedData extends SavedData {
 	static SettlementSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		SettlementSavedData data = new SettlementSavedData();
 		data.resourceObservations = SettlementResourceObservations.load(tag.get("ResourceObservations"));
+		data.foragingAreas = SettlementForagingAreas.load(tag.get("ForagingAreas"));
 		data.protectedAreas = PlayerProtectedAreas.load(tag.get("PlayerProtectedAreas"), tag.get("DataVersion"));
 
 		ListTag settlementList = tag.getList("Settlements", ListTag.TAG_COMPOUND);

@@ -39,6 +39,7 @@ public final class SettlementCommands {
 	private SettlementCommands() {}
 
 	public static void register() {
+		SettlementForagingCommands.registerLifecycle();
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
 			dispatcher.register(SettlementCommands.<CommandSourceStack>commandTree(source -> source.hasPermission(2), SettlementCommands::execute)));
 	}
@@ -62,6 +63,16 @@ public final class SettlementCommands {
 					.executes(ctx -> handler.run(ctx, "observations", operation))));
 		}
 		settlement.then(observations);
+		var foraging = LiteralArgumentBuilder.<S>literal("foraging")
+			.executes(ctx -> handler.run(ctx, "foraging", ""));
+		foraging.then(LiteralArgumentBuilder.<S>literal("preview").requires(admin)
+			.then(RequiredArgumentBuilder.<S, Integer>argument("radius", IntegerArgumentType.integer(1, SettlementForagingAreas.MAX_RADIUS))
+				.executes(ctx -> handler.run(ctx, "foraging", "preview"))));
+		for (String operation : List.of("confirm", "cancel", "revoke")) {
+			foraging.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.executes(ctx -> handler.run(ctx, "foraging", operation)));
+		}
+		settlement.then(foraging);
 		settlement.then(LiteralArgumentBuilder.<S>literal("cargo")
 			.executes(ctx -> handler.run(ctx, "cargo", ""))
 			.then(LiteralArgumentBuilder.<S>literal("recover")
@@ -124,6 +135,7 @@ public final class SettlementCommands {
 		// Remnants remain at the death location even after the resident's membership is removed.
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
+		if (action.equals("foraging")) return SettlementForagingCommands.execute(context, option);
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement settlement = nearest(data.all(), player.position()).orElse(null);
 		if (settlement == null) {
@@ -181,6 +193,7 @@ public final class SettlementCommands {
 		}
 		if (action.equals("status") || action.equals("materials")) {
 			showStatus(source, data, settlement);
+			if (action.equals("status")) source.sendSuccess(() -> SettlementForagingCommands.summaryMessage(data, settlement), false);
 			ConstructionSystem.inspect(level, data, settlement).ifPresent(readiness ->
 				source.sendSuccess(() -> constructionMessage(readiness), false));
 			showMaterials(source, data, settlement, SettlementStockpile.getStockpile(level, data, settlement));

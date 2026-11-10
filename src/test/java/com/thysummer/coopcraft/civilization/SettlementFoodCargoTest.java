@@ -30,7 +30,11 @@ class SettlementFoodCargoTest {
 		final Settlement camp = data.getOrCreate(BlockPos.ZERO, "Food cargo", 0);
 		final SimpleContainer bag = new SimpleContainer(8), store = new SimpleContainer(4);
 		Fixture() { this(new UUID(712, 1)); }
-		Fixture(UUID actor) { this.actor = actor; data.registerMember(camp, actor, 0); data.setStockpile(camp, BlockPos.ZERO.east()); }
+		Fixture(UUID actor) {
+			this.actor = actor; data.registerMember(camp, actor, 0); data.setStockpile(camp, BlockPos.ZERO.east());
+			assertEquals(SettlementForagingAreas.Status.CREATED,
+				data.permitForagingArea(camp, actor, BlockPos.ZERO, 1).status());
+		}
 		int retained() { return SettlementFoodCargo.retainedFoodPoints(data, camp, actor); }
 		boolean surplus() { return SettlementFoodCargo.hasSurplus(data, camp, actor, bag); }
 		SettlementCargoDelivery.Ticket prepare() { return SettlementCargoDelivery.prepare(data, camp, actor, bag, () -> true); }

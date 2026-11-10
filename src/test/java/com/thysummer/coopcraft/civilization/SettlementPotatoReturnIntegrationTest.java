@@ -65,6 +65,8 @@ class SettlementPotatoReturnIntegrationTest {
 				});
 		}
 		int berries(int amount) {
+			if (data.foragingAreaOf(camp).isEmpty()) assertEquals(SettlementForagingAreas.Status.CREATED,
+				data.permitForagingArea(camp, ACTOR, BlockPos.ZERO, 1).status());
 			BlockState[] bush = { Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3) };
 			return SettlementForaging.harvest(data, camp, ACTOR, BlockPos.ZERO, bag, () -> true, () -> true, () -> true,
 				() -> bush[0], () -> List.of(new ItemStack(Items.SWEET_BERRIES, amount)), mature -> {

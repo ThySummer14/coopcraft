@@ -42,11 +42,27 @@ final class SettlementBerryCargoHarvest {
 			this.day = state == null ? 0 : state.world().day();
 			this.clock = state == null ? null : state.foodClockId().orElse(null);
 			this.personId = state == null ? null : state.residentId(actor).orElse(null);
-			this.person = personId == null ? null : state.world().allPeople().stream()
-				.filter(candidate -> candidate.id().equals(personId)).findFirst().orElse(null);
+			this.person = mappedPerson(state, personId);
 		}
 
 		boolean valid(SettlementSavedData current, Settlement settlement, UUID currentActor, BooleanSupplier adult) {
+			return validWithPresence(current, settlement, currentActor, adult,
+				() -> state.world().allPeople().stream().anyMatch(candidate -> candidate == person));
+		}
+
+		private static Person mappedPerson(SettlementSimulationState state, String id) {
+			if (state == null || id == null) return null;
+			try { return state.world().person(id); }
+			catch (IllegalArgumentException missing) { return null; }
+		}
+
+		/** Equivalent identity lookup for scan/Goal checks; avoid sorting all residents per position or tick. */
+		boolean validForScan(SettlementSavedData current, Settlement settlement, UUID currentActor, BooleanSupplier adult) {
+			return validWithPresence(current, settlement, currentActor, adult, () -> mappedPerson(state, personId) == person);
+		}
+
+		private boolean validWithPresence(SettlementSavedData current, Settlement settlement, UUID currentActor,
+			BooleanSupplier adult, BooleanSupplier personPresent) {
 			if (!adult.getAsBoolean() || data != current || !camp.equals(settlement.id())
 				|| !actor.equals(currentActor) || member != current.memberIdentity(actor)
 				|| state != current.simulationOf(settlement).orElse(null)) return false;
@@ -58,7 +74,7 @@ final class SettlementBerryCargoHarvest {
 				&& (!survival || production && clock != null && day >= 0 && personId != null
 					&& current.isMember(settlement, actor) && person != null && person.isAlive()
 					&& person.campId().equals(state.campOwner().id())
-					&& state.world().allPeople().stream().anyMatch(candidate -> candidate == person));
+					&& personPresent.getAsBoolean());
 		}
 
 		/** Called only after reserving a plain seed from this harvest's original loot. */

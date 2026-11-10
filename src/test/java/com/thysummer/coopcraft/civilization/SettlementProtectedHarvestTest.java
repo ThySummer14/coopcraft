@@ -66,6 +66,8 @@ class SettlementProtectedHarvestTest {
 				@Override public boolean canAddItem(ItemStack stack) { planned(); return super.canAddItem(stack); }
 			};
 			data.registerMember(camp, ACTOR, 0);
+			if (kind == Kind.BERRY) assertEquals(SettlementForagingAreas.Status.CREATED,
+				data.permitForagingArea(camp, OWNER, TARGET, 4).status());
 			data.toggleResource(camp, TARGET);
 			if (simulation) {
 				var state = data.getOrCreateSimulation(camp);
@@ -185,8 +187,8 @@ class SettlementProtectedHarvestTest {
 	@Test void protectionIsReadAgainImmediatelyBeforeWorldMutationAfterLastStateRead() {
 		for (Kind kind : Kind.values()) {
 			Fixture f = new Fixture(kind, true); BlockState original = f.block; CompoundTag before = f.saved();
-			// Gathering reads planned/valid/exact; food harvest reads valid/mature/valid/exact.
-			f.protectOnRead = kind == Kind.GATHER ? 3 : 4;
+			// Final state read: gathering planned/valid/exact, berries mature/exact, potatoes valid/mature/valid/exact.
+			f.protectOnRead = switch (kind) { case GATHER -> 3; case BERRY -> 2; case POTATO -> 4; };
 			ItemStack source = f.freshLoot(); int count = source.getCount();
 			assertEquals(0, f.run(source)); assertEquals(f.protectOnRead, f.blockReads);
 			assertTrue(f.data.isResidentModificationBlocked(TARGET));
@@ -280,15 +282,21 @@ class SettlementProtectedHarvestTest {
 
 	@Test void berryFinderSkipsNearestProtectedBushWithoutReadingItAndFindsOutsideBush() {
 		SettlementSavedData data = new SettlementSavedData(); BlockPos farther = TARGET.east(2);
+		Settlement camp = data.getOrCreate(BlockPos.ZERO, "Berry finder", 0);
+		data.registerMember(camp, ACTOR, 0);
+		assertEquals(SettlementForagingAreas.Status.CREATED,
+			data.permitForagingArea(camp, OWNER, TARGET, 4).status());
 		UUID area = protect(data, TARGET); AtomicInteger protectedReads = new AtomicInteger();
 		var block = (java.util.function.Function<BlockPos, BlockState>) pos -> {
 			if (pos.getX() == TARGET.getX() && pos.getZ() == TARGET.getZ()) protectedReads.incrementAndGet();
 			return pos.equals(TARGET) || pos.equals(farther) ? ripeBerry(3) : Blocks.AIR.defaultBlockState();
 		};
-		assertEquals(farther, SettlementForaging.findRipeBush(data, BlockPos.ZERO, pos -> true, pos -> true, block).orElseThrow());
+		assertEquals(farther, SettlementForaging.findRipeBush(data, camp, ACTOR, BlockPos.ZERO,
+			() -> true, pos -> true, pos -> true, pos -> true, pos -> true, block).orElseThrow());
 		assertEquals(0, protectedReads.get());
 		assertEquals(PlayerProtectedAreas.Status.REMOVED, data.removeProtectedArea(area, OWNER, false));
-		assertEquals(TARGET, SettlementForaging.findRipeBush(data, BlockPos.ZERO, pos -> true, pos -> true, block).orElseThrow());
+		assertEquals(TARGET, SettlementForaging.findRipeBush(data, camp, ACTOR, BlockPos.ZERO,
+			() -> true, pos -> true, pos -> true, pos -> true, pos -> true, block).orElseThrow());
 	}
 
 	@Test void potatoFinderSkipsProtectedMarkedCropAndRetainsBothMarks() {
@@ -303,10 +311,14 @@ class SettlementProtectedHarvestTest {
 	}
 
 	@Test void damagedProtectionPreventsFinderWorldReads() {
-		Fixture f = new Fixture(Kind.POTATO, false); CompoundTag saved = f.saved();
+		Fixture f = new Fixture(Kind.POTATO, false);
+		assertEquals(SettlementForagingAreas.Status.CREATED,
+			f.data.permitForagingArea(f.camp, OWNER, TARGET, 4).status());
+		CompoundTag saved = f.saved();
 		saved.put("PlayerProtectedAreas", StringTag.valueOf("bad")); f.load(saved);
 		java.util.function.Predicate<BlockPos> noReads = pos -> { fail("Damaged protection must short-circuit world reads"); return false; };
-		assertTrue(SettlementForaging.findRipeBush(f.data, BlockPos.ZERO, noReads, noReads, pos -> ripeBerry(3)).isEmpty());
+		assertTrue(SettlementForaging.findRipeBush(f.data, f.camp, ACTOR, BlockPos.ZERO,
+			() -> true, pos -> true, noReads, noReads, pos -> true, pos -> ripeBerry(3)).isEmpty());
 		assertTrue(SettlementCropHarvest.findRipe(f.data, f.camp, BlockPos.ZERO, noReads, noReads, pos -> ripePotato()).isEmpty());
 	}
 }

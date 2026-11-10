@@ -44,6 +44,8 @@ public class VillagerWorkGoal extends Goal {
 	private Action action;
 	private BlockPos target;
 	private BlockPos forageTarget;
+	private SettlementForagingLeases forageRegistry;
+	private SettlementForagingLeases.Lease forageLease;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
 	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
 	private SettlementStarterCrafting.Ticket currentStarterCraft;
@@ -72,6 +74,7 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public boolean canUse() {
+		releaseForageLease();
 		refreshMeetingInvitation();
 		Optional<Settlement> workSettlement = findWorkSettlement();
 		if (workSettlement.isEmpty()) {
@@ -116,11 +119,11 @@ public class VillagerWorkGoal extends Goal {
 			return false;
 		}
 		if (settlementData().getStockpile(settlement).isPresent() && shouldForage() && (!carrying || emergencyForage())) {
-			BlockPos bush = findRipeBerryBush();
-			if (bush != null) {
-				action = SettlementCropHarvest.isRipe(villager.level().getBlockState(bush)) ? Action.HARVEST_CROP : Action.FORAGE;
-				forageTarget = bush;
-				target = bush;
+			ForageChoice choice = findRipeBerryBush();
+			if (choice != null) {
+				action = choice.crop() ? Action.HARVEST_CROP : Action.FORAGE;
+				forageTarget = choice.position();
+				target = choice.position();
 				progress = 0;
 				return true;
 			}
@@ -168,8 +171,13 @@ public class VillagerWorkGoal extends Goal {
 		if (action != null && action != Action.EAT && action != Action.ATTEND_MEETING
 			&& action != Action.RETURN_TO_STOCKPILE && !villager.isBaby()
 			&& settlement != null && hasReturnCargo()
-			&& cargoCooldown.ready(villager.level().getGameTime()) && !emergencyForage()) return false;
-		return action != null && isTargetValid() && findWorkSettlement().isPresent();
+			&& cargoCooldown.ready(villager.level().getGameTime()) && !emergencyForage()) {
+			releaseForageLease();
+			return false;
+		}
+		boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
+		if (!continuing) releaseForageLease();
+		return continuing;
 	}
 
 	@Override
@@ -184,6 +192,7 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void stop() {
+		releaseForageLease();
 		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
 		if (foodTicket != null) foodTicket.cancel();
 		foodTicket = null;
@@ -201,6 +210,12 @@ public class VillagerWorkGoal extends Goal {
 		searchCooldown = 0;
 		travelTicks = 0;
 		villager.getNavigation().stop();
+	}
+
+	private void releaseForageLease() {
+		if (forageRegistry != null) forageRegistry.release(forageLease);
+		forageLease = null;
+		forageRegistry = null;
 	}
 
 	private static VillagerWorkGoal goalOf(Villager villager) {
@@ -493,7 +508,8 @@ public class VillagerWorkGoal extends Goal {
 		if (action == null) return;
 		if (isSupplyAction()) { tickBuildSupply(); return; }
 		if (action == Action.RETURN_TO_STOCKPILE) { tickCargoReturn(); return; }
-		if (action == Action.CRAFT_FIRST_WORKBENCH && !isTargetValid()) { stop(); return; }
+		if ((action == Action.CRAFT_FIRST_WORKBENCH || action == Action.FORAGE || action == Action.HARVEST_CROP)
+			&& !isTargetValid()) { stop(); return; }
 		if (foodTicket != null) {
 			villager.getNavigation().stop();
 			if (!foodTicket.waiting()) {
@@ -797,6 +813,8 @@ public class VillagerWorkGoal extends Goal {
 		if (target == null) {
 			return false;
 		}
+		if ((action == Action.FORAGE || action == Action.HARVEST_CROP)
+			&& (!isTargetValid() || !constructionPathIsTicking())) { stop(); return false; }
 		if ((action == Action.BUILD || action == Action.CRAFT_FIRST_WORKBENCH) && !constructionPathIsTicking()) {
 			villager.getNavigation().stop();
 			travelTicks = 0;
@@ -845,7 +863,8 @@ public class VillagerWorkGoal extends Goal {
 		List<BlockPos> candidates = new ArrayList<>();
 		for (Direction direction : Direction.Plane.HORIZONTAL) {
 			BlockPos candidate = target.relative(direction);
-			if (level.isPositionEntityTicking(candidate)
+			if (foragePositionAccessible(level, candidate) && foragePositionAccessible(level, candidate.above())
+				&& foragePositionAccessible(level, candidate.below())
 				&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
 				&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
 				&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
@@ -859,6 +878,11 @@ public class VillagerWorkGoal extends Goal {
 			}
 		}
 		return navigateTo(target);
+	}
+
+	private static boolean foragePositionAccessible(ServerLevel level, BlockPos position) {
+		return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position)
+			&& level.isLoaded(position) && level.isPositionEntityTicking(position);
 	}
 
 	private boolean navigateToConstructionApproach() {
@@ -882,7 +906,19 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean navigateTo(BlockPos pos) {
-		if (action == Action.CRAFT_FIRST_WORKBENCH && !navigationSearchRegionLoaded()) return false;
+		if ((action == Action.CRAFT_FIRST_WORKBENCH || action == Action.FORAGE || action == Action.HARVEST_CROP)
+			&& !navigationSearchRegionLoaded()) return false;
+		if (action == Action.FORAGE || action == Action.HARVEST_CROP) {
+			ServerLevel level = (ServerLevel) villager.level();
+			if (!foragePositionAccessible(level, pos)) return false;
+			var path = villager.getNavigation().createPath(pos, 0);
+			if (path == null || !path.canReach()) return false;
+			for (int index = 0; index < path.getNodeCount(); index++) {
+				if (!foragePositionAccessible(level, path.getNodePos(index))) return false;
+			}
+			return villager.getNavigation().moveTo(path,
+				settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+		}
 		double speed = settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed();
 		boolean moving = villager.getNavigation().moveTo(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, speed);
 		if (!moving || (action != Action.BUILD && action != Action.CRAFT_FIRST_WORKBENCH)) {
@@ -919,7 +955,9 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.RETURN_TO_STOCKPILE) return cargoTicket != null && target.equals(cargoTicket.store())
 			&& SettlementCargoDelivery.valid(cargoTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
 		if (action == Action.FORAGE) {
-			return SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
+			return forageRegistry != null && forageRegistry.valid(forageLease, settlementData(), settlement,
+				villager.getUUID(), target, level.getGameTime())
+				&& SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
 		}
 		if (action == Action.GATHER) {
 			return !hasReturnCargo() && SettlementGathering.validTarget(level, settlementData(), settlement, villager, target);
@@ -1194,14 +1232,20 @@ public class VillagerWorkGoal extends Goal {
 		));
 	}
 
-	private BlockPos findRipeBerryBush() {
-		if (!(villager.level() instanceof ServerLevel level)) {
-			return null;
-		}
+	private record ForageChoice(BlockPos position, boolean crop) { }
+
+	private ForageChoice findRipeBerryBush() {
+		if (!(villager.level() instanceof ServerLevel level)) return null;
 		BlockPos origin = villager.blockPosition();
-		BlockPos berry = SettlementForaging.findRipeBush(level, settlementData(), origin).orElse(null);
+		BlockPos berry = SettlementForaging.findRipeBush(level, settlementData(), settlement, villager, origin).orElse(null);
 		BlockPos crop = SettlementCropHarvest.findRipe(level, settlementData(), settlement, origin).orElse(null);
-		return crop != null && (berry == null || origin.distSqr(crop) < origin.distSqr(berry)) ? crop : berry;
+		// Reserve only the final berry choice, never a berry discarded in favor of a nearer potato plot.
+		if (crop != null && (berry == null || origin.distSqr(crop) < origin.distSqr(berry))) return new ForageChoice(crop, true);
+		if (berry == null || !SettlementForaging.validTarget(level, settlementData(), settlement, villager, berry)) return null;
+		forageRegistry = settlementData().foragingLeases();
+		forageLease = forageRegistry.claim(settlementData(), settlement, villager.getUUID(), berry, level.getGameTime());
+		if (forageLease == null) { releaseForageLease(); return null; }
+		return new ForageChoice(berry, false);
 	}
 
 	private void forage() {
@@ -1211,7 +1255,8 @@ public class VillagerWorkGoal extends Goal {
 		if (action == Action.HARVEST_CROP) {
 			SettlementCropHarvest.harvest(level, settlementData(), settlement, villager, target);
 		} else {
-			SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+			try { SettlementForaging.harvest(level, settlementData(), settlement, villager, target, forageRegistry, forageLease); }
+			finally { releaseForageLease(); }
 		}
 	}
 

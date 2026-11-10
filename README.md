@@ -167,7 +167,7 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 
 ### 居民自主资源观察（只读候选）
 
-居民会分批记录附近已加载的成熟甜浆果位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选来源始终未知，不会自动增加木石/土豆采集授权，也不会改变旧自动浆果采收行为。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。
+居民会分批记录附近已加载的成熟甜浆果位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选来源始终未知，不会自动增加木石/土豆采集授权。甜浆果实际采摘另须本营显式许可区，保护区始终优先。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。
 
 ### 玩家建筑保护区
 
@@ -176,3 +176,7 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 ### 施工木板实际运输
 
 普通橡木板与门、床共用单件领料：村民先到公仓取料，再携带到工地安装，失败或工程失效保留/退回原物。木屋不再远程消耗公仓木板，建造耗时会增加；定制木板不自动使用，其他建材的物流范围见 [施工取料说明](docs/construction-supply-logistics.md)。
+
+### 安全自主采浆果
+
+在拟授权区域中心执行 `/coop settlement foraging preview 8`，查看本营、范围及完整高度提示后用 `/coop settlement foraging confirm` 确认（OP2）。村民自行寻找区内成熟浆果并预约采摘，不必逐丛标记。旧档未配置时自动采浆果暂停；人工土豆田和已有食物仍保留。撤销、保护区及范围限制见 [安全觅食说明](docs/safe-foraging.md)。
