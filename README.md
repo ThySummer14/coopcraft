@@ -197,3 +197,5 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 OP先用 `/coop settlement gathering preview wood 4` 预览，再 `confirm` 确认。模式可选wood/stone/both，半径1–8，覆盖全部高度且包括玩家放置的同类材料；请先保护不愿拆的建筑与支撑。村民从有限观察候选中自行选点，保护优先、撤销使旧任务失效；不会把UNKNOWN候选自动写成人工标记。旧档默认无许可，完整范围和实物守恒边界见[安全木石采集](docs/safe-material-gathering.md)。
 
 - **土豆田扩种**：明确逐格许可后，居民可用默认实物模式下留粮后的普通土豆播种，成熟后接既有采收复种。不会自动开垦或消耗抽象食物，见[安全播种](docs/surplus-potato-sowing.md)。
+
+- **成人送食照料幼儿**：默认实物模式下，空闲成人可将留粮后的普通浆果或土豆带到附近饥饿幼儿身边，连续接触后消耗1件真实余粮。幼儿已有自行进食不受锁定，见[幼儿送食照料](docs/child-food-care.md)。

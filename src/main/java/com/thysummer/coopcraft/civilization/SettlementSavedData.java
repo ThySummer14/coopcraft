@@ -66,6 +66,9 @@ public final class SettlementSavedData extends SavedData {
 	private final Map<UUID, UUID> leaders = new LinkedHashMap<>();
 	private final Map<UUID, MemberNeeds> memberNeeds = new LinkedHashMap<>();
 	private final SettlementFoodRequests foodRequests = new SettlementFoodRequests();
+	// Ephemeral child-care coordination; no NBT or dirty tracking.
+	private final SettlementChildCareClaims childCareClaims = new SettlementChildCareClaims();
+	public SettlementChildCareClaims childCareClaims() { return childCareClaims; }
 	// Transient, dimension-local retry timing; intentionally absent from NBT and dirty tracking.
 	private final ConstructionSiteRetries constructionSiteRetries = new ConstructionSiteRetries();
 
@@ -521,6 +524,7 @@ public final class SettlementSavedData extends SavedData {
 
 	public void removeMember(UUID villagerId) {
 		foodRequests.cancelResident(villagerId);
+		childCareClaims.cancelResident(villagerId);
 		boolean changed = members.remove(villagerId) != null;
 		discoveryRoster.remove(villagerId);
 		if (changed) membershipRevision++;

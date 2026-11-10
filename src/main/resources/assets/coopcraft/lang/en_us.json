@@ -819,5 +819,6 @@
 	"coopcraft.interaction.meeting.inquiry.factor_weight": "%s%s",
 	"coopcraft.interaction.meeting.inquiry.factor_positive": "+",
 	"coopcraft.interaction.meeting.inquiry.factor_negative": "−",
-	"coopcraft.interaction.meeting.inquiry.factor_generosity": "Generosity toward hunger in other households"
+	"coopcraft.interaction.meeting.inquiry.factor_generosity": "Generosity toward hunger in other households",
+	"coopcraft.interaction.action.feed_child": "Bringing food to a child"
 }
