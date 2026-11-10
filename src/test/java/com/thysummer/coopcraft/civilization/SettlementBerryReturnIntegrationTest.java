@@ -349,8 +349,8 @@ class SettlementBerryReturnIntegrationTest {
 		String continuation = source.substring(source.indexOf("public boolean canContinueToUse()"), source.indexOf("public void start()"));
 		String returning = source.substring(source.indexOf("private void tickCargoReturn()"), source.indexOf("private boolean shouldEat()"));
 		assertTrue(selection.contains("carrying && !emergencyForage()"));
-		assertTrue(continuation.matches("(?s).*&& !emergencyForage\\(\\)\\)\\s*\\{\\s*releaseForageLease\\(\\);\\s*releaseMaterialLease\\(\\);\\s*return false;\\s*}.*"),
-			"Food-aware cargo preemption must release both forage and material leases before stopping");
+		assertTrue(continuation.matches("(?s).*&& !emergencyForage\\(\\)\\)\\s*\\{\\s*releaseForageLease\\(\\);\\s*releaseMaterialLease\\(\\);\\s*cancelShearing\\(\\);\\s*return false;\\s*}.*"),
+			"Food-aware cargo preemption must release forage, material and sheep work before stopping");
 		assertTrue(returning.contains("meetingTicket != null || emergencyForage()"));
 		assertTrue(returning.indexOf("if (atCargoStore())") < returning.indexOf("Container currentStore"));
 		assertTrue(returning.contains("currentStore, this::atCargoStore"));
