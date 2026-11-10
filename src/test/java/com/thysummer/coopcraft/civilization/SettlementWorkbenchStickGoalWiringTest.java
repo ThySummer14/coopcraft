@@ -54,6 +54,11 @@ class SettlementWorkbenchStickGoalWiringTest {
 		assertTrue(methods.get("prepareWorkbenchCrafting").contains("stickDemandStillNeeded(demands,SettlementStockpile.getStockpile(level,data,camp))"));
 	}
 
+	private static String compact(Tree tree) {
+		assertNotNull(tree);
+		return tree.toString().replaceAll("\\s+", "");
+	}
+
 	private static int requiredIndex(String source, String expected) {
 		assertNotNull(source);
 		int index = source.indexOf(expected);
