@@ -40,6 +40,7 @@ public final class SettlementCommands {
 
 	public static void register() {
 		SettlementForagingCommands.registerLifecycle();
+		SettlementGatheringCommands.registerLifecycle();
 		CommandRegistrationCallback.EVENT.register((dispatcher, registry, environment) ->
 			dispatcher.register(SettlementCommands.<CommandSourceStack>commandTree(source -> source.hasPermission(2), SettlementCommands::execute)));
 	}
@@ -73,6 +74,20 @@ public final class SettlementCommands {
 				.executes(ctx -> handler.run(ctx, "foraging", operation)));
 		}
 		settlement.then(foraging);
+		var gathering = LiteralArgumentBuilder.<S>literal("gathering")
+			.executes(ctx -> handler.run(ctx, "gathering", ""));
+		var gatheringPreview = LiteralArgumentBuilder.<S>literal("preview").requires(admin);
+		for (String mode : List.of("wood", "stone", "both")) {
+			gatheringPreview.then(LiteralArgumentBuilder.<S>literal(mode)
+				.then(RequiredArgumentBuilder.<S, Integer>argument("radius", IntegerArgumentType.integer(1, SettlementGatheringAreas.MAX_RADIUS))
+					.executes(ctx -> handler.run(ctx, "gathering", "preview_" + mode))));
+		}
+		gathering.then(gatheringPreview);
+		for (String operation : List.of("confirm", "cancel", "revoke")) {
+			gathering.then(LiteralArgumentBuilder.<S>literal(operation).requires(admin)
+				.executes(ctx -> handler.run(ctx, "gathering", operation)));
+		}
+		settlement.then(gathering);
 		settlement.then(LiteralArgumentBuilder.<S>literal("cargo")
 			.executes(ctx -> handler.run(ctx, "cargo", ""))
 			.then(LiteralArgumentBuilder.<S>literal("recover")
@@ -136,6 +151,7 @@ public final class SettlementCommands {
 		if (action.equals("cargo")) return SettlementCargoCommands.execute(source, option,
 			option.equals("recover") || option.equals("rescue") ? StringArgumentType.getString(context, "cargo_record") : "");
 		if (action.equals("foraging")) return SettlementForagingCommands.execute(context, option);
+		if (action.equals("gathering")) return SettlementGatheringCommands.execute(context, option);
 		SettlementSavedData data = SettlementSavedData.get(level);
 		Settlement settlement = nearest(data.all(), player.position()).orElse(null);
 		if (settlement == null) {
@@ -194,6 +210,7 @@ public final class SettlementCommands {
 		if (action.equals("status") || action.equals("materials")) {
 			showStatus(source, data, settlement);
 			if (action.equals("status")) source.sendSuccess(() -> SettlementForagingCommands.summaryMessage(data, settlement), false);
+			if (action.equals("status")) source.sendSuccess(() -> SettlementGatheringCommands.summaryMessage(data, settlement), false);
 			ConstructionSystem.inspect(level, data, settlement).ifPresent(readiness ->
 				source.sendSuccess(() -> constructionMessage(readiness), false));
 			showMaterials(source, data, settlement, SettlementStockpile.getStockpile(level, data, settlement));

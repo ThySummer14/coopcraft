@@ -840,4 +840,11 @@ status和materials会同时显示保存的施工步骤数、蓝图ID、下一位
 
 `/coop settlement observations` 现在同时显示成熟甜浆果、普通橡木原木和石头/圆石的历史候选，列出材料、UNKNOWN来源及当前保护否决。居民按原16坐标/tick预算自行观察，保护区内不新增候选；查询不会扫描世界、寻路或标记采集点。
 
-木石尚未自动破坏，仍需要玩家原有人工标记。候选类型变更会换ID，抑制按坐标保持；三类共用64条营地额度。完整旧档、容量和边界见[资源观察说明](resource-observations.md)。
+木石自动采收另需gathering区域许可，原人工标记仍可独立使用。候选类型变更会换ID，抑制按坐标保持并停止该候选的自动木石任务；三类共用64条营地额度。完整旧档、容量和边界见[资源观察说明](resource-observations.md)。
+
+
+## 明确木石采集许可区
+
+`/coop settlement gathering` 只读查看本营许可。OP2先站在中心用 `gathering preview <wood|stone|both> <1..8>`，核对材料与全高度方形后 `gathering confirm`；`cancel` 放弃预览，`revoke` 撤销。wood仅普通橡木原木，stone仅石头/圆石，both是合集。包括当前和今后玩家放置的同类方块，保护区优先；不要把“来源UNKNOWN”误解为天然。
+
+旧档默认无许可，人工标记不变。村民仍从有限观察候选选择、在12格内作业，不会扫描整个许可区。候选满额或暂不可见不等于采空。任务身份、取消、库存及持久化边界见[安全木石采集](safe-material-gathering.md)。

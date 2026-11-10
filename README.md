@@ -167,7 +167,7 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 
 ### 居民自主资源观察（只读候选）
 
-居民会在同一有界扫描中分批记录附近已加载的成熟甜浆果、橡木原木及石头/圆石位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选显示材料种类及当前保护否决，来源始终未知，不会自动增加木石/土豆采集授权。保护区内不新增观察，已有历史记录不自动删除。甜浆果实际采摘另须本营显式许可区，保护区始终优先。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。
+居民会在同一有界扫描中分批记录附近已加载的成熟甜浆果、橡木原木及石头/圆石位置，可用 `/coop settlement observations` 查看，并由 OP 显式抑制或恢复观察。候选显示材料种类及当前保护否决，来源始终未知，本身不授予木石或土豆采集权。木石自动采收另需本营明确许可区，原人工标记保留。保护区内不新增观察，已有历史记录不自动删除。甜浆果实际采摘另须本营显式许可区，保护区始终优先。范围、容量和存档边界见 [资源观察说明](docs/resource-observations.md)。
 
 ### 玩家建筑保护区
 
@@ -180,3 +180,8 @@ src/main/resources/assets/coopcraft/           方块模型、贴图、lang 文�
 ### 安全自主采浆果
 
 在拟授权区域中心执行 `/coop settlement foraging preview 8`，查看本营、范围及完整高度提示后用 `/coop settlement foraging confirm` 确认（OP2）。村民自行寻找区内成熟浆果并预约采摘，不必逐丛标记。旧档未配置时自动采浆果暂停；人工土豆田和已有食物仍保留。撤销、保护区及范围限制见 [安全觅食说明](docs/safe-foraging.md)。
+
+
+### 明确许可内自主采集木石
+
+OP先用 `/coop settlement gathering preview wood 4` 预览，再 `confirm` 确认。模式可选wood/stone/both，半径1–8，覆盖全部高度且包括玩家放置的同类材料；请先保护不愿拆的建筑与支撑。村民从有限观察候选中自行选点，保护优先、撤销使旧任务失效；不会把UNKNOWN候选自动写成人工标记。旧档默认无许可，完整范围和实物守恒边界见[安全木石采集](docs/safe-material-gathering.md)。

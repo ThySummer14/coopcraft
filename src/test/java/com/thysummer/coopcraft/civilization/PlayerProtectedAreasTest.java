@@ -218,7 +218,7 @@ class PlayerProtectedAreasTest {
 		var first = data.addProtectedArea(OWNER, "First", -12, -13, -10, -11).area();
 		var second = data.addProtectedArea(OTHER, "Second", 6, 8, 2, 3).area();
 		CompoundTag expected = save(data);
-		assertEquals(22, expected.getInt("DataVersion"));
+		assertEquals(23, expected.getInt("DataVersion"));
 		assertEquals(1, expected.getCompound(FIELD).getInt("Version"));
 		for (int pass = 0; pass < 2; pass++) {
 			data = SettlementSavedData.load(save(data), null);

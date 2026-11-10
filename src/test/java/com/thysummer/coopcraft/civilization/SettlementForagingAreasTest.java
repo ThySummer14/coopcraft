@@ -169,7 +169,7 @@ class SettlementForagingAreasTest {
 		SettlementSavedData data = populatedData(); Settlement camp = camp(data);
 		var area = data.permitForagingArea(camp, AUTHOR, new BlockPos(5, -64, -6), 16).area();
 		CompoundTag expected = save(data);
-		assertEquals(22, expected.getInt("DataVersion")); assertEquals(1, expected.getCompound(FIELD).getInt("Version"));
+		assertEquals(23, expected.getInt("DataVersion")); assertEquals(1, expected.getCompound(FIELD).getInt("Version"));
 		for (int pass = 0; pass < 2; pass++) {
 			data = SettlementSavedData.load(save(data), null); camp = camp(data);
 			assertFalse(data.foragingAreasBlocked()); assertFalse(data.isDirty());
