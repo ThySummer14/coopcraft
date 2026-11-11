@@ -967,5 +967,15 @@
 	"coopcraft.interaction.action.workbench_pickaxe": "Making a first stone pickaxe from carried materials at the workbench",
 	"coopcraft.interaction.action.collect_stone_pickaxe": "Collecting an existing plain stone pickaxe from the communal store",
 	"coopcraft.interaction.action.scout_material_area": "Scouting permitted material area",
-	"coopcraft.interaction.food_sharing.memory": "Witnessed handover (game tick %s): %s gave %s %s × %s."
+	"coopcraft.interaction.food_sharing.memory": "Witnessed handover (game tick %s): %s gave %s %s × %s.",
+	"block.coopcraft.mechanical_drill": "Mechanical Drill",
+	"block.coopcraft.mechanical_drill.tooltip": "Mines on redstone pulses. Right-click to insert a tool, sneak-right-click to retrieve it. Outputs to the rear container.",
+	"coopcraft.mechanical_drill.status.idle": "Ready for a redstone pulse",
+	"coopcraft.mechanical_drill.status.running": "Block harvested; waiting for the next pulse",
+	"coopcraft.mechanical_drill.status.no_tool": "Requires a damageable tool",
+	"coopcraft.mechanical_drill.status.wrong_tool": "The current tool cannot harvest the block in front",
+	"coopcraft.mechanical_drill.status.protected": "The container or machine in front is protected",
+	"coopcraft.mechanical_drill.status.output_full": "Paused: no room in the rear container",
+	"block.coopcraft.conveyor_belt": "Item Conveyor",
+	"block.coopcraft.conveyor_belt.tooltip": "Moves items on its surface into the container ahead. Apply redstone power to brake."
 }

@@ -2,6 +2,8 @@
   "replace": false,
   "values": [
     "coopcraft:farm_station",
+    "coopcraft:mechanical_drill",
+    "coopcraft:conveyor_belt",
     "coopcraft:waterwheel",
     "coopcraft:drive_shaft",
     "coopcraft:archive",

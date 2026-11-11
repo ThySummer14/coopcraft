@@ -8,6 +8,8 @@
 
 开发方向与范围控制见 [全模组产品纲领](docs/mod-product-charter.md) 和 [精简开发路线及验收门槛](docs/lean-development-roadmap.md)；现有功能与实现状态仍以本README、[文明系统主线设计](docs/civilization-design.md)及实际源码为准。
 
+![机械钻头、红石与物品传送带组成的刷石产线](docs/images/mechanical-factory.jpg)
+
 ## 功能
 
 - **共享进度播报**：队友达成进度时，你的屏幕上也会弹出同一个成就 toast。
@@ -164,6 +166,17 @@
 
 `modpack/mods/` 已加入 **DangoMusic 1.5.0-coopcraft.2（1.21.1 Fabric 客户端版）**，游戏内默认按 `M` 打开网易云音乐播放器。此修订版基于官方 v1.5.0，修复三个辉光着色器引用缺失顶点文件的问题；`.2` 增加灵动岛/Now Playing 的 X/Y 位置设置，以及默认 `H` 键的 HUD 显示开关。它与 CoopCraft 分开加载，不需要安装到服务端。安装方式、上游来源、SHA-256、修改版源码和 GPL-3.0 许可说明见 [整合包说明](modpack/README.md)。
 
+- **机械钻头**：支持六个朝向，每次红石上升沿采集前方一个方块。右键放入有耐久的工具，
+  潜行右键取回，空手右键查看状态；漏斗也能补充或取走工具。采集遵循工具类型、附魔与
+  原版掉落表，成功后消耗耐久。产物优先进入后方容器，没有容器时正常掉落。容器满、
+  工具不合适时不会破坏方块；容器与其他带方块实体的机器不会被钻头采集。
+
+- **物品传送带**：批量合成并拼接成物品运输线，把带面上的掉落物送入前方容器。
+  红石信号可以刹停；容器只能接收部分物品时只扣除实际插入的数量，剩余物品留在带上。
+
+  可以在钻头前方用原版水和岩浆生成圆石，再用侦测器时钟提供脉冲；后方接箱子，或让
+  掉落物落在传送带上送入箱子，就能搭一条基础刷石产线。两种机械都在红石创造物品栏中。
+
 ## 版本
 
 | 项目 | 版本 |
@@ -192,6 +205,9 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk/Contents/Home
 ./gradlew runGameTest # 启动无界面游戏测试服务器
 ./gradlew build       # 构建，产物在 build/libs/
 ```
+
+`./gradlew test` 运行 JUnit 测试，`./gradlew runGameTest` 在临时服务端世界里
+验证机械采集、容器保护、物品输送和文明生产。提交前运行 `./gradlew build runGameTest`。
 
 首次构建会下载 Gradle、Minecraft、映射和依赖，需要几分钟。之后走缓存会快很多。
 

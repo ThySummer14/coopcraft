@@ -23,6 +23,7 @@
 			"com.thysummer.coopcraft.client.CoopCraftClient"
 		],
 		"fabric-gametest": [
+			"com.thysummer.coopcraft.automation.AutomationGameTest",
 			"com.thysummer.coopcraft.civilization.CivilizationGameTest",
 			"com.thysummer.coopcraft.civilization.ConstructionRecoveryGameTest",
 			"com.thysummer.coopcraft.civilization.MinecraftStockpileAdapterGameTest",

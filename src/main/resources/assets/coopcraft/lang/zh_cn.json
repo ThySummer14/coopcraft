@@ -967,5 +967,15 @@
 	"coopcraft.interaction.action.workbench_pickaxe": "在工作台用携带材料制作首把石镐",
 	"coopcraft.interaction.action.collect_stone_pickaxe": "前往公仓领取已有的普通石镐",
 	"coopcraft.interaction.action.scout_material_area": "勘察许可材料区",
-	"coopcraft.interaction.food_sharing.memory": "亲历送粮（游戏刻 %s）：%s 交给 %s %s 份%s。"
+	"coopcraft.interaction.food_sharing.memory": "亲历送粮（游戏刻 %s）：%s 交给 %s %s 份%s。",
+	"block.coopcraft.mechanical_drill": "机械钻头",
+	"block.coopcraft.mechanical_drill.tooltip": "红石脉冲驱动采集；右键装工具，潜行右键取回，产物优先送入后方容器。",
+	"coopcraft.mechanical_drill.status.idle": "已就绪，等待红石脉冲",
+	"coopcraft.mechanical_drill.status.running": "采集完成，等待下一次脉冲",
+	"coopcraft.mechanical_drill.status.no_tool": "需要一把有耐久的工具",
+	"coopcraft.mechanical_drill.status.wrong_tool": "当前工具无法采集前方方块",
+	"coopcraft.mechanical_drill.status.protected": "前方的容器或机械受到保护",
+	"coopcraft.mechanical_drill.status.output_full": "后方容器空间不足，已暂停",
+	"block.coopcraft.conveyor_belt": "物品传送带",
+	"block.coopcraft.conveyor_belt.tooltip": "运输带面上的物品并送入前方容器；红石信号可刹停。"
 }

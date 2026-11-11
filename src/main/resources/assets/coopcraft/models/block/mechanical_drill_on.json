@@ -1,0 +1,6 @@
+{
+  "parent": "coopcraft:block/mechanical_drill",
+  "textures": {
+    "north": "coopcraft:block/mechanical_drill_front_on"
+  }
+}
