@@ -1,0 +1,30 @@
+id: settlement-care
+description: Let a resident complete a real care slot, then reopen the ledger and verify its event.
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "forceload add 10298 10298 10306 10306"
+    - "fill 10298 -61 10298 10306 -61 10306 minecraft:stone"
+    - "fill 10298 -60 10298 10306 -58 10306 minecraft:air"
+    - "kill @e[type=minecraft:villager,x=10298,y=-60,z=10298,dx=8,dy=4,dz=8]"
+    - "tp @p 10300 -60 10305 180 0"
+    - "setblock 10300 -60 10302 minecraft:bell"
+    - "setblock 10300 -60 10303 minecraft:chest"
+    - "summon minecraft:villager 10300 -60 10300 {UUID:[I;0,0,0,27],PersistenceRequired:1b}"
+    - "summon minecraft:villager 10301 -60 10300 {UUID:[I;0,0,0,28],Age:-24000,PersistenceRequired:1b}"
+steps:
+  - ui_close: {}
+  - wait: 1500
+  - player_use: {x: 10300, y: -60, z: 10302, face: up}
+  - wait: 500
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 5000}
+  - ui_close: {}
+  - wait: 20000
+  - player_use: {x: 10300, y: -60, z: 10302, face: up}
+  - wait: 500
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 5000}
+  - click_text: ["生活", "Household"]
+  - wait: 300
+  - assert_ui: {text_contains_any: ["个时段", "slot"], timeout_ms: 5000}
+  - screenshot: "settlement-care-complete"

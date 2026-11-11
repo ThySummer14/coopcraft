@@ -41,7 +41,12 @@ class SettlementOverviewPayloadTest {
 					"", "farmer", "forager", false, -8, 64, 20, 72, 35, 81, 66, "ambitious", List.of("greedy", "fast"), true
 				),
 				new SettlementOverviewPayload.ResidentInfo(
-					"Ada", "librarian", "generalist", true, -12, 64, 26, 48, 90, 22, 18, "honest", List.of("generous", "wise"), false
+					"Ada", "librarian", "generalist", true, -12, 64, 26, 48, 90, 22, 18, "honest", List.of("generous", "wise"), false,
+					new SettlementOverviewPayload.ResidentObservation(
+						true, List.of("Aren"), 1,
+						List.of(new SettlementOverviewPayload.CareObservation("Aren", 2, false)), 1,
+						true, 3, true, "build", "", center.asLong()
+					)
 				)
 			),
 			List.of(
@@ -50,7 +55,12 @@ class SettlementOverviewPayloadTest {
 					List.of(new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.recipe", "sticks"))
 				),
 				new SettlementOverviewPayload.SimulationEventInfo(0, "EXTERNAL_EXPORT", "TUBERS", 2, List.of())
-			)
+			),
+			List.of("common_food_shortage", "construction_paused_food"),
+			"food",
+			CivilizationEras.PRIMITIVE,
+			"coopcraft.milestone.common_stockpile",
+			"new_camp"
 		);
 		RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
 		try {
@@ -68,6 +78,10 @@ class SettlementOverviewPayloadTest {
 		UUID firstParent = UUID.randomUUID();
 		UUID secondParent = UUID.randomUUID();
 		UUID child = UUID.randomUUID();
+		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
+		state.mapResident(firstParent, false, 80);
+		state.mapResident(secondParent, false, 80);
+		state.mapResidentWithParents(child, 80, firstParent, secondParent);
 		SimulationEvent birth = new SimulationEvent(
 			1, 0, EventType.BIRTH,
 			List.of(
@@ -86,7 +100,7 @@ class SettlementOverviewPayloadTest {
 				VillagerNames.fullName(firstParent) + ", " + VillagerNames.fullName(secondParent)
 			),
 			new SettlementOverviewPayload.SimulationEventDetail(
-				"coopcraft.simulation.detail.child", VillagerNames.fullName(child)
+				"coopcraft.simulation.detail.child", VillagerNames.nameFor(data, settlement, child)
 			)
 		), info.details());
 	}
@@ -155,5 +169,16 @@ class SettlementOverviewPayloadTest {
 			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.work_type", "coopcraft.simulation.worktype.CRAFT"),
 			new SettlementOverviewPayload.SimulationEventDetail("coopcraft.simulation.detail.skill", "1.0 → 1.01")
 		), info.details());
+	}
+
+	@Test
+	void nextStepPrioritizesOneBasicAction() {
+		assertEquals("stockpile", Civilization.nextStep(false, List.of(), SettlementStage.PRIMITIVE, false, 0, 2, false, 0));
+		assertEquals("food", Civilization.nextStep(true, List.of("food_emergency"), SettlementStage.PRIMITIVE, false, 0, 2, false, 0));
+		assertEquals("hearth", Civilization.nextStep(true, List.of(), SettlementStage.PRIMITIVE, false, 2, 2, false, 0));
+		assertEquals("housing", Civilization.nextStep(true, List.of(), SettlementStage.AGRICULTURAL, false, 1, 2, false, 0));
+		assertEquals("crafting_station", Civilization.nextStep(true, List.of(), SettlementStage.AGRICULTURAL, false, 2, 2, false, 0));
+		assertEquals("resources", Civilization.nextStep(true, List.of(), SettlementStage.AGRICULTURAL, false, 2, 2, true, 2));
+		assertEquals("observe", Civilization.nextStep(true, List.of(), SettlementStage.AGRICULTURAL, false, 2, 2, true, 3));
 	}
 }

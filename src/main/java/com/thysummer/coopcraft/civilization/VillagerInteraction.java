@@ -1,15 +1,11 @@
 package com.thysummer.coopcraft.civilization;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import com.thysummer.coopcraft.civilization.simulation.Person;
-import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 import com.thysummer.coopcraft.civilization.simulation.ResourceType;
+import java.util.ArrayList;
+import java.util.List;
 
-import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
@@ -19,6 +15,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.EntityHitResult;
 
@@ -29,36 +26,97 @@ public final class VillagerInteraction {
 	private VillagerInteraction() {
 	}
 
+	/** Compatibility callback: Mob.interact must handle important items before our mobInteract hook. */
 	public static InteractionResult onUseEntity(
-		Player player,
-		Level level,
-		InteractionHand hand,
-		Entity entity,
-		EntityHitResult hitResult
+		Player player, Level level, InteractionHand hand, Entity entity, EntityHitResult hitResult
 	) {
-		if (hand != InteractionHand.MAIN_HAND || !(entity instanceof Villager villager)) {
-			return InteractionResult.PASS;
-		}
-		if (!(level instanceof ServerLevel serverLevel) || !(player instanceof ServerPlayer serverPlayer)) {
-			return InteractionResult.PASS;
-		}
-		SettlementSavedData data = SettlementSavedData.get(serverLevel);
-		Optional<Settlement> settlement = data.findSettlementForVillager(villager.getUUID());
-		if (settlement.isEmpty()) {
-			return InteractionResult.PASS;
-		}
-		if (player.isShiftKeyDown() && isFood(serverPlayer.getMainHandItem())) {
-			offerFood(serverPlayer, villager, settlement.get(), data);
-			return InteractionResult.SUCCESS;
-		}
-		if (!player.isShiftKeyDown()) {
-			describe(serverPlayer, villager, settlement.get(), data);
-		}
 		return InteractionResult.PASS;
 	}
 
+	/** Server-only entry, called after vanilla important-item interactions (name tags/spawn eggs).
+	 * Vanilla interaction packets enforce reach; gift/invitation services retain their distance checks. */
+	public static InteractionResult onMobInteract(Villager villager, Player player, InteractionHand hand) {
+		if (!(villager.level() instanceof ServerLevel level)) return InteractionResult.PASS;
+		var membership = SettlementMembershipClaims.resolve(level, villager.getUUID());
+		boolean eligible = player instanceof ServerPlayer && player.level() == level
+			&& level.getEntity(villager.getUUID()) == villager
+			&& villager.isAlive() && !villager.isRemoved() && player.isAlive() && !player.isRemoved()
+			&& !player.isSpectator() && !villager.isSleeping() && !villager.isTrading();
+		ItemStack held = player.getItemInHand(hand);
+		Route route = route(membership, level.dimension(), hand, held.is(Items.VILLAGER_SPAWN_EGG),
+			eligible, player.isShiftKeyDown(), isFood(held), held.isEmpty());
+		if (route == Route.PASS) return InteractionResult.PASS;
+		if (route == Route.SILENT) return InteractionResult.CONSUME;
+		ServerPlayer serverPlayer = (ServerPlayer) player;
+		if (route == Route.ORPHAN || route == Route.CONFLICT || route == Route.UNAVAILABLE) {
+			serverPlayer.sendSystemMessage(diagnostic(route, nameOf(villager)));
+			return InteractionResult.CONSUME;
+		}
+		var claim = membership.uniqueClaim().orElseThrow();
+		if (route == Route.AWAY) {
+			serverPlayer.sendSystemMessage(awayMessage(nameOf(villager), claim, level.dimension()));
+			return InteractionResult.CONSUME;
+		}
+		// Only a unique claim in this actual dimension may reach local world/inventory operations.
+		switch (route) {
+			case GIFT -> offerFood(serverPlayer, villager, claim.settlement(), claim.data());
+			case INVITE -> {
+				String result = VillagerWorkGoal.inviteToMeeting(serverPlayer, villager, claim.data(), claim.settlement());
+				serverPlayer.sendSystemMessage(Component.translatable("coopcraft.interaction.meeting." + result, nameOf(villager)));
+			}
+			case DESCRIBE -> {
+				if (!ResidentDialogService.open(serverPlayer, villager, claim.data(), claim.settlement())) {
+					describe(serverPlayer, villager, claim.settlement(), claim.data());
+				}
+			}
+			default -> throw new IllegalStateException("Unexpected resident interaction route: " + route);
+		}
+		return InteractionResult.CONSUME;
+	}
+
+	/** Identity is independent of hand, distance, stage, survival and production settings. */
+	public static boolean blocksVanillaTrade(SettlementMembershipClaims.Resolution membership) {
+		return membership.status() != SettlementMembershipClaims.Status.NONE;
+	}
+
+	/** Shared production decision seam. PASS is only safe for nonmembers or vanilla's egg exception. */
+	static Route route(SettlementMembershipClaims.Resolution membership, ResourceKey<Level> currentDimension,
+		InteractionHand hand, boolean villagerSpawnEgg, boolean eligible, boolean sneaking, boolean food, boolean empty) {
+		if (!blocksVanillaTrade(membership) || villagerSpawnEgg) return Route.PASS;
+		if (hand != InteractionHand.MAIN_HAND || !eligible) return Route.SILENT;
+		return switch (membership.status()) {
+			case NONE -> Route.PASS;
+			case ORPHAN -> Route.ORPHAN;
+			case CONFLICT -> Route.CONFLICT;
+			case UNAVAILABLE -> Route.UNAVAILABLE;
+			case UNIQUE -> membership.uniqueClaim().map(claim -> {
+				if (!claim.dimension().equals(currentDimension)) return Route.AWAY;
+				if (!sneaking) return Route.DESCRIBE;
+				if (food) return Route.GIFT;
+				return empty ? Route.INVITE : Route.SILENT;
+			}).orElse(Route.UNAVAILABLE);
+		};
+	}
+
+	static Component diagnostic(Route route, Component name) {
+		String key = switch (route) {
+			case ORPHAN -> "orphan";
+			case CONFLICT -> "conflict";
+			case UNAVAILABLE -> "unavailable";
+			default -> throw new IllegalArgumentException("Not a membership diagnostic: " + route);
+		};
+		return Component.translatable("coopcraft.interaction.membership." + key, name);
+	}
+
+	static Component awayMessage(Component name, SettlementMembershipClaims.Claim claim, ResourceKey<Level> currentDimension) {
+		return Component.translatable("coopcraft.interaction.membership.away", name, claim.settlement().name(),
+			claim.dimension().location().toString(), currentDimension.location().toString());
+	}
+
+	enum Route { PASS, SILENT, DESCRIBE, GIFT, INVITE, AWAY, ORPHAN, CONFLICT, UNAVAILABLE }
+
 	static OfferResult offerFood(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
-		if (!villager.isAlive()) {
+		if (!villager.isAlive() || !player.isAlive()) {
 			return refuse(player, villager, "not_alive");
 		}
 		if (player.isSpectator()) {
@@ -67,105 +125,41 @@ public final class VillagerInteraction {
 		if (player.distanceToSqr(villager) > OFFER_DISTANCE_SQUARED) {
 			return refuse(player, villager, "too_far");
 		}
-		ItemStack held = player.getMainHandItem();
-		if (!isFood(held)) {
-			return refuse(player, villager, "not_food");
+		if (!(villager.level() instanceof ServerLevel level) || player.level() != level) {
+			return refuse(player, villager, "wrong_level");
 		}
-		if (!held.getComponentsPatch().isEmpty()) {
-			return refuse(player, villager, "unsupported_food");
-		}
-		Component itemDisplayName = held.getHoverName();
-		String itemName = held.getItem().getDescriptionId();
-
-		ServerLevel level = (ServerLevel) villager.level();
-		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		if (personId == null) {
-			state.mapResident(villager.getUUID(), villager.isBaby(), data.needsOf(settlement, villager.getUUID()).satiety());
-			personId = state.residentId(villager.getUUID()).orElseThrow();
-			data.setDirty();
-		}
-		Person person = state.world().person(personId);
-		boolean survival = state.survivalEnabled();
-		boolean supportedFood = isSupportedFood(held, survival);
-		Container stockpile = survival ? null : SettlementStockpile.getStockpile(level, data, settlement);
-		if (!survival && stockpile == null) {
-			return refuse(player, villager, "no_stockpile");
-		}
-
-		String playerActor = PLAYER_ACTOR_PREFIX + player.getUUID();
-		int trust = person.trustIn(playerActor);
-		VillagerPersonality personality = data.personalityOf(settlement, villager.getUUID());
-		VillagerInteractionDecision.Decision decision = VillagerInteractionDecision.decide(
-			satietyOf(data, settlement, state, villager),
-			data.registeredCount(settlement),
-			communalFoodUnits(state, stockpile),
-			trust,
-			personality.sociability(),
-			supportedFood
-		);
-		if (!decision.accepted()) {
-			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), decision.reason(), trust
-			);
-			data.setDirty();
-			return refuse(player, villager, decision.reason());
-		}
-
-		int moved;
-		if (survival) {
-			ResourceType resourceType = MinecraftStockpileAdapter.resourceType(held).orElseThrow();
-			long requestId = state.world().recordShareRequest(personId, playerActor, Math.max(1, person.hunger()));
-			moved = MinecraftStockpileAdapter.importToSimulation(
-				player.getInventory(),
-				state.world(),
-				state.campOwner(),
-				resourceType,
-				1,
-				List.of(personId, playerActor),
-				Map.of(
-					"activity", "player_gift",
-					"playerName", player.getScoreboardName(),
-					"villagerId", villager.getUUID().toString()
-				),
-				List.of(requestId)
-			);
-		} else {
-			ItemStack removed = removeOneFood(player.getInventory(), held.getItem());
-			if (removed.isEmpty()) {
-				return refuse(player, villager, "transfer_failed");
-			}
-			moved = SettlementStockpile.insert(stockpile, removed);
-			if (moved == 0) {
-				player.getInventory().placeItemBackInInventory(removed);
-				return refuse(player, villager, "stockpile_full");
-			}
-		}
-		if (moved == 0) {
-			state.world().recordGiftInteraction(
-				personId, playerActor, false, itemName, player.getScoreboardName(), "transfer_failed", trust
-			);
-			data.setDirty();
-			return refuse(player, villager, "transfer_failed");
-		}
-
-		person.recordAidFrom(playerActor);
-		state.world().recordGiftInteraction(
-			personId, playerActor, true, itemName, player.getScoreboardName(), decision.reason(), person.trustIn(playerActor)
-		);
-		data.setDirty();
+		if (!data.isMember(settlement, villager.getUUID())) return refuse(player, villager, "not_member");
+		int slot = player.getInventory().selected;
+		ItemStack held = player.getMainHandItem().copy();
+		Container stockpile = SettlementSimulationService.isSurvivalEnabled(data, settlement)
+			? null : SettlementStockpile.getStockpile(level, data, settlement);
+		OfferResult result = VillagerGiftService.offer(data, settlement, villager.getUUID(), villager.isBaby(),
+			PLAYER_ACTOR_PREFIX + player.getUUID(), player.getScoreboardName(), player.getInventory(), slot,
+			() -> player.getInventory().selected, held, stockpile, level.getDayTime() / Level.TICKS_PER_DAY);
+		if (!result.accepted()) return refuse(player, villager, result.reason());
 		player.displayClientMessage(Component.translatable(
-			"coopcraft.interaction.accepted", nameOf(villager), itemDisplayName
-		), false);
-		return new OfferResult(true, decision.reason(), moved);
+			"coopcraft.interaction.accepted", nameOf(villager), held.getHoverName(), reason(result.reason())), false);
+		return result;
 	}
 
 	private static void describe(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		inspectLines(player, villager, settlement, data).forEach(player::sendSystemMessage);
+	}
+
+	/** Shared read-only description for chat compatibility and the resident window. */
+	static List<Component> inspectLines(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		List<Component> lines = new ArrayList<>(inspectCoreLines(player, villager, settlement, data));
+		lines.addAll(SettlementFoodSharingMemories.inspect(data, settlement, villager.getUUID()));
+		return List.copyOf(lines);
+	}
+
+	static List<Component> inspectCoreLines(ServerPlayer player, Villager villager, Settlement settlement, SettlementSavedData data) {
+		List<Component> lines = new ArrayList<>();
 		ServerLevel level = (ServerLevel) villager.level();
-		Component name = nameOf(villager);
+		Component name = Component.literal(nameOf(villager).getString());
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		int satiety = satietyOf(data, settlement, state, villager);
-		player.sendSystemMessage(Component.translatable(
+		lines.add(Component.translatable(
 			"coopcraft.interaction.inspect",
 			name,
 			Component.translatable("coopcraft.work_role." + LaborAllocator.roleOf(level, data, settlement, villager.getUUID()).id()),
@@ -174,27 +168,40 @@ public final class VillagerInteraction {
 		VillagerWorkGoal.WorkStatus status = VillagerWorkGoal.statusOf(villager);
 		Component action = Component.translatable("coopcraft.interaction.action." + status.action());
 		if (status.blocker() != null) {
-			player.sendSystemMessage(Component.translatable(
+			lines.add(Component.translatable(
 				"coopcraft.interaction.inspect_action_blocked",
 				action,
 				Component.translatable("coopcraft.interaction.blocker." + status.blocker())
 			));
 		} else if (status.target() != null) {
-			player.sendSystemMessage(Component.translatable(
+			lines.add(Component.translatable(
 				"coopcraft.interaction.inspect_action_target", action, status.target().toShortString()
 			));
 		} else {
-			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_action", action));
+			lines.add(Component.translatable("coopcraft.interaction.inspect_action", action));
 		}
+		lines.add(Component.translatable("coopcraft.interaction.meeting.inspect_" + VillagerWorkGoal.invitationStatus(villager)));
+		lines.addAll(ResidentMeetingView.socialWorkCost(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY));
+		VillagerMeetingInquiry.inspect(data, settlement, villager.getUUID(), level.getDayTime() / Level.TICKS_PER_DAY)
+			.forEach(lines::add);
+		lines.add(Component.translatable("coopcraft.interaction.meeting.hint"));
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
-		player.sendSystemMessage(Component.translatable(
-			"coopcraft.interaction.inspect_food",
-			communalFoodUnits(state, stockpile),
-			(long) Math.max(1, data.registeredCount(settlement)) * VillagerInteractionDecision.FOOD_RESERVE_UNITS_PER_MEMBER
-		));
-		if (isFood(player.getMainHandItem())) {
-			player.sendSystemMessage(Component.translatable("coopcraft.interaction.inspect_hint"));
+		lines.add(SettlementCommands.reservesMessage(settlement.name(),
+			SettlementReserves.inspect(data, settlement, stockpile)));
+		if (state != null) {
+			long day = level.getDayTime() / Level.TICKS_PER_DAY;
+			boolean careRequest = state.careFoodRequest(villager.getUUID(), day).isPresent();
+			boolean foodAvailable = state.survivalEnabled()
+				? SettlementSimulationService.hasFood(data, settlement)
+				: SettlementNeeds.hasFood(villager.getInventory(), stockpile);
+			if (careRequest && !foodAvailable) {
+				lines.add(Component.translatable("coopcraft.interaction.care_food_request", name));
+			}
 		}
+		if (isFood(player.getMainHandItem())) {
+			lines.add(Component.translatable("coopcraft.interaction.inspect_hint"));
+		}
+		return List.copyOf(lines);
 	}
 
 	private static OfferResult refuse(ServerPlayer player, Villager villager, String reason) {
@@ -204,7 +211,7 @@ public final class VillagerInteraction {
 		return new OfferResult(false, reason, 0);
 	}
 
-	private static Component nameOf(Villager villager) {
+	static Component nameOf(Villager villager) {
 		return villager.getCustomName() == null
 			? Component.literal(VillagerNames.fullName(villager.getUUID())) : villager.getCustomName();
 	}
@@ -213,20 +220,20 @@ public final class VillagerInteraction {
 		return Component.translatable("coopcraft.interaction.reason." + reason);
 	}
 
-	private static boolean isFood(ItemStack stack) {
+	static boolean isFood(ItemStack stack) {
 		if (stack.isEmpty()) {
 			return false;
 		}
-		if (Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0) > 0) {
+		if (SettlementFood.points(stack.getItem()) > 0) {
 			return true;
 		}
 		return MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent();
 	}
 
-	private static boolean isSupportedFood(ItemStack stack, boolean survival) {
+	static boolean isSupportedFood(ItemStack stack, boolean survival) {
 		return survival
 			? MinecraftStockpileAdapter.resourceType(stack).filter(ResourceType::isFood).isPresent()
-			: Villager.FOOD_POINTS.getOrDefault(stack.getItem(), 0) > 0;
+			: SettlementFood.points(stack.getItem()) > 0;
 	}
 
 	private static int satietyOf(
@@ -241,26 +248,6 @@ public final class VillagerInteraction {
 				.orElseGet(() -> data.needsOf(settlement, villager.getUUID()).satiety());
 		}
 		return data.needsOf(settlement, villager.getUUID()).satiety();
-	}
-
-	private static long communalFoodUnits(SettlementSimulationState state, Container stockpile) {
-		if (state != null && state.survivalEnabled()) {
-			return state.world().batchesAt(state.campOwner()).stream()
-				.filter(batch -> batch.resourceType().isFood())
-				.mapToLong(ResourceBatch::quantity)
-				.sum();
-		}
-		return SettlementStockpile.communalFoodPoints(stockpile);
-	}
-
-	private static ItemStack removeOneFood(Container inventory, net.minecraft.world.item.Item item) {
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			ItemStack stack = inventory.getItem(slot);
-			if (stack.is(item) && stack.getComponentsPatch().isEmpty()) {
-				return inventory.removeItem(slot, 1);
-			}
-		}
-		return ItemStack.EMPTY;
 	}
 
 	record OfferResult(boolean accepted, String reason, int moved) {

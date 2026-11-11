@@ -2,12 +2,14 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import com.thysummer.coopcraft.civilization.simulation.Camp;
 import com.thysummer.coopcraft.civilization.simulation.EventType;
@@ -29,33 +31,65 @@ import com.thysummer.coopcraft.civilization.simulation.WorkType;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 
 public final class SettlementSimulationState {
 	private final Settlement settlement;
 	private final SimulationWorld world;
 	private final NormSystem norms;
-	private static final int DAILY_FOOD_UNIT_CAP = 3;
+	private final UUID foodClockId;
+	private final Tag invalidFoodClockTag;
+	static final int DAILY_FOOD_UNIT_CAP = 3;
 
 	private final Map<UUID, String> residentIds = new LinkedHashMap<>();
+	// Derived identity index only; personality stays exclusively on the saved member.
+	private final Map<Person, UUID> residentUuids = new IdentityHashMap<>();
 	private final Map<String, Integer> foodAllocations = new LinkedHashMap<>();
+	private final Map<String, Long> craftLessonDays = new LinkedHashMap<>();
+	private Tag invalidCraftLessons;
 	private boolean survivalEnabled;
 	private boolean productionEnabled;
 	private boolean growthEnabled;
 	private boolean skillsEnabled;
 	private boolean normsEnabled;
+	private boolean autonomousMeetingsEnabled;
+	private Tag invalidAutonomousMeetings;
+	private long autonomousMeetingsVersion;
+	private long foodRequestModeVersion;
+
+	long foodRequestModeVersion() { return foodRequestModeVersion; }
 	private long lastSurvivalDay = Long.MIN_VALUE;
 	private long foodAllocationDay = Long.MIN_VALUE;
+	private final Map<UUID, CareAssignment> careAssignments = new LinkedHashMap<>();
+	private long carePlanDay = Long.MIN_VALUE;
+	private final Map<UUID, Long> careFoodRequests = new LinkedHashMap<>();
+	private long careFoodRequestDay = Long.MIN_VALUE;
+	private CoordinationPlan coordinationPlan = CoordinationPlan.empty(-1);
+	private boolean coordinationDirty = true;
 
-	private SettlementSimulationState(Settlement settlement, SimulationWorld world) {
+	private SettlementSimulationState(Settlement settlement, SimulationWorld world, UUID foodClockId,
+		Tag invalidFoodClockTag) {
 		this.settlement = settlement;
 		this.world = world;
-		this.norms = new NormSystem(world, SimulationConfig.defaults());
+		this.norms = new NormSystem(world, SimulationConfig.defaults(), DAILY_FOOD_UNIT_CAP);
+		this.foodClockId = foodClockId;
+		this.invalidFoodClockTag = invalidFoodClockTag;
 	}
 
 	public static SettlementSimulationState create(Settlement settlement) {
+		return create(settlement, UUID.randomUUID(), null);
+	}
+
+	private static SettlementSimulationState create(Settlement settlement, UUID foodClockId,
+		Tag invalidFoodClockTag) {
 		SimulationWorld world = new SimulationWorld();
 		world.registerCamp(new Camp(campId(settlement), settlement.name()));
-		return new SettlementSimulationState(settlement, world);
+		return new SettlementSimulationState(settlement, world, foodClockId, invalidFoodClockTag);
+	}
+
+	/** Independent of camp IDs and mode toggles; a corrupt saved identity remains unavailable. */
+	public Optional<UUID> foodClockId() {
+		return Optional.ofNullable(foodClockId);
 	}
 
 	public SimulationWorld world() {
@@ -64,6 +98,24 @@ public final class SettlementSimulationState {
 
 	public NormSystem norms() {
 		return norms;
+	}
+
+	/** Bind only from the owning SavedData; standalone simulations retain neutral opinions. */
+	void bindOpinionPersonality(Function<UUID, VillagerPersonality> memberPersonality) {
+		norms.setOpinionSelfishnessProvider(person -> {
+			VillagerPersonality personality = opinionPersonality(person, memberPersonality);
+			return personality != null ? personality.selfishness() : 50;
+		});
+		norms.setOpinionGenerosityProvider(person -> {
+			VillagerPersonality personality = opinionPersonality(person, memberPersonality);
+			return personality != null && personality.traits().contains(VillagerTrait.GENEROUS);
+		});
+	}
+
+	private VillagerPersonality opinionPersonality(Person person, Function<UUID, VillagerPersonality> memberPersonality) {
+		UUID resident = residentUuids.get(person);
+		return resident != null && person.id().equals(residentIds.get(resident))
+			? memberPersonality.apply(resident) : null;
 	}
 
 	public StorageOwner campOwner() {
@@ -87,6 +139,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setProductionEnabled(boolean enabled) {
+		if (productionEnabled != enabled) foodRequestModeVersion++;
 		productionEnabled = enabled;
 	}
 
@@ -103,6 +156,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setSkillsEnabled(boolean enabled) {
+		if (skillsEnabled != enabled) foodRequestModeVersion++;
 		skillsEnabled = enabled;
 	}
 
@@ -111,7 +165,41 @@ public final class SettlementSimulationState {
 	}
 
 	public void setNormsEnabled(boolean enabled) {
+		if (normsEnabled != enabled) foodRequestModeVersion++;
 		normsEnabled = enabled;
+	}
+
+	public boolean autonomousMeetingsAvailable() { return invalidAutonomousMeetings == null; }
+
+	public boolean autonomousMeetingsEnabled() { return autonomousMeetingsEnabled; }
+
+	long autonomousMeetingsVersion() { return autonomousMeetingsVersion; }
+
+	/** Unsupported optional data must survive even an explicit attempt to change this setting. */
+	public void setAutonomousMeetingsEnabled(boolean enabled) {
+		if (!autonomousMeetingsAvailable() || autonomousMeetingsEnabled == enabled) return;
+		autonomousMeetingsEnabled = enabled;
+		autonomousMeetingsVersion++;
+	}
+
+	private Tag saveAutonomousMeetings() {
+		if (invalidAutonomousMeetings != null) return invalidAutonomousMeetings.copy();
+		CompoundTag result = new CompoundTag();
+		result.putInt("Version", 1);
+		result.putBoolean("Enabled", autonomousMeetingsEnabled);
+		return result;
+	}
+
+	private void loadAutonomousMeetings(Tag raw) {
+		if (raw == null) return; // Existing worlds never opt in implicitly.
+		if (raw instanceof CompoundTag root && root.getAllKeys().equals(Set.of("Version", "Enabled"))
+			&& root.contains("Version", Tag.TAG_INT) && root.getInt("Version") == 1
+			&& root.contains("Enabled", Tag.TAG_BYTE)
+			&& (root.getByte("Enabled") == 0 || root.getByte("Enabled") == 1)) {
+			autonomousMeetingsEnabled = root.getByte("Enabled") == 1;
+			return;
+		}
+		invalidAutonomousMeetings = raw.copy();
 	}
 
 	public long lastSurvivalDay() {
@@ -119,6 +207,7 @@ public final class SettlementSimulationState {
 	}
 
 	public void setSurvivalEnabled(boolean enabled, long currentDay) {
+		if (survivalEnabled != enabled) foodRequestModeVersion++;
 		survivalEnabled = enabled;
 		lastSurvivalDay = currentDay;
 	}
@@ -149,7 +238,12 @@ public final class SettlementSimulationState {
 		foodAllocations.put(personId, total);
 	}
 
-	private int dailyFoodUnitCap(String personId) {
+	/** Current-day persisted allocation count, without advancing or resetting its ledger. */
+	public int allocatedFoodUnits(String personId) {
+		return foodAllocationDay == world.day() ? foodAllocations.getOrDefault(personId, 0) : 0;
+	}
+
+	public int dailyFoodUnitCap(String personId) {
 		int baseCap = normsEnabled ? world.norm(campOwner().id(), Norm.NEED_FIRST_COMMON_STORE)
 			.filter(Norm::isActive)
 			.map(Norm::allocationUnitCap)
@@ -211,21 +305,194 @@ public final class SettlementSimulationState {
 		);
 		world.registerPerson(person);
 		residentIds.put(villagerId, personId);
+		residentUuids.put(person, villagerId);
 		return true;
 	}
 
 	public List<SimulationEvent> recentEvents(int limit) {
-		if (limit < 0) {
-			throw new IllegalArgumentException("Event limit cannot be negative");
+		return world.ledger().recentEvents(limit);
+	}
+
+	boolean craftLessonsAvailable() { return invalidCraftLessons == null; }
+
+	boolean craftLessonUsed(String personId) {
+		long day = world.day();
+		return day < 0 || craftLessonDays.values().stream().anyMatch(previous -> previous > day)
+			|| craftLessonDays.getOrDefault(personId, Long.MIN_VALUE) >= day;
+	}
+
+	void recordCraftLesson(String teacher, String learner) {
+		craftLessonDays.put(teacher, world.day());
+		craftLessonDays.put(learner, world.day());
+	}
+
+	private Tag saveCraftLessons() {
+		if (invalidCraftLessons != null) return invalidCraftLessons.copy();
+		CompoundTag result = new CompoundTag();
+		result.putInt("Version", 1);
+		CompoundTag days = new CompoundTag();
+		craftLessonDays.forEach(days::putLong);
+		result.put("LastDays", days);
+		return result;
+	}
+
+	private void loadCraftLessons(Tag raw) {
+		if (raw == null) return; // Legacy worlds have no invented attendance history.
+		if (raw instanceof CompoundTag root && root.getAllKeys().equals(Set.of("Version", "LastDays"))
+			&& root.contains("Version", Tag.TAG_INT) && root.getInt("Version") == 1
+			&& root.contains("LastDays", Tag.TAG_COMPOUND)) {
+			CompoundTag days = root.getCompound("LastDays");
+			boolean valid = days.getAllKeys().stream().allMatch(id -> !id.isBlank()
+				&& days.contains(id, Tag.TAG_LONG) && days.getLong(id) >= 0);
+			if (valid) {
+				for (String id : days.getAllKeys()) craftLessonDays.put(id, days.getLong(id));
+				return;
+			}
 		}
-		List<SimulationEvent> events = world.ledger().events();
-		int fromIndex = Math.max(0, events.size() - limit);
-		return List.copyOf(events.subList(fromIndex, events.size()));
+		// Unknown versions and malformed optional data only disable this feature, losslessly.
+		invalidCraftLessons = raw.copy();
+	}
+
+	public List<CareAssignment> careAssignments() {
+		return careAssignments.values().stream()
+			.sorted(Comparator.comparing(assignment -> assignment.dependentId().toString()))
+			.toList();
+	}
+
+	public Optional<CareAssignment> careForCaregiver(UUID caregiverId) {
+		return careAssignments.values().stream().filter(assignment -> assignment.caregiverId().equals(caregiverId)).findFirst();
+	}
+
+	public Optional<CareAssignment> careForDependent(UUID dependentId) {
+		return Optional.ofNullable(careAssignments.get(dependentId));
+	}
+
+	public long carePlanDay() {
+		return carePlanDay;
+	}
+
+	public Optional<Long> careFoodRequest(UUID dependentId, long currentDay) {
+		if (careFoodRequestDay != currentDay) {
+			return Optional.empty();
+		}
+		return Optional.ofNullable(careFoodRequests.get(dependentId));
+	}
+
+	long ensureCareFoodRequest(UUID dependentId, long currentDay, long neededNutrition) {
+		if (currentDay < 0 || neededNutrition <= 0) {
+			throw new IllegalArgumentException("Care food request needs a valid day and nutrition need");
+		}
+		String dependentPerson = residentId(dependentId)
+			.orElseThrow(() -> new IllegalArgumentException("Care food request requires a mapped dependent"));
+		if (careFoodRequestDay != currentDay) {
+			careFoodRequests.clear();
+			careFoodRequestDay = currentDay;
+		}
+		Long existing = careFoodRequests.get(dependentId);
+		if (existing != null) {
+			return existing;
+		}
+		long request = world.recordShareRequest(
+			dependentPerson, campOwner().id(), neededNutrition,
+			Map.of(
+				"reason", "care_food",
+				"minecraftDay", Long.toString(currentDay),
+				"villagerId", dependentId.toString()
+			)
+		);
+		careFoodRequests.put(dependentId, request);
+		return request;
+	}
+
+	void replaceCareAssignments(long day, List<CareAssignment> assignments) {
+		if (day < 0) {
+			throw new IllegalArgumentException("Care plan day cannot be negative");
+		}
+		java.util.Set<UUID> caregivers = new java.util.HashSet<>();
+		for (CareAssignment assignment : assignments) {
+			if (assignment.day() != day || !caregivers.add(assignment.caregiverId())) {
+				throw new IllegalArgumentException("Invalid care plan");
+			}
+		}
+		careAssignments.clear();
+		carePlanDay = day;
+		for (CareAssignment assignment : assignments) {
+			if (careAssignments.putIfAbsent(assignment.dependentId(), assignment) != null) {
+				throw new IllegalArgumentException("A dependent cannot have two caregivers");
+			}
+		}
+	}
+
+	void updateCareAssignment(CareAssignment assignment) {
+		CareAssignment previous = careAssignments.get(assignment.dependentId());
+		if (previous == null || previous.completed() || !previous.caregiverId().equals(assignment.caregiverId())
+			|| previous.day() != assignment.day() || assignment.day() != carePlanDay
+			|| assignment.elapsedTicks() != previous.elapsedTicks() + 1) {
+			throw new IllegalArgumentException("Care progress must advance exactly once");
+		}
+		careAssignments.put(assignment.dependentId(), assignment);
+	}
+
+	void resetCareHours() {
+		for (String personId : residentIds.values()) {
+			world.person(personId).resetCareHours();
+		}
+	}
+
+	public CoordinationPlan coordinationPlan() {
+		return coordinationPlan;
+	}
+
+	public boolean coordinationDirty() {
+		return coordinationDirty;
+	}
+
+	public void requestCoordinationReplan() {
+		coordinationDirty = true;
+	}
+
+	public void clearCoordinationDirty() {
+		coordinationDirty = false;
+	}
+
+	void replaceCoordinationPlan(CoordinationPlan plan) {
+		if (plan.day() < 0) {
+			throw new IllegalArgumentException("Coordination plan day cannot be negative");
+		}
+		for (WorkReservation reservation : plan.reservations()) {
+			if (!residentIds.containsKey(reservation.actorId())) {
+				throw new IllegalArgumentException("A reservation requires a mapped resident");
+			}
+		}
+		coordinationPlan = plan;
+		coordinationDirty = false;
+	}
+
+	void updateWorkReservation(WorkReservation reservation) {
+		WorkReservation previous = coordinationPlan.reservationFor(reservation.actorId()).orElse(null);
+		if (previous == null || previous.day() != coordinationPlan.day()
+			|| !previous.id().equals(reservation.id()) || !previous.needId().equals(reservation.needId())
+			|| previous.task() != reservation.task()) {
+			throw new IllegalArgumentException("Work reservation identity cannot change");
+		}
+		List<WorkReservation> updated = new ArrayList<>();
+		for (WorkReservation current : coordinationPlan.reservations()) {
+			updated.add(current.actorId().equals(reservation.actorId()) ? reservation : current);
+		}
+		coordinationPlan = new CoordinationPlan(coordinationPlan.day(), coordinationPlan.signals(), updated);
 	}
 
 	CompoundTag save() {
 		CompoundTag tag = new CompoundTag();
+		if (foodClockId != null) {
+			tag.putUUID("FoodClockId", foodClockId);
+		} else {
+			// Retain malformed or future data verbatim rather than silently giving it a fresh clock.
+			tag.put("FoodClockId", invalidFoodClockTag.copy());
+		}
 		tag.putLong("Day", world.day());
+		tag.put("CraftLessons", saveCraftLessons());
+		tag.put("AutonomousMeetings", saveAutonomousMeetings());
 		tag.putLong("NextBatchId", world.nextBatchId());
 		tag.putBoolean("SurvivalEnabled", survivalEnabled);
 		tag.putBoolean("ProductionEnabled", productionEnabled);
@@ -233,6 +500,7 @@ public final class SettlementSimulationState {
 		tag.putBoolean("SkillsEnabled", skillsEnabled);
 		tag.putBoolean("NormsEnabled", normsEnabled);
 		tag.putLong("LastSurvivalDay", lastSurvivalDay);
+		tag.putLong("LastMeetingDay", norms.lastMeetingDay(campOwner().id()));
 		tag.putLong("FoodAllocationDay", foodAllocationDay);
 		ListTag allocations = new ListTag();
 		for (Map.Entry<String, Integer> entry : foodAllocations.entrySet().stream()
@@ -243,6 +511,33 @@ public final class SettlementSimulationState {
 			allocations.add(allocation);
 		}
 		tag.put("FoodAllocations", allocations);
+		tag.putLong("CarePlanDay", carePlanDay);
+		ListTag careList = new ListTag();
+		for (CareAssignment assignment : careAssignments()) {
+			careList.add(assignment.save());
+		}
+		tag.put("CareAssignments", careList);
+		tag.putLong("CareFoodRequestDay", careFoodRequestDay);
+		ListTag careFoodRequests = new ListTag();
+		for (Map.Entry<UUID, Long> entry : this.careFoodRequests.entrySet().stream()
+			.sorted(Map.Entry.comparingByKey(Comparator.comparing(UUID::toString))).toList()) {
+			CompoundTag request = new CompoundTag();
+			request.putUUID("VillagerId", entry.getKey());
+			request.putLong("EventId", entry.getValue());
+			careFoodRequests.add(request);
+		}
+		tag.put("CareFoodRequests", careFoodRequests);
+		tag.putLong("CoordinationDay", coordinationPlan.day());
+		ListTag needs = new ListTag();
+		for (NeedSignal signal : coordinationPlan.signals()) {
+			needs.add(signal.save());
+		}
+		tag.put("NeedSignals", needs);
+		ListTag work = new ListTag();
+		for (WorkReservation reservation : coordinationPlan.orderedReservations()) {
+			work.add(reservation.save());
+		}
+		tag.put("WorkReservations", work);
 		ListTag residents = new ListTag();
 		for (Map.Entry<UUID, String> entry : residentIds.entrySet().stream()
 			.sorted(Map.Entry.comparingByKey(Comparator.comparing(UUID::toString)))
@@ -255,6 +550,15 @@ public final class SettlementSimulationState {
 			resident.putString("AgeBand", person.ageBand().name());
 			resident.putLong("AgeDays", person.ageDays());
 			resident.putInt("Hunger", person.hunger());
+			if (person.hasFoodDayHistory()) {
+				CompoundTag history = new CompoundTag();
+				history.putLong("ObservedDays", person.observedFoodDays());
+				history.putLong("HungerDays", person.hungerDays());
+				history.putInt("HungerStreak", person.hungerStreak());
+				history.putLong("LastCoreDay", person.lastObservedFoodDay());
+				history.putLong("LastGameDay", person.lastObservedFoodGameDay());
+				resident.put("FoodDayHistory", history);
+			}
 			resident.putInt("RiskPreference", person.riskPreference());
 			if (!person.parents().isEmpty()) {
 				resident.put("Parents", saveStrings(person.parents()));
@@ -292,12 +596,16 @@ public final class SettlementSimulationState {
 	}
 
 	static SettlementSimulationState load(Settlement settlement, CompoundTag tag) {
-		SettlementSimulationState state = create(settlement);
+		UUID foodClockId = !tag.contains("FoodClockId") ? UUID.randomUUID()
+			: tag.hasUUID("FoodClockId") ? tag.getUUID("FoodClockId") : null;
+		Tag invalidFoodClockTag = foodClockId == null ? tag.get("FoodClockId").copy() : null;
+		SettlementSimulationState state = create(settlement, foodClockId, invalidFoodClockTag);
 		state.survivalEnabled = tag.contains("SurvivalEnabled") && tag.getBoolean("SurvivalEnabled");
 		state.productionEnabled = tag.contains("ProductionEnabled") && tag.getBoolean("ProductionEnabled");
 		state.growthEnabled = tag.contains("GrowthEnabled") && tag.getBoolean("GrowthEnabled");
 		state.skillsEnabled = tag.contains("SkillsEnabled") && tag.getBoolean("SkillsEnabled");
 		state.normsEnabled = tag.contains("NormsEnabled") && tag.getBoolean("NormsEnabled");
+		state.loadAutonomousMeetings(tag.get("AutonomousMeetings"));
 		state.lastSurvivalDay = tag.contains("LastSurvivalDay") ? tag.getLong("LastSurvivalDay") : Long.MIN_VALUE;
 		ListTag residents = tag.getList("Residents", ListTag.TAG_COMPOUND);
 		Map<String, List<String>> parentage = new LinkedHashMap<>();
@@ -327,8 +635,10 @@ public final class SettlementSimulationState {
 			if (resident.contains("Social")) {
 				loadSocial(person, resident.getCompound("Social"));
 			}
+			loadFoodDayHistory(person, resident, tag.getLong("Day"), state.lastSurvivalDay);
 			state.world.registerPerson(person);
 			state.residentIds.put(resident.getUUID("VillagerId"), person.id());
+			state.residentUuids.put(person, resident.getUUID("VillagerId"));
 			if (resident.contains("Parents")) {
 				parentage.put(person.id(), loadStrings(resident.getList("Parents", ListTag.TAG_STRING)));
 			}
@@ -355,6 +665,7 @@ public final class SettlementSimulationState {
 		for (int i = 0; i < proposals.size(); i++) {
 			state.world.registerProposal(loadProposal(proposals.getCompound(i)));
 		}
+		// Restore the recorded date verbatim. Only a new allocation may roll this ledger forward.
 		state.foodAllocationDay = tag.contains("FoodAllocationDay") ? tag.getLong("FoodAllocationDay") : Long.MIN_VALUE;
 		ListTag allocations = tag.getList("FoodAllocations", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < allocations.size(); i++) {
@@ -363,13 +674,78 @@ public final class SettlementSimulationState {
 			if (units <= 0) {
 				throw new IllegalArgumentException("Restored food allocation must be positive");
 			}
-			if (state.foodAllocationDay != state.world.day()) {
-				state.foodAllocationDay = state.world.day();
-				state.foodAllocations.clear();
-			}
 			state.foodAllocations.put(allocation.getString("PersonId"), units);
 		}
+		long lastMeetingDay = Long.MIN_VALUE;
+		long savedMeetingDay = tag.getLong("LastMeetingDay");
+		if (tag.contains("LastMeetingDay", ListTag.TAG_LONG)
+			&& (savedMeetingDay == Long.MIN_VALUE || (savedMeetingDay >= 0 && savedMeetingDay <= state.world.day()))) {
+			lastMeetingDay = savedMeetingDay;
+		} else {
+			// Legacy rounds reserve only their own current core day; they do not prove attendance.
+			boolean deliberatedToday = state.world.ledger().eventsAtDay(state.world.day()).stream()
+				.filter(event -> event.type() == EventType.NORM_DELIBERATED)
+				.anyMatch(event -> state.world.proposal(event.context().getOrDefault("proposalId", ""))
+					.filter(proposal -> proposal.campId().equals(state.campOwner().id())).isPresent());
+			if (deliberatedToday) lastMeetingDay = state.world.day();
+		}
+		state.norms.restoreLastMeetingDay(state.campOwner().id(), lastMeetingDay);
+		state.norms.restoreChargedSupervision();
+		state.loadCraftLessons(tag.get("CraftLessons"));
+		state.carePlanDay = tag.contains("CarePlanDay") ? tag.getLong("CarePlanDay") : Long.MIN_VALUE;
+		ListTag careList = tag.getList("CareAssignments", ListTag.TAG_COMPOUND);
+		List<CareAssignment> restoredCare = new ArrayList<>();
+		for (int i = 0; i < careList.size(); i++) {
+			restoredCare.add(CareAssignment.load(careList.getCompound(i)));
+		}
+		if (!restoredCare.isEmpty()) {
+			state.replaceCareAssignments(state.carePlanDay, restoredCare);
+		}
+		state.careFoodRequestDay = tag.contains("CareFoodRequestDay") ? tag.getLong("CareFoodRequestDay") : Long.MIN_VALUE;
+		ListTag careFoodRequests = tag.getList("CareFoodRequests", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < careFoodRequests.size(); i++) {
+			CompoundTag request = careFoodRequests.getCompound(i);
+			UUID dependentId = request.getUUID("VillagerId");
+			String dependentPerson = state.residentId(dependentId)
+				.orElseThrow(() -> new IllegalArgumentException("Care food request requires a mapped dependent"));
+			long eventId = request.getLong("EventId");
+			state.world.ledger().event(eventId)
+				.filter(event -> event.type() == EventType.SHARE_REQUEST)
+				.filter(event -> event.actors().equals(List.of(dependentPerson, state.campOwner().id())))
+				.orElseThrow(() -> new IllegalArgumentException("Invalid care food request event"));
+			state.careFoodRequests.put(dependentId, eventId);
+		}
+		long coordinationDay = tag.contains("CoordinationDay") ? tag.getLong("CoordinationDay") : -1;
+		List<NeedSignal> needs = new ArrayList<>();
+		for (int i = 0; i < tag.getList("NeedSignals", ListTag.TAG_COMPOUND).size(); i++) {
+			needs.add(NeedSignal.load(tag.getList("NeedSignals", ListTag.TAG_COMPOUND).getCompound(i)));
+		}
+		List<WorkReservation> work = new ArrayList<>();
+		for (int i = 0; i < tag.getList("WorkReservations", ListTag.TAG_COMPOUND).size(); i++) {
+			work.add(WorkReservation.load(tag.getList("WorkReservations", ListTag.TAG_COMPOUND).getCompound(i)));
+		}
+		if (coordinationDay >= 0) {
+			state.replaceCoordinationPlan(new CoordinationPlan(coordinationDay, needs, work));
+		}
 		return state;
+	}
+
+	private static void loadFoodDayHistory(Person person, CompoundTag resident, long coreDay, long gameDay) {
+		if (!resident.contains("FoodDayHistory", ListTag.TAG_COMPOUND)) return;
+		CompoundTag history = resident.getCompound("FoodDayHistory");
+		if (!history.contains("ObservedDays", ListTag.TAG_LONG) || !history.contains("HungerDays", ListTag.TAG_LONG)
+			|| !history.contains("HungerStreak", ListTag.TAG_INT) || !history.contains("LastCoreDay", ListTag.TAG_LONG)
+			|| !history.contains("LastGameDay", ListTag.TAG_LONG)) return;
+		long lastCore = history.getLong("LastCoreDay");
+		long lastGame = history.getLong("LastGameDay");
+		// Saves occur after advancement. Future and partial histories carry no evidence.
+		if (lastCore >= coreDay || lastGame > gameDay) return;
+		try {
+			person.restoreFoodDayHistory(history.getLong("ObservedDays"), history.getLong("HungerDays"),
+				history.getInt("HungerStreak"), lastCore, lastGame);
+		} catch (IllegalArgumentException invalidHistory) {
+			// Optional metadata from old/corrupt saves must never manufacture a second hungry day.
+		}
 	}
 
 	private static CompoundTag saveSocial(Person person) {
@@ -377,6 +753,7 @@ public final class SettlementSimulationState {
 		tag.putInt("Grievance", person.grievance());
 		tag.putInt("SocialHours", person.socialHours());
 		tag.putInt("PreviousSocialHours", person.previousSocialHours());
+		tag.putInt("CareHours", person.careHours());
 		ListTag trust = new ListTag();
 		for (Map.Entry<String, Integer> entry : person.trustedPeople().entrySet().stream()
 			.sorted(Map.Entry.comparingByKey()).toList()) {
@@ -386,6 +763,16 @@ public final class SettlementSimulationState {
 			trust.add(relationship);
 		}
 		tag.put("Trust", trust);
+		// Optional additive field: older readers ignore it and may discard it when saving.
+		ListTag reciprocity = new ListTag();
+		for (Map.Entry<String, Integer> entry : person.reciprocityMemories().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag relationship = new CompoundTag();
+			relationship.putString("PersonId", entry.getKey());
+			relationship.putInt("Value", entry.getValue());
+			reciprocity.add(relationship);
+		}
+		tag.put("Reciprocity", reciprocity);
 		tag.put("ObservedNorms", saveStrings(person.observedNorms().stream().sorted().toList()));
 		ListTag information = new ListTag();
 		for (SocialInformation known : person.information()) {
@@ -397,10 +784,21 @@ public final class SettlementSimulationState {
 
 	private static void loadSocial(Person person, CompoundTag tag) {
 		person.restoreSocialState(tag.getInt("Grievance"), tag.getInt("SocialHours"), tag.getInt("PreviousSocialHours"));
+		person.restoreCareHours(tag.contains("CareHours") ? tag.getInt("CareHours") : 0);
 		ListTag trust = tag.getList("Trust", ListTag.TAG_COMPOUND);
 		for (int i = 0; i < trust.size(); i++) {
 			CompoundTag relationship = trust.getCompound(i);
 			person.setTrust(relationship.getString("PersonId"), relationship.getInt("Value"));
+		}
+		ListTag reciprocity = tag.getList("Reciprocity", ListTag.TAG_COMPOUND);
+		for (int i = 0; i < reciprocity.size(); i++) {
+			CompoundTag relationship = reciprocity.getCompound(i);
+			// Skip just the malformed optional memory, preserving valid residents and resources.
+			if (!relationship.contains("PersonId", ListTag.TAG_STRING)
+				|| !relationship.contains("Value", ListTag.TAG_INT)) continue;
+			String donorId = relationship.getString("PersonId");
+			int count = relationship.getInt("Value");
+			if (!donorId.isBlank() && count >= 0) person.restoreReciprocity(donorId, count);
 		}
 		for (String normId : loadStrings(tag.getList("ObservedNorms", ListTag.TAG_STRING))) {
 			person.observeNorm(normId);

@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "B": { "item": "minecraft:bookshelf" },
+    "P": { "item": "minecraft:oak_planks" }
+  },
+  "pattern": ["PPP", "PBP", "PPP"],
+  "result": { "count": 1, "id": "coopcraft:archive" },
+  "show_notification": true
+}

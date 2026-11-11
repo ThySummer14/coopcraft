@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "O": { "item": "minecraft:observer" },
+    "R": { "item": "minecraft:redstone" }
+  },
+  "pattern": ["IRI", "ROR", "IRI"],
+  "result": { "count": 1, "id": "coopcraft:computer_core" },
+  "show_notification": true
+}

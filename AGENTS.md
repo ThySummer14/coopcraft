@@ -59,7 +59,7 @@ export GRADLE_USER_HOME=/Users/filisi/工作/会话/.gradle
 ## 6. 测试与合并
 
 - `./gradlew build` 必须绿。
-- `./gradlew runGameTest` 有一个已知不稳定用例：`CivilizationGameTest#foundsandreusessettlement`（`timeoutTicks = 60000`，靠村民寻路搭 Cottage，位置随机，本地常超时）。失败先重跑一次，别急着改逻辑；CI 上通过说明代码没问题。
+- GameTest 聚落必须隔离：生存类场景用 `CivilizationGameTestSupport.isolatedSettlement`，长场景 `CivilizationGameTest#foundsandreusessettlement` 使用独立批次，并清理测试存档、遗留村民和地板以上的旧方块。不要移除这些隔离措施，也不要把跨测试串扰当成玩法 bug。
 - 开 PR 前先把最新 `main` 合进分支解冲突（仓库历史惯例：`Merge branch 'main' into feat/xxx`），CI 绿再合并。
 - 不直接 push `main`；不对别人正在用的分支 force push。
 - 分支命名：`feat/`、`fix/`、`chore/`。

@@ -13,6 +13,7 @@ import java.util.Set;
 public final class EventLedger {
 	private final List<SimulationEvent> events = new ArrayList<>();
 	private final Map<Long, SimulationEvent> eventsById = new HashMap<>();
+	private final Map<Long, List<SimulationEvent>> eventsByDay = new HashMap<>();
 	private long nextEventId = 1;
 	private long lastDay;
 
@@ -34,6 +35,7 @@ public final class EventLedger {
 		}
 		events.add(event);
 		eventsById.put(event.eventId(), event);
+		eventsByDay.computeIfAbsent(event.day(), ignored -> new ArrayList<>()).add(event);
 		nextEventId++;
 		lastDay = event.day();
 	}
@@ -52,7 +54,19 @@ public final class EventLedger {
 	}
 
 	public List<SimulationEvent> eventsAtDay(long day) {
-		return events.stream().filter(event -> event.day() == day).toList();
+		return List.copyOf(eventsByDay.getOrDefault(day, List.of()));
+	}
+
+	public Optional<SimulationEvent> lastEvent() {
+		return events.isEmpty() ? Optional.empty() : Optional.of(events.getLast());
+	}
+
+	public List<SimulationEvent> recentEvents(int limit) {
+		if (limit < 0) {
+			throw new IllegalArgumentException("Event limit cannot be negative");
+		}
+		int fromIndex = Math.max(0, events.size() - limit);
+		return List.copyOf(events.subList(fromIndex, events.size()));
 	}
 
 	public Optional<SimulationEvent> event(long eventId) {

@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north,powered=false": { "model": "coopcraft:block/mechanical_drill" },
+    "facing=east,powered=false": { "model": "coopcraft:block/mechanical_drill", "y": 90 },
+    "facing=south,powered=false": { "model": "coopcraft:block/mechanical_drill", "y": 180 },
+    "facing=west,powered=false": { "model": "coopcraft:block/mechanical_drill", "y": 270 },
+    "facing=up,powered=false": { "model": "coopcraft:block/mechanical_drill", "x": 270 },
+    "facing=down,powered=false": { "model": "coopcraft:block/mechanical_drill", "x": 90 },
+    "facing=north,powered=true": { "model": "coopcraft:block/mechanical_drill_on" },
+    "facing=east,powered=true": { "model": "coopcraft:block/mechanical_drill_on", "y": 90 },
+    "facing=south,powered=true": { "model": "coopcraft:block/mechanical_drill_on", "y": 180 },
+    "facing=west,powered=true": { "model": "coopcraft:block/mechanical_drill_on", "y": 270 },
+    "facing=up,powered=true": { "model": "coopcraft:block/mechanical_drill_on", "x": 270 },
+    "facing=down,powered=true": { "model": "coopcraft:block/mechanical_drill_on", "x": 90 }
+  }
+}

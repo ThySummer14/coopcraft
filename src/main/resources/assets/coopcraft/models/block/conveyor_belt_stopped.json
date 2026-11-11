@@ -1,0 +1,6 @@
+{
+  "parent": "coopcraft:block/conveyor_belt",
+  "textures": {
+    "top": "coopcraft:block/conveyor_belt_stopped"
+  }
+}

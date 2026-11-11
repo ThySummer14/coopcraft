@@ -5,7 +5,20 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"PlayerAdvancementsMixin",
+		"SheepShearingDropsMixin",
+		"VillagerLoanDeathMixin",
 		"VillagerMakeLoveMixin",
+		"VillagerInteractionMixin",
+		"MerchantMenuMixin",
+		"VillagerFoodAgeMixin",
+		"TradeWithVillagerFoodAgeMixin",
+		"HarvestFarmlandFoodAgeMixin",
+		"ItemStackFoodAgeMixin",
+		"LivingEntityFoodAgeMixin",
+		"PlayerFoodAgeMixin",
+		"MobFoodAgeMixin",
+		"MobShearsEquipmentMixin",
+		"RecipeManagerFoodAgeMixin",
 		"MobAccessor"
 	],
 	"injectors": {

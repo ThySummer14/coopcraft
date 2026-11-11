@@ -154,6 +154,38 @@ class SettlementStockpileTest {
 	}
 
 	@Test
+	void foragedBerriesEnterTheSameRationAndReserveAccounting() {
+		SimpleContainer inventory = new SimpleContainer(2);
+		SimpleContainer stockpile = new SimpleContainer(2);
+		inventory.setItem(0, new ItemStack(Items.SWEET_BERRIES, 20));
+
+		assertEquals(8, SettlementStockpile.depositExcessFood(stockpile, inventory));
+		assertEquals(12, inventory.countItem(Items.SWEET_BERRIES));
+		assertEquals(8, SettlementStockpile.communalFoodPoints(stockpile));
+		inventory.removeItem(0, 4);
+		assertEquals(4, SettlementStockpile.distributeBasicFood(stockpile, inventory));
+		assertEquals(12, inventory.countItem(Items.SWEET_BERRIES));
+		assertEquals(4, stockpile.countItem(Items.SWEET_BERRIES));
+		assertEquals(16, inventory.countItem(Items.SWEET_BERRIES) + stockpile.countItem(Items.SWEET_BERRIES));
+	}
+
+	@Test
+	void depositsMetalResourcesAsPublicStock() {
+		SimpleContainer villagerInventory = new SimpleContainer(3);
+		villagerInventory.setItem(0, new ItemStack(Items.RAW_IRON, 2));
+		villagerInventory.setItem(1, new ItemStack(Items.COAL, 3));
+		villagerInventory.setItem(2, new ItemStack(Items.IRON_INGOT, 4));
+		SimpleContainer stockpile = new SimpleContainer(3);
+
+		assertEquals(9, SettlementStockpile.depositGatheredResources(stockpile, villagerInventory));
+		assertEquals(2, stockpile.countItem(Items.RAW_IRON));
+		assertEquals(3, stockpile.countItem(Items.COAL));
+		assertEquals(4, stockpile.countItem(Items.IRON_INGOT));
+		assertEquals(9, SettlementStockpile.communalResourceCount(stockpile));
+		assertTrue(villagerInventory.isEmpty());
+	}
+
+	@Test
 	void readsPublicSurplusFromRealContents() {
 		SimpleContainer stockpile = new SimpleContainer(3);
 		stockpile.setItem(0, new ItemStack(Items.BREAD, 2));

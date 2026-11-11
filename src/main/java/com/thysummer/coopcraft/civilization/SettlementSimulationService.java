@@ -1,5 +1,8 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,6 +19,8 @@ import com.thysummer.coopcraft.civilization.simulation.SimulationEvent;
 import com.thysummer.coopcraft.civilization.simulation.SurvivalSystem;
 import com.thysummer.coopcraft.civilization.simulation.WorkType;
 
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -24,6 +29,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 public final class SettlementSimulationService {
+	static final int OBSERVED_HUNGER_THRESHOLD = 100 - SettlementNeeds.HUNGRY_AT;
 	private SettlementSimulationService() {
 	}
 
@@ -35,7 +41,9 @@ public final class SettlementSimulationService {
 		int requested
 	) {
 		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		int moved = MinecraftStockpileAdapter.importToSimulation(container, state.world(), state.campOwner(), resourceType, requested);
+		int moved = resourceType != null && resourceType.isFood()
+			? MinecraftFoodAgeAdapter.importToSimulation(container, state, resourceType, requested)
+			: MinecraftStockpileAdapter.importToSimulation(container, state.world(), state.campOwner(), resourceType, requested);
 		if (moved > 0) {
 			data.setDirty();
 		}
@@ -50,7 +58,9 @@ public final class SettlementSimulationService {
 		Container container
 	) {
 		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		int moved = MinecraftStockpileAdapter.exportToContainer(state.world(), state.campOwner(), batchId, requested, container);
+		int moved = state.world().batch(batchId).resourceType().isFood()
+			? MinecraftFoodAgeAdapter.exportToContainer(state, batchId, requested, container)
+			: MinecraftStockpileAdapter.exportToContainer(state.world(), state.campOwner(), batchId, requested, container);
 		if (moved > 0) {
 			data.setDirty();
 		}
@@ -86,6 +96,7 @@ public final class SettlementSimulationService {
 			state.setSkillsEnabled(false);
 			state.setNormsEnabled(false);
 		}
+		data.foodRequests().cancel(settlement);
 		state.setSurvivalEnabled(enabled, currentDay(level));
 		data.setDirty();
 	}
@@ -152,6 +163,7 @@ public final class SettlementSimulationService {
 			throw new IllegalStateException("Norm mapping requires survival simulation to be enabled");
 		}
 		if (state.normsEnabled() != enabled) {
+			data.foodRequests().cancel(settlement);
 			state.setNormsEnabled(enabled);
 			data.setDirty();
 		}
@@ -162,25 +174,59 @@ public final class SettlementSimulationService {
 	}
 
 	public static boolean recordBirth(ServerLevel level, Villager firstParent, Villager secondParent, Villager child) {
-		if (firstParent.isBaby() || secondParent.isBaby() || !child.isBaby()) {
+		if (level == null || firstParent == null || secondParent == null || child == null
+				|| firstParent.level() != level || secondParent.level() != level || child.level() != level
+				|| !firstParent.isAlive() || firstParent.isRemoved() || !secondParent.isAlive() || secondParent.isRemoved()
+				|| !child.isAlive() || child.isRemoved() || firstParent.isBaby() || secondParent.isBaby() || !child.isBaby()) {
 			return false;
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
-		Settlement settlement = data.all().stream()
-			.filter(candidate -> data.isMember(candidate, firstParent.getUUID()))
-			.filter(candidate -> data.isMember(candidate, secondParent.getUUID()))
-			.findFirst()
+		Settlement settlement = data.findSettlementForVillager(firstParent.getUUID())
 			.orElse(null);
-		if (settlement == null) {
+		if (!recordBirth(SettlementMembershipClaims.sources(level), level.dimension(), data, settlement,
+				firstParent.getUUID(), secondParent.getUUID(), child.getUUID(), currentDay(level))) {
 			return false;
 		}
-		SettlementSimulationState state = data.getOrCreateSimulation(settlement);
-		if (!state.mapResidentWithParents(child.getUUID(), data.needsOf(settlement, child.getUUID()).satiety(),
-			firstParent.getUUID(), secondParent.getUUID())) {
+		data.completeEraMilestone(settlement, CivilizationEras.POPULATION_GROWTH);
+		VillagerNames.assignOrMigrate(data, settlement, child);
+		return true;
+	}
+
+	/** Global preflight precedes every simulation/person/event write. */
+	static boolean recordBirth(List<SettlementMembershipClaims.Source> sources,
+			ResourceKey<Level> dimension, SettlementSavedData data, Settlement settlement,
+			UUID firstParentId, UUID secondParentId, UUID childId, long joinedDay) {
+		if (SettlementMembershipClaims.resolve(sources, dimension, childId).status() != SettlementMembershipClaims.Status.NONE
+				|| !SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(sources, dimension, firstParentId),
+					dimension, data, settlement)
+				|| !SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(sources, dimension, secondParentId),
+					dimension, data, settlement)) return false;
+		return recordBirth(data, settlement, firstParentId, secondParentId, childId, joinedDay);
+	}
+
+	/** Same-dimension primitive; production births must pass the global overload before any core write. */
+	static boolean recordBirth(SettlementSavedData data, Settlement settlement, UUID firstParentId,
+			UUID secondParentId, UUID childId, long joinedDay) {
+		if (data == null || firstParentId == null || secondParentId == null || childId == null
+				|| firstParentId.equals(secondParentId) || childId.equals(firstParentId) || childId.equals(secondParentId)
+				|| data.memberRegistrationResult(settlement, childId, joinedDay) != SettlementSavedData.MemberRegistrationResult.ADDED
+				|| !data.isMember(settlement, firstParentId) || !data.isMember(settlement, secondParentId)) {
 			return false;
 		}
-		data.registerMember(settlement, child.getUUID(), currentDay(level));
-		VillagerNames.assignIfAbsent(data, settlement, child);
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || state.residentId(childId).isPresent()) return false;
+		String firstPersonId = state.residentId(firstParentId).orElse(null);
+		String secondPersonId = state.residentId(secondParentId).orElse(null);
+		if (firstPersonId == null || secondPersonId == null
+				|| !state.world().person(firstPersonId).canMakeDecisions()
+				|| !state.world().person(secondPersonId).canMakeDecisions()) {
+			return false;
+		}
+		// The server-thread preflight above covers both join rejection and all mapping preconditions.
+		if (!state.mapResidentWithParents(childId, data.needsOf(settlement, childId).satiety(), firstParentId, secondParentId)) {
+			return false;
+		}
+		data.registerMember(settlement, childId, joinedDay);
 		data.setDirty();
 		return true;
 	}
@@ -201,6 +247,34 @@ public final class SettlementSimulationService {
 		int duration
 	) {
 		return workDuration(data, settlement, villagerId, duration, WorkType.CRAFT);
+	}
+
+	/** Read-only social budget for a current, living resident of the canonical settlement. */
+	public record SocialWork(int socialHours, int previousSocialHours, int availableHours) {}
+
+	public static Optional<SocialWork> socialWork(
+		SettlementSavedData data, Settlement settlement, UUID villagerId
+	) {
+		if (data == null || settlement == null || villagerId == null
+			|| data.all().stream().noneMatch(candidate -> candidate == settlement)
+			|| !data.isMember(settlement, villagerId)) return Optional.empty();
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled() || !state.normsEnabled()) return Optional.empty();
+		return state.residentId(villagerId)
+			.flatMap(id -> state.world().allPeople().stream().filter(person -> person.id().equals(id)).findFirst())
+			.filter(person -> person.isAlive() && person.campId().equals(state.campOwner().id()))
+			.map(person -> new SocialWork(person.socialHours(), person.previousSocialHours(),
+				Math.max(1, 6 - person.previousSocialHours())));
+	}
+
+	/** BUILD has no core skill: apply only the already-settled social time cost. */
+	public static int constructionWorkDuration(
+		SettlementSavedData data, Settlement settlement, UUID villagerId, int duration
+	) {
+		if (duration <= 0) throw new IllegalArgumentException("Work duration must be positive");
+		return socialWork(data, settlement, villagerId)
+			.map(work -> (int) Math.min(Integer.MAX_VALUE, Math.round(duration * 6.0 / work.availableHours())))
+			.orElse(duration);
 	}
 
 	private static int workDuration(
@@ -265,7 +339,8 @@ public final class SettlementSimulationService {
 		}
 		String personId = state.residentId(villager.getUUID()).orElse(null);
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (personId == null || resourceType == null) {
+		// Existing personal recipes use materials; food must not bypass its age-preserving handoff.
+		if (personId == null || resourceType == null || resourceType.isFood()) {
 			return 0;
 		}
 		int remaining = requested;
@@ -311,31 +386,48 @@ public final class SettlementSimulationService {
 		int inserted,
 		String activity
 	) {
+		return recordProduction(data, settlement, villager.getUUID(), villager.getInventory(), item, inserted, activity);
+	}
+
+	/** Container boundary shared by real collection and server-free service regression tests. */
+	static int recordProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity) {
+		return recordProduction(data, settlement, actor, inventory, item, inserted, activity, true);
+	}
+
+	/** Practice for successfully harvested physical cargo, without importing any old or new bag food. */
+	static int recordCarriedProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity) {
+		return recordProduction(data, settlement, actor, inventory, item, inserted, activity, false);
+	}
+
+	private static int recordProduction(SettlementSavedData data, Settlement settlement, UUID actor, Container inventory,
+		Item item, int inserted, String activity, boolean importFood) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled() || inserted <= 0) {
 			return 0;
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
+		String personId = state.residentId(actor).orElse(null);
 		if (personId == null) {
 			return 0;
 		}
 		int moved = 0;
 		long productionEventId = -1;
 		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (state.productionEnabled() && resourceType != null) {
+		if (importFood && state.productionEnabled() && resourceType != null && resourceType.isFood()) {
 			moved = MinecraftStockpileAdapter.importToSimulation(
-				villager.getInventory(), state.world(), state.campOwner(), resourceType, inserted,
-				List.of(personId), Map.of("activity", activity, "villagerId", villager.getUUID().toString())
+				inventory, state.world(), state.campOwner(), resourceType, inserted,
+				List.of(personId), Map.of("activity", activity, "villagerId", actor.toString())
 			);
 			if (moved > 0) {
-				productionEventId = state.world().ledger().events().getLast().eventId();
+				productionEventId = state.world().ledger().lastEvent().orElseThrow().eventId();
 				data.setDirty();
 			}
 		}
 		if (state.skillsEnabled()) {
 			boolean practiced = knowledge(state).practice(
 				state.world().person(personId), WorkType.GATHER,
-				Map.of("activity", activity, "villagerId", villager.getUUID().toString()),
+				Map.of("activity", activity, "villagerId", actor.toString()),
 				productionEventId < 0 ? List.of() : List.of(productionEventId)
 			);
 			if (practiced) {
@@ -345,79 +437,144 @@ public final class SettlementSimulationService {
 		return moved;
 	}
 
-	public static boolean recordCrafting(
-		Villager villager,
-		SettlementSavedData data,
-		Settlement settlement,
-		String recipe
-	) {
-		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
-		if (state == null || !state.survivalEnabled() || !state.productionEnabled() && !state.skillsEnabled()) {
-			return false;
+	/** Ephemeral server-thread crafting evidence; a travelling batch must seal its synchronous pickup window. */
+	public static final class CraftingAttempt {
+		private final SettlementSimulationState state;
+		private final com.thysummer.coopcraft.civilization.simulation.SimulationWorld world;
+		private final UUID actor;
+		private final String personId;
+		private final String recipe;
+		private final Item output;
+		private final int produced;
+		private final long watermark;
+		private Long sealedInputEnd;
+		private boolean completed;
+
+		private CraftingAttempt(SettlementSimulationState state, UUID actor, String personId,
+			String recipe, Item output, int produced) {
+			this.state = state;
+			this.world = state == null ? null : state.world();
+			this.actor = actor;
+			this.personId = personId;
+			this.recipe = recipe;
+			this.output = output;
+			this.produced = produced;
+			this.watermark = world == null ? 0 : world.ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		if (personId == null) {
-			return false;
-		}
-		long previousPractice = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SKILL_PRACTICED)
-			.filter(event -> event.actors().equals(List.of(personId)))
-			.filter(event -> WorkType.CRAFT.name().equals(event.context().get("workType")))
-			.mapToLong(SimulationEvent::eventId)
-			.max().orElse(0);
-		List<Long> materialCauses = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT)
-			.filter(event -> event.eventId() > previousPractice)
-			.filter(event -> event.actors().contains(personId))
-			.filter(event -> "craft".equals(event.context().get("activity")))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.map(SimulationEvent::eventId)
-			.toList();
-		long completed = state.world().recordCrafting(
-			personId, recipe, Map.of("activity", "craft", "villagerId", villager.getUUID().toString()), materialCauses
-		);
-		boolean practiced = state.skillsEnabled() && knowledge(state).practice(
-			state.world().person(personId), WorkType.CRAFT,
-			Map.of("activity", "craft", "recipe", recipe, "villagerId", villager.getUUID().toString()),
-			List.of(completed)
-		);
-		data.setDirty();
-		return practiced;
 	}
 
-	public static int recordCraftedProduct(
-		Villager villager,
-		SettlementSavedData data,
-		Settlement settlement,
-		String recipe,
-		Item item,
-		int inserted
-	) {
+	/** Unforgeable in-memory receipt; product import must use this exact completion. */
+	public static final class CraftingCompletion {
+		private final CraftingAttempt attempt;
+		private final long eventId;
+		private boolean imported;
+
+		private CraftingCompletion(CraftingAttempt attempt, long eventId) {
+			this.attempt = attempt;
+			this.eventId = eventId;
+		}
+
+		public long eventId() {
+			return eventId;
+		}
+	}
+
+	public static CraftingAttempt beginCrafting(SettlementSavedData data, Settlement settlement,
+		UUID actor, String recipe, Item output, int produced) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
-		if (state == null || !state.survivalEnabled() || !state.productionEnabled() || inserted <= 0) {
+		String personId = state == null ? null : state.residentId(actor).orElse(null);
+		if (state == null || !state.survivalEnabled() || (!state.productionEnabled() && !state.skillsEnabled())
+			|| personId == null || !state.world().person(personId).isAlive()
+			|| !data.isMember(settlement, actor) || recipe == null || recipe.isBlank() || output == null || produced <= 0) {
+			state = null;
+		}
+		return new CraftingAttempt(state, actor, personId, recipe, output, produced);
+	}
+
+	/** Freeze synchronous pickup evidence before a physical batch travels to its workbench. */
+	static void sealCraftingInputs(CraftingAttempt attempt) {
+		if (attempt != null && !attempt.completed && attempt.sealedInputEnd == null) {
+			attempt.sealedInputEnd = attempt.world == null ? 0L
+				: attempt.world.ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		}
+	}
+
+	private static boolean validCraftingAttempt(SettlementSavedData data, Settlement settlement,
+		UUID actor, CraftingAttempt attempt) {
+		if (attempt == null || attempt.state == null || !attempt.actor.equals(actor)) {
+			return false;
+		}
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		return state == attempt.state && state.world() == attempt.world && state.survivalEnabled()
+			&& (state.productionEnabled() || state.skillsEnabled()) && data.isMember(settlement, actor)
+			&& state.residentId(actor).filter(attempt.personId::equals).isPresent()
+			&& state.world().person(attempt.personId).isAlive();
+	}
+
+	public static Optional<CraftingCompletion> recordCrafting(Villager villager, SettlementSavedData data,
+		Settlement settlement, CraftingAttempt attempt) {
+		return villager.isAlive() ? recordCrafting(data, settlement, villager.getUUID(), attempt) : Optional.empty();
+	}
+
+	static Optional<CraftingCompletion> recordCrafting(SettlementSavedData data, Settlement settlement,
+		UUID actor, CraftingAttempt attempt) {
+		if (!validCraftingAttempt(data, settlement, actor, attempt) || attempt.completed) {
+			return Optional.empty();
+		}
+		SettlementSimulationState state = attempt.state;
+		List<Long> causes = new ArrayList<>();
+		long end = attempt.sealedInputEnd != null ? attempt.sealedInputEnd
+			: state.world().ledger().lastEvent().map(SimulationEvent::eventId).orElse(0L);
+		// Only direct exports after this attempt began. Pre-existing real inventory has unknown provenance.
+		for (long id = attempt.watermark + 1; id <= end; id++) {
+			SimulationEvent event = state.world().ledger().event(id).orElseThrow();
+			if (event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.EXTERNAL_EXPORT
+				&& event.actors().equals(List.of(attempt.personId))
+				&& "craft".equals(event.context().get("activity"))
+				&& attempt.recipe.equals(event.context().get("recipe"))) {
+				causes.add(id);
+			}
+		}
+		long completed = state.world().recordCrafting(attempt.personId, attempt.recipe, Map.of(
+			"activity", "craft", "villagerId", actor.toString(),
+			"provenanceScope", "current_attempt_direct_exports", "preexistingInventoryProvenance", "unknown",
+			"outputItem", BuiltInRegistries.ITEM.getKey(attempt.output).toString(),
+			"outputCount", Integer.toString(attempt.produced)), causes);
+		attempt.completed = true;
+		data.setDirty();
+		if (state.skillsEnabled()) {
+			knowledge(state).practice(state.world().person(attempt.personId), WorkType.CRAFT,
+				Map.of("activity", "craft", "recipe", attempt.recipe, "villagerId", actor.toString()), List.of(completed));
+		}
+		return Optional.of(new CraftingCompletion(attempt, completed));
+	}
+
+	public static int recordCraftedProduct(Villager villager, SettlementSavedData data, Settlement settlement,
+		CraftingCompletion completion, Item item, int inserted) {
+		return villager.isAlive() ? recordCraftedProduct(data, settlement, villager.getUUID(),
+			villager.getInventory(), completion, item, inserted) : 0;
+	}
+
+	static int recordCraftedProduct(SettlementSavedData data, Settlement settlement, UUID actor,
+		Container inventory, CraftingCompletion completion, Item item, int inserted) {
+		if (completion == null || completion.imported || !validCraftingAttempt(data, settlement, actor, completion.attempt)) {
 			return 0;
 		}
-		String personId = state.residentId(villager.getUUID()).orElse(null);
-		ResourceType resourceType = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
-		if (personId == null || resourceType == null) {
+		CraftingAttempt attempt = completion.attempt;
+		if (inventory == null || !attempt.state.productionEnabled() || item != attempt.output || inserted <= 0 || inserted > attempt.produced) {
 			return 0;
 		}
-		long completed = state.world().ledger().events().stream()
-			.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.CRAFT_COMPLETED)
-			.filter(event -> event.actors().equals(List.of(personId)))
-			.filter(event -> recipe.equals(event.context().get("recipe")))
-			.mapToLong(SimulationEvent::eventId)
-			.max().orElse(-1);
-		if (completed < 0) {
+		ResourceType type = MinecraftStockpileAdapter.resourceType(new ItemStack(item)).orElse(null);
+		if (type == null) {
 			return 0;
 		}
-		int moved = MinecraftStockpileAdapter.importToSimulation(
-			villager.getInventory(), state.world(), state.campOwner(), resourceType, inserted,
-			List.of(personId), Map.of(
-				"activity", "craft", "recipe", recipe, "villagerId", villager.getUUID().toString()
-			),
-			List.of(completed)
-		);
+		// Consume before handoff: a zero move or failure cannot authorize a later unrelated inventory.
+		completion.imported = true;
+		// Only food is imported automatically, independently of runtime material tags.
+		if (!type.isFood()) return 0;
+		int moved = MinecraftStockpileAdapter.importToSimulation(inventory, attempt.world, attempt.state.campOwner(),
+			type, inserted, List.of(attempt.personId),
+			Map.of("activity", "craft", "recipe", attempt.recipe, "villagerId", actor.toString()), List.of(completion.eventId));
 		if (moved > 0) {
 			data.setDirty();
 		}
@@ -438,12 +595,8 @@ public final class SettlementSimulationService {
 			return;
 		}
 		Map<UUID, Person> active = activeResidents(level, data, settlement, state);
+		if (!closeObservedDay(data, settlement, state, currentDay, active)) return;
 		if (!active.isEmpty()) {
-			if (state.normsEnabled()) {
-				state.norms().startDay(active.values());
-				state.norms().processSocialPhase(active.values(), true);
-			}
-			survival(state).advanceDay(active.values());
 			for (UUID villagerId : active.keySet()) {
 				syncSatiety(data, settlement, state, villagerId);
 			}
@@ -456,8 +609,36 @@ public final class SettlementSimulationService {
 				}
 			}
 		}
+	}
+
+	/** Server supplies physically active residents; recheck domain identity before recording outcomes. */
+	static boolean closeObservedDay(SettlementSavedData data, Settlement settlement, SettlementSimulationState state,
+		long currentDay, Map<UUID, Person> active) {
+		if (data.all().stream().noneMatch(candidate -> candidate == settlement)
+			|| data.simulationOf(settlement).orElse(null) != state || currentDay < 0 || !state.survivalEnabled() || currentDay <= state.lastSurvivalDay()) return false;
+		List<Person> eligible = active.entrySet().stream()
+			.filter(entry -> data.isMember(settlement, entry.getKey()))
+			.filter(entry -> state.residentId(entry.getKey()).filter(entry.getValue().id()::equals).isPresent())
+			.map(Map.Entry::getValue)
+			.filter(person -> person.isAlive() && person.campId().equals(state.campOwner().id())
+				&& state.world().allPeople().contains(person)).distinct().toList();
+		if (!eligible.isEmpty()) {
+			SurvivalSystem survival = survival(state);
+			// LastGameDay is the observed boundary, not an inferred previous calendar day.
+			// The real AI seeks an ordinary meal at satiety <= HUNGRY_AT.
+			survival.observeClosingDay(eligible, currentDay, OBSERVED_HUNGER_THRESHOLD - 1);
+			if (state.normsEnabled()) {
+				state.norms().observeSocialDay(eligible);
+				state.norms().startDay(eligible);
+			}
+			survival.advanceDay(eligible);
+			// The live settlement path must settle expiry just like the standalone simulation.
+			// Only an observed active day advances this clock; no unloaded-day catch-up is added.
+			state.world().spoilExpired();
+		}
 		state.markSurvivalDay(currentDay);
 		data.setDirty();
+		return true;
 	}
 
 	public static boolean hasFood(SettlementSavedData data, Settlement settlement) {
@@ -477,7 +658,46 @@ public final class SettlementSimulationService {
 			&& survival(state).availableFood(state.campOwner().id()) > 0;
 	}
 
+	/** Read-only eligibility; the request is recorded only after the villager reaches the store. */
+	public static boolean hasPendingFoodRefusal(SettlementSavedData data, Settlement settlement, UUID villagerId) {
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled() || !state.normsEnabled()) {
+			return false;
+		}
+		return state.residentId(villagerId)
+			.map(personId -> hasPendingFoodRefusal(state, state.world().person(personId)))
+			.orElse(false);
+	}
+
+	private static boolean hasPendingFoodRefusal(SettlementSimulationState state, Person person) {
+		return state.survivalEnabled() && state.normsEnabled() && person.isAlive()
+			&& person.hunger() > 5 && state.remainingFoodUnits(person.id()) == 0
+			&& !hasFoodRefusalToday(state, person);
+	}
+
+	private static boolean hasFoodRefusalToday(SettlementSimulationState state, Person person) {
+		return state.world().ledger().eventsAtDay(state.world().day()).stream()
+			.anyMatch(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SHARE_REFUSED
+				&& event.actors().equals(List.of(person.id(), state.campOwner().id())));
+	}
+
+	/** Pure/core callers retain simulated attendance; Minecraft meals must supply fresh loaded candidates. */
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId) {
+		return eat(data, settlement, villagerId, 0, data.simulationOf(settlement)
+			.map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, Collection<Person> candidates) {
+		return eat(data, settlement, villagerId, 0, candidates);
+	}
+
+	static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, long existingRequestEventId) {
+		return eat(data, settlement, villagerId, existingRequestEventId, data.simulationOf(settlement)
+			.map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, long existingRequestEventId,
+		Collection<Person> candidates) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled()) {
 			return 0;
@@ -492,36 +712,44 @@ public final class SettlementSimulationService {
 			recordFoodRefusal(data, state, person);
 			return 0;
 		}
-		SurvivalSystem.MealResult meal = survival(state).eatFromCommon(person, remainingUnits);
+		SurvivalSystem.MealWithEvidence evidence = survival(state).eatFromCommonWithEvidence(
+			person, remainingUnits, existingRequestEventId);
+		SurvivalSystem.MealResult meal = evidence.meal();
 		if (meal.units() > 0) {
+			// Consumption has already changed the world, even if bookkeeping below fails.
+			data.setDirty();
 			state.recordFoodAllocation(personId, meal.units());
+			com.thysummer.coopcraft.civilization.simulation.CommonMealInterruption.recordIfNeeded(
+				state.world(), person, evidence, state.allocatedFoodUnits(personId), state.dailyFoodUnitCap(personId));
 			if (state.normsEnabled()) {
-				state.norms().recordCommonAllocation(
-					person, meal.units(), meal.requestEventId(), meal.allocationEventId()
-				);
+				state.norms().recordCommonAllocation(person, evidence, state.allocatedFoodUnits(personId), candidates);
 			}
 			syncSatiety(data, settlement, state, villagerId);
-			data.setDirty();
 		}
 		return (int) Math.min(Integer.MAX_VALUE, meal.nutrition());
 	}
 
 	private static void recordFoodRefusal(SettlementSavedData data, SettlementSimulationState state, Person person) {
-		if (!state.normsEnabled() || person.hunger() <= 5) {
+		if (!hasPendingFoodRefusal(state, person)) {
 			return;
 		}
-		boolean alreadyRefused = state.world().ledger().eventsAtDay(state.world().day()).stream()
-			.anyMatch(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.SHARE_REFUSED
-				&& event.actors().equals(List.of(person.id(), state.campOwner().id())));
-		if (alreadyRefused) {
-			return;
-		}
-		long request = state.world().recordShareRequest(person.id(), state.campOwner().id(), person.hunger() - 5L);
-		state.world().recordShareRefusal(request, person.id(), state.campOwner().id(), 0);
+		long neededNutrition = person.hunger() - 5L;
+		// Snapshot the current item allowance and abstract common food, not actual hunger relief.
+		Map<String, String> context = Map.of(
+			"reason", "daily-unit-cap-exhausted",
+			"allocationBasis", "item_units",
+			"allocatedUnits", Integer.toString(state.allocatedFoodUnits(person.id())),
+			"cap", Integer.toString(state.dailyFoodUnitCap(person.id())),
+			"hunger", Integer.toString(person.hunger()),
+			"neededNutrition", Long.toString(neededNutrition),
+			"availableNutrition", Long.toString(state.world().availableNutrition(state.campOwner()))
+		);
+		long request = state.world().recordShareRequest(person.id(), state.campOwner().id(), neededNutrition);
+		state.world().recordShareRefusal(request, person.id(), state.campOwner().id(), 0, context);
 		data.setDirty();
 	}
 
-	private static Map<UUID, Person> activeResidents(
+	static Map<UUID, Person> activeResidents(
 		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement,
@@ -534,9 +762,10 @@ public final class SettlementSimulationService {
 				continue;
 			}
 			if (level.getEntity(villagerId) instanceof Villager villager
-				&& villager.isAlive()
+				&& villager.isAlive() && !villager.isRemoved() && villager.level() == level
 				&& villager.distanceToSqr(settlement.center().getCenter()) <= 64.0 * 64.0) {
-				active.put(villagerId, state.world().person(entry.getValue()));
+				Person person = state.world().person(entry.getValue());
+				if (person.isAlive() && person.campId().equals(state.campOwner().id())) active.put(villagerId, person);
 			}
 		}
 		return active;

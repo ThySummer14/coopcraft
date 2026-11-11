@@ -1,0 +1,23 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "coopcraft:block/conveyor_belt_stopped",
+    "bottom": "minecraft:block/iron_block",
+    "side": "minecraft:block/iron_block",
+    "top": "coopcraft:block/conveyor_belt"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 4, 16],
+      "faces": {
+        "down": { "texture": "#bottom", "cullface": "down" },
+        "up": { "texture": "#top" },
+        "north": { "texture": "#side", "uv": [0, 12, 16, 16], "cullface": "north" },
+        "south": { "texture": "#side", "uv": [0, 12, 16, 16], "cullface": "south" },
+        "east": { "texture": "#side", "uv": [0, 12, 16, 16], "cullface": "east" },
+        "west": { "texture": "#side", "uv": [0, 12, 16, 16], "cullface": "west" }
+      }
+    }
+  ]
+}

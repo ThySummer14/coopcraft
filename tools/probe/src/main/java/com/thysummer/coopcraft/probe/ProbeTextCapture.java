@@ -18,7 +18,7 @@ public final class ProbeTextCapture {
 			return;
 		}
 		Minecraft client = Minecraft.getInstance();
-		String key = client.screen == null ? "<hud>" : client.screen.getClass().getName();
+		String key = client.screen == null ? "<hud>" : Integer.toHexString(System.identityHashCode(client.screen));
 		if (!key.equals(screenKey)) {
 			screenKey = key;
 			TEXTS.clear();

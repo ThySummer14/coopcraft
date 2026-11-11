@@ -29,11 +29,100 @@ public final class Automation {
 		CoopCraft.id("farm_station"),
 		new BlockItem(FARM_STATION, new Item.Properties())
 	);
+	public static final Block MECHANICAL_DRILL = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("mechanical_drill"),
+		new MechanicalDrillBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).requiresCorrectToolForDrops())
+	);
+	public static final BlockEntityType<MechanicalDrillBlockEntity> MECHANICAL_DRILL_ENTITY = Registry.register(
+		BuiltInRegistries.BLOCK_ENTITY_TYPE,
+		CoopCraft.id("mechanical_drill"),
+		BlockEntityType.Builder.of(MechanicalDrillBlockEntity::new, MECHANICAL_DRILL).build(null)
+	);
+	public static final Item MECHANICAL_DRILL_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("mechanical_drill"),
+		new BlockItem(MECHANICAL_DRILL, new Item.Properties())
+	);
+	public static final Block CONVEYOR_BELT = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("conveyor_belt"),
+		new ConveyorBeltBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).requiresCorrectToolForDrops().noOcclusion())
+	);
+	public static final BlockEntityType<ConveyorBeltBlockEntity> CONVEYOR_BELT_ENTITY = Registry.register(
+		BuiltInRegistries.BLOCK_ENTITY_TYPE,
+		CoopCraft.id("conveyor_belt"),
+		BlockEntityType.Builder.of(ConveyorBeltBlockEntity::new, CONVEYOR_BELT).build(null)
+	);
+	public static final Item CONVEYOR_BELT_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("conveyor_belt"),
+		new BlockItem(CONVEYOR_BELT, new Item.Properties())
+	);
+	public static final Block WATERWHEEL = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("waterwheel"),
+		new WaterwheelBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.OAK_PLANKS).requiresCorrectToolForDrops())
+	);
+	public static final Item WATERWHEEL_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("waterwheel"),
+		new BlockItem(WATERWHEEL, new Item.Properties())
+	);
+	public static final Block DRIVE_SHAFT = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("drive_shaft"),
+		new DriveShaftBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).requiresCorrectToolForDrops())
+	);
+	public static final Item DRIVE_SHAFT_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("drive_shaft"),
+		new BlockItem(DRIVE_SHAFT, new Item.Properties())
+	);
+	public static final Block ARCHIVE = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("archive"),
+		new ArchiveBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.BOOKSHELF).requiresCorrectToolForDrops())
+	);
+	public static final BlockEntityType<ArchiveBlockEntity> ARCHIVE_ENTITY = Registry.register(
+		BuiltInRegistries.BLOCK_ENTITY_TYPE,
+		CoopCraft.id("archive"),
+		BlockEntityType.Builder.of(ArchiveBlockEntity::new, ARCHIVE).build(null)
+	);
+	public static final Item ARCHIVE_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("archive"),
+		new BlockItem(ARCHIVE, new Item.Properties())
+	);
+	public static final Block COMPUTER_CORE = Registry.register(
+		BuiltInRegistries.BLOCK,
+		CoopCraft.id("computer_core"),
+		new ComputerCoreBlock(BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).requiresCorrectToolForDrops()
+				.isRedstoneConductor((state, level, pos) -> false))
+	);
+	public static final BlockEntityType<ComputerCoreBlockEntity> COMPUTER_CORE_ENTITY = Registry.register(
+		BuiltInRegistries.BLOCK_ENTITY_TYPE,
+		CoopCraft.id("computer_core"),
+		BlockEntityType.Builder.of(ComputerCoreBlockEntity::new, COMPUTER_CORE).build(null)
+	);
+	public static final Item COMPUTER_CORE_ITEM = Registry.register(
+		BuiltInRegistries.ITEM,
+		CoopCraft.id("computer_core"),
+		new BlockItem(COMPUTER_CORE, new Item.Properties())
+	);
 
 	private Automation() {
 	}
 
 	public static void register() {
-		ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.REDSTONE_BLOCKS).register(entries -> entries.accept(FARM_STATION_ITEM));
+		ItemGroupEvents.modifyEntriesEvent(CreativeModeTabs.REDSTONE_BLOCKS).register(entries -> {
+			entries.accept(FARM_STATION_ITEM);
+			entries.accept(MECHANICAL_DRILL_ITEM);
+			entries.accept(CONVEYOR_BELT_ITEM);
+			entries.accept(WATERWHEEL_ITEM);
+			entries.accept(DRIVE_SHAFT_ITEM);
+			entries.accept(ARCHIVE_ITEM);
+			entries.accept(COMPUTER_CORE_ITEM);
+		});
 	}
 }

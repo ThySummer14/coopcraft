@@ -1,0 +1,48 @@
+id: settlement-coordination
+description: Pause a real public project during a food emergency, replenish the stockpile, and verify resumption in the roster.
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "gamemode creative @p"
+    - "time set day"
+    - "forceload add 11304 11304 11336 11336"
+    - "fill 11304 -61 11304 11336 -61 11336 minecraft:stone"
+    - "fill 11304 -60 11304 11336 -56 11336 minecraft:air"
+    - "kill @e[type=minecraft:villager,x=11304,y=-60,z=11304,dx=32,dy=6,dz=32]"
+    - "tp @p 11320 -60 11327 180 0"
+    - "setblock 11320 -60 11322 minecraft:bell"
+    - "setblock 11319 -60 11323 minecraft:chest"
+    - "setblock 11325 -60 11322 minecraft:sweet_berry_bush[age=3]"
+    - "setblock 11326 -60 11322 minecraft:sweet_berry_bush[age=3]"
+    - "setblock 11325 -60 11324 minecraft:sweet_berry_bush[age=3]"
+    - "summon minecraft:villager 11318 -60 11320 {PersistenceRequired:1b}"
+    - "summon minecraft:villager 11319 -60 11320 {PersistenceRequired:1b}"
+    - "summon minecraft:villager 11320 -60 11320 {PersistenceRequired:1b}"
+    - "summon minecraft:villager 11321 -60 11320 {PersistenceRequired:1b}"
+    - "summon minecraft:villager 11322 -60 11320 {PersistenceRequired:1b}"
+    - "data modify block 11319 -60 11323 Items set value [{Slot:0b,id:\"minecraft:bread\",count:64},{Slot:1b,id:\"minecraft:cobblestone\",count:64},{Slot:2b,id:\"minecraft:oak_planks\",count:64},{Slot:3b,id:\"minecraft:oak_door\",count:1},{Slot:4b,id:\"minecraft:white_bed\",count:1},{Slot:5b,id:\"minecraft:torch\",count:2},{Slot:6b,id:\"minecraft:campfire\",count:1}]"
+steps:
+  - ui_close: {}
+  - wait: 1500
+  - player_use: {x: 11320, y: -60, z: 11322, face: up}
+  - wait: 500
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 10000}
+  - ui_close: {}
+  - player_use: {x: 11319, y: -60, z: 11323, face: up, shift: true}
+  - wait: 4000
+  - server_command: "data modify block 11319 -60 11323 Items set value [{Slot:0b,id:\"minecraft:cobblestone\",count:64},{Slot:1b,id:\"minecraft:oak_planks\",count:64},{Slot:2b,id:\"minecraft:oak_door\",count:1},{Slot:3b,id:\"minecraft:white_bed\",count:1},{Slot:4b,id:\"minecraft:torch\",count:2},{Slot:5b,id:\"minecraft:campfire\",count:1}]"
+  - wait: 6000
+  - player_use: {x: 11320, y: -60, z: 11322, face: up}
+  - wait: 500
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 5000}
+  - assert_ui: {text_contains_any: ["粮食告急，施工暂停", "Food emergency; building paused"], timeout_ms: 5000}
+  - screenshot: "settlement-coordination-paused"
+  - ui_close: {}
+  - server_command: "data modify block 11319 -60 11323 Items set value [{Slot:0b,id:\"minecraft:bread\",count:64},{Slot:1b,id:\"minecraft:cobblestone\",count:64},{Slot:2b,id:\"minecraft:oak_planks\",count:64},{Slot:3b,id:\"minecraft:oak_door\",count:1},{Slot:4b,id:\"minecraft:white_bed\",count:1},{Slot:5b,id:\"minecraft:torch\",count:2},{Slot:6b,id:\"minecraft:campfire\",count:1}]"
+  - wait: 6000
+  - player_use: {x: 11320, y: -60, z: 11322, face: up}
+  - wait: 500
+  - assert_ui: {screen_contains: "SettlementScreen", timeout_ms: 5000}
+  - assert_ui: {text_not_contains: ["粮食告急", "Food emergency", "施工暂缓", "building is paused"], timeout_ms: 5000}
+  - screenshot: "settlement-coordination-resumed"

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "axis=x": { "model": "coopcraft:block/drive_shaft", "x": 90, "y": 90 },
+    "axis=y": { "model": "coopcraft:block/drive_shaft" },
+    "axis=z": { "model": "coopcraft:block/drive_shaft", "x": 90 }
+  }
+}

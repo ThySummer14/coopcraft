@@ -1,6 +1,7 @@
 package com.thysummer.coopcraft.net;
 
 import com.thysummer.coopcraft.CoopCraft;
+import com.thysummer.coopcraft.civilization.ResidentDialogService;
 
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -27,9 +28,15 @@ public final class CoopNetworking {
 		PayloadTypeRegistry.playS2C().register(DeathPointPayload.TYPE, DeathPointPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(TeamHealthPayload.TYPE, TeamHealthPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(SettlementOverviewPayload.TYPE, SettlementOverviewPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playS2C().register(ResidentDialogPayload.TYPE, ResidentDialogPayload.STREAM_CODEC);
+		PayloadTypeRegistry.playC2S().register(ResidentDialogActionPayload.TYPE, ResidentDialogActionPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playC2S().register(WaypointAddPayload.TYPE, WaypointAddPayload.STREAM_CODEC);
 		PayloadTypeRegistry.playC2S().register(WaypointRemovePayload.TYPE, WaypointRemovePayload.STREAM_CODEC);
 		PayloadTypeRegistry.playS2C().register(WaypointListPayload.TYPE, WaypointListPayload.STREAM_CODEC);
+
+		ServerPlayNetworking.registerGlobalReceiver(ResidentDialogActionPayload.TYPE, (payload, context) ->
+			context.server().execute(() -> ResidentDialogService.handle(context.player(), payload)));
+		ResidentDialogService.registerLifecycle();
 
 		ServerPlayNetworking.registerGlobalReceiver(ShareCoordsPayload.TYPE, (payload, context) -> {
 			ServerPlayer sender = context.player();

@@ -31,6 +31,8 @@ public class CoopCraftClient implements ClientModInitializer {
 		CoordsSharing.register();
 		DeathPoints.register();
 		SettlementScreens.register();
+		ResidentDialogScreens.register();
+		SettlementFoodTooltips.register();
 		BiomeTitles.register();
 		WaypointClient.register();
 

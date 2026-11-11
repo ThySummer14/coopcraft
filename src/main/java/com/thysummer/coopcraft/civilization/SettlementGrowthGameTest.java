@@ -23,7 +23,7 @@ public final class SettlementGrowthGameTest implements FabricGameTest {
 	public void vanillaAdulthoodMapsOnceAndSurvivesReload(GameTestHelper helper) {
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Growth Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Growth Settlement");
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		villager.setBaby(true);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));

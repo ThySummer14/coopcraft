@@ -8,6 +8,8 @@ import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -38,6 +40,10 @@ public final class ProbeServerApi {
 			"/status", body -> onServer(server, () -> status(server)),
 			"/command", body -> onServer(server, () -> command(server, body)),
 			"/world/block", body -> onServer(server, () -> block(server, body)),
+			"/world/settlement-data", body -> onServer(server, () -> settlementData(server)),
+			"/world/settlement-survey", body -> onServer(server, () -> settlementSurvey(server, body)),
+			"/world/resident-goal", body -> onServer(server, () -> residentGoal(server, body)),
+			"/world/blueprints", body -> onServer(server, ProbeServerApi::blueprints),
 			"/log/tail", body -> onServer(server, () -> logTail(body))
 		);
 	}
@@ -51,7 +57,124 @@ public final class ProbeServerApi {
 				future.completeExceptionally(error);
 			}
 		});
-		return future.get(5, TimeUnit.SECONDS);
+		return future.get(20, TimeUnit.SECONDS);
+	}
+
+	private static JsonObject settlementSurvey(MinecraftServer server, JsonObject body) {
+		if (!body.has("x") || !body.has("y") || !body.has("z")) {
+			return ProbeJson.error("world/settlement-survey requires x/y/z");
+		}
+		ServerLevel level = server.overworld();
+		BlockPos center = new BlockPos(body.get("x").getAsInt(), body.get("y").getAsInt(), body.get("z").getAsInt());
+		try {
+			Class<?> stages = Class.forName("com.thysummer.coopcraft.civilization.SettlementStages");
+			var survey = stages.getDeclaredMethod("survey", ServerLevel.class, BlockPos.class, int.class, int.class);
+			survey.setAccessible(true);
+			Object result = survey.invoke(null, level, center, 0, 32);
+			JsonObject json = ProbeJson.ok();
+			for (String field : List.of("beds", "farmland", "plantedCrops", "wheatCrops", "workstationTypes", "villageStructure", "smithy")) {
+				var accessor = result.getClass().getDeclaredMethod(field);
+				accessor.setAccessible(true);
+				Object value = accessor.invoke(result);
+				if (value instanceof Number number) {
+					json.addProperty(field, number);
+				} else if (value instanceof Boolean bool) {
+					json.addProperty(field, bool);
+				}
+			}
+			return json;
+		} catch (ReflectiveOperationException error) {
+			return ProbeJson.error("Settlement survey unavailable: " + error);
+		}
+	}
+
+	private static JsonObject settlementData(MinecraftServer server) {
+		var factory = new net.minecraft.world.level.saveddata.SavedData.Factory<>(
+			ProbeServerApi::emptySavedData,
+			(tag, registries) -> emptySavedData(),
+			null
+		);
+		ServerLevel level = server.overworld();
+		CompoundTag tag = level.getDataStorage().computeIfAbsent(factory, "coopcraft_settlements")
+			.save(new CompoundTag(), level.registryAccess());
+		JsonObject json = ProbeJson.ok();
+		json.add("data", NbtOps.INSTANCE.convertTo(com.mojang.serialization.JsonOps.INSTANCE, tag));
+		return json;
+	}
+
+	private static JsonObject residentGoal(MinecraftServer server, JsonObject body) {
+		if (!body.has("uuid")) {
+			return ProbeJson.error("world/resident-goal requires uuid");
+		}
+		java.util.UUID villagerId;
+		try {
+			villagerId = java.util.UUID.fromString(body.get("uuid").getAsString());
+		} catch (IllegalArgumentException error) {
+			return ProbeJson.error("invalid villager uuid");
+		}
+		if (!(server.overworld().getEntity(villagerId) instanceof net.minecraft.world.entity.npc.Villager villager)) {
+			return ProbeJson.error("villager is not loaded: " + villagerId);
+		}
+		try {
+			Class<?> goalClass = Class.forName("com.thysummer.coopcraft.civilization.VillagerWorkGoal");
+			Object status = goalClass.getMethod("statusOf", net.minecraft.world.entity.npc.Villager.class).invoke(null, villager);
+			JsonObject json = ProbeJson.ok();
+			json.addProperty("uuid", villagerId.toString());
+			json.addProperty("action", String.valueOf(status.getClass().getMethod("action").invoke(status)));
+			json.addProperty("blocker", String.valueOf(status.getClass().getMethod("blocker").invoke(status)));
+			json.addProperty("target", String.valueOf(status.getClass().getMethod("target").invoke(status)));
+			JsonArray inventory = new JsonArray();
+			for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
+				var stack = villager.getInventory().getItem(slot);
+				if (stack.isEmpty()) {
+					continue;
+				}
+				JsonObject item = new JsonObject();
+				item.addProperty("slot", slot);
+				item.addProperty("item", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+				item.addProperty("count", stack.getCount());
+				inventory.add(item);
+			}
+			json.add("inventory", inventory);
+			Class<?> accessor = Class.forName("com.thysummer.coopcraft.mixin.MobAccessor");
+			Object selector = accessor.getMethod("getGoalSelector").invoke(villager);
+			for (Object wrapped : (Iterable<?>) selector.getClass().getMethod("getAvailableGoals").invoke(selector)) {
+				Object goal = wrapped.getClass().getMethod("getGoal").invoke(wrapped);
+				if (goalClass.isInstance(goal)) {
+					var debug = goalClass.getDeclaredMethod("debugState");
+					debug.setAccessible(true);
+					json.addProperty("debug", String.valueOf(debug.invoke(goal)));
+				}
+			}
+			return json;
+		} catch (ReflectiveOperationException error) {
+			return ProbeJson.error("Resident goal inspection unavailable: " + error);
+		}
+	}
+
+	private static JsonObject blueprints() {
+		try {
+			Class<?> manager = Class.forName("com.thysummer.coopcraft.civilization.BlueprintManager");
+			JsonObject json = ProbeJson.ok();
+			for (String id : new String[] {"campfire_hearth", "stone_cottage"}) {
+				Object plan = manager.getMethod("get", net.minecraft.resources.ResourceLocation.class).invoke(
+					null, net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("coopcraft", id)
+				);
+				json.addProperty(id, String.valueOf(plan));
+			}
+			return json;
+		} catch (ReflectiveOperationException error) {
+			return ProbeJson.error("Blueprint inspection unavailable: " + error);
+		}
+	}
+
+	private static net.minecraft.world.level.saveddata.SavedData emptySavedData() {
+		return new net.minecraft.world.level.saveddata.SavedData() {
+			@Override
+			public CompoundTag save(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
+				return tag;
+			}
+		};
 	}
 
 	private static JsonObject status(MinecraftServer server) {
@@ -126,8 +249,15 @@ public final class ProbeServerApi {
 		json.addProperty("y", pos.getY());
 		json.addProperty("z", pos.getZ());
 		json.addProperty("loaded", level.isLoaded(pos));
+		json.addProperty("entityTicking", level.isPositionEntityTicking(pos));
 		json.addProperty("block", BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
 		json.addProperty("state", state.toString());
+		if (level.getBlockEntity(pos) != null) {
+			json.add("blockEntity", NbtOps.INSTANCE.convertTo(
+				com.mojang.serialization.JsonOps.INSTANCE,
+				level.getBlockEntity(pos).saveWithoutMetadata(level.registryAccess())
+			));
+		}
 		return json;
 	}
 

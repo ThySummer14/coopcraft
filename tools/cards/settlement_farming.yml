@@ -1,0 +1,59 @@
+id: settlement-farming
+description: Use the existing food reservation to harvest a real crop, reserve one beetroot seed, replant, and account for the food in resident inventories.
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "gamemode survival @p"
+    - "time set day"
+    - "forceload add 14296 14296 14312 14312"
+    - "fill 14294 -62 14294 14314 -56 14314 minecraft:air"
+    - "fill 14296 -61 14296 14312 -61 14312 minecraft:bedrock"
+    - "fill 14296 -60 14296 14312 -57 14312 minecraft:air"
+    - "fill 14296 -60 14296 14312 -57 14296 minecraft:barrier"
+    - "fill 14296 -60 14312 14312 -57 14312 minecraft:barrier"
+    - "fill 14296 -60 14296 14296 -57 14312 minecraft:barrier"
+    - "fill 14312 -60 14296 14312 -57 14312 minecraft:barrier"
+    - "fill 14296 -57 14296 14312 -57 14312 minecraft:barrier"
+    - "tp @p 14303 -60 14305 180 0"
+    - "setblock 14303 -60 14302 minecraft:bell"
+    - "setblock 14303 -60 14303 minecraft:chest"
+    - "data modify block 14303 -60 14303 Items set value []"
+    - "fill 14298 -60 14297 14300 -60 14299 minecraft:farmland"
+    - "execute unless entity 00000000-0000-0000-0000-000000000050 run summon minecraft:villager 14303 -60 14300 {UUID:[I;0,0,0,80],PersistenceRequired:1b}"
+    - "execute unless entity 00000000-0000-0000-0000-000000000051 run summon minecraft:villager 14304 -60 14300 {UUID:[I;0,0,0,81],PersistenceRequired:1b}"
+    - "execute unless entity 00000000-0000-0000-0000-000000000052 run summon minecraft:villager 14305 -60 14300 {UUID:[I;0,0,0,82],PersistenceRequired:1b}"
+    - "tp 00000000-0000-0000-0000-000000000050 14303 -60 14300"
+    - "tp 00000000-0000-0000-0000-000000000051 14304 -60 14300"
+    - "tp 00000000-0000-0000-0000-000000000052 14305 -60 14300"
+    - "data modify entity 00000000-0000-0000-0000-000000000050 Inventory set value []"
+    - "data modify entity 00000000-0000-0000-0000-000000000051 Inventory set value []"
+    - "data modify entity 00000000-0000-0000-0000-000000000052 Inventory set value []"
+    - "kill @e[type=minecraft:item,x=14296,y=-60,z=14296,dx=16,dy=4,dz=16]"
+    - "setblock 14299 -59 14298 minecraft:beetroots[age=3]"
+steps:
+  - ui_close: {}
+  - wait: 3000
+  - player_use_until: {x: 14303, y: -60, z: 14302, face: up, screen_contains: "SettlementScreen", timeout_ms: 20000}
+  - assert_ui: {text_contains_any: ["农业定居", "Agricultural settlement"]}
+  - ui_close: {}
+  - player_use: {x: 14303, y: -60, z: 14303, face: up, shift: true}
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 14303, y: -60, z: 14303}, path: "blockEntity.Items", op: eq, value: []}
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 14299, y: -59, z: 14298}, path: "state", op: contains, value: "age=0", timeout_ms: 120000}
+  - assert_json:
+      side: server
+      endpoint: "/world/resident-goal"
+      request_any:
+        - {uuid: "00000000-0000-0000-0000-000000000050"}
+        - {uuid: "00000000-0000-0000-0000-000000000051"}
+        - {uuid: "00000000-0000-0000-0000-000000000052"}
+      path: "inventory.*.item"
+      op: contains
+      value: "minecraft:beetroot"
+      timeout_ms: 10000
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: contains, value: "WORK_COMMITTED"}
+  - player_use_until: {x: 14303, y: -60, z: 14302, face: up, screen_contains: "SettlementScreen", timeout_ms: 10000}
+  - assert_ui: {text_contains_any: ["公仓余粮", "Communal food"]}
+  - assert_ui: {text_contains_any: ["下一步", "Next step"]}
+  - assert_ui: {text_contains_any: ["补充食物", "Add food"]}
+  - screenshot: "settlement-farming-replenished"

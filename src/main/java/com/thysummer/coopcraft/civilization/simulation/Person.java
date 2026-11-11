@@ -38,6 +38,9 @@ public final class Person {
 	private int hunger;
 	private long hungerDays;
 	private int hungerStreak;
+	private long observedFoodDays;
+	private long lastObservedFoodDay = -1;
+	private long lastObservedFoodGameDay = -1;
 	private int grievance;
 	private int socialHours;
 	private int previousSocialHours;
@@ -164,6 +167,21 @@ public final class Person {
 		careHours += hours;
 	}
 
+	public void recordCareHours(int hours) {
+		assignCareHours(hours);
+	}
+
+	public void restoreCareHours(int hours) {
+		if (hours < 0 || hours > 6) {
+			throw new IllegalArgumentException("Invalid restored care hours");
+		}
+		careHours = hours;
+	}
+
+	public void resetCareHours() {
+		careHours = 0;
+	}
+
 	public int health() {
 		return health;
 	}
@@ -228,8 +246,22 @@ public final class Person {
 		return reciprocity.getOrDefault(otherPersonId, 0);
 	}
 
+	public Map<String, Integer> reciprocityMemories() {
+		return Map.copyOf(reciprocity);
+	}
+
+	/** Restore evidence directly, without replaying aid, trust gains or grievance relief. */
+	public void restoreReciprocity(String donorId, int count) {
+		if (donorId == null || donorId.isBlank() || count < 0) {
+			throw new IllegalArgumentException("Invalid reciprocity memory");
+		}
+		if (count == 0) reciprocity.remove(donorId);
+		else reciprocity.put(donorId, count);
+	}
+
 	public void recordAidFrom(String donorId) {
-		reciprocity.merge(donorId, 1, Integer::sum);
+		int previous = reciprocityWith(donorId);
+		restoreReciprocity(donorId, previous == Integer.MAX_VALUE ? previous : previous + 1);
 		adjustTrust(donorId, 2);
 		grievance = Math.max(0, grievance - 1);
 	}
@@ -399,9 +431,41 @@ public final class Person {
 		energy = 100;
 	}
 
+	public boolean hasFoodDayHistory() { return observedFoodDays > 0; }
+	public long observedFoodDays() { return observedFoodDays; }
+	public long lastObservedFoodDay() { return lastObservedFoodDay; }
+	public long lastObservedFoodGameDay() { return lastObservedFoodGameDay; }
+
+	/** Records only a witnessed closing day, never an inferred offline meal outcome. */
+	void observeFoodDay(long coreDay, long gameDay, int threshold) {
+		if (coreDay < 0 || gameDay < 0) throw new IllegalArgumentException("Negative observation day");
+		if (hasFoodDayHistory() && (coreDay <= lastObservedFoodDay || gameDay <= lastObservedFoodGameDay)) return;
+		if (!hasFoodDayHistory() || coreDay - lastObservedFoodDay != 1 || gameDay - lastObservedFoodGameDay != 1) {
+			hungerStreak = 0;
+		}
+		if (hunger > threshold) recordHungerDay(); else recordFoodAccessDay();
+		if (observedFoodDays < Long.MAX_VALUE) observedFoodDays++;
+		lastObservedFoodDay = coreDay;
+		lastObservedFoodGameDay = gameDay;
+	}
+
+	/** Restore an entire validated observation record; partial records must not be inferred. */
+	public void restoreFoodDayHistory(long observations, long hungryDays, int streak, long coreDay, long gameDay) {
+		if (observations <= 0 || coreDay < 0 || gameDay < 0 || observations - 1 > coreDay || observations - 1 > gameDay
+			|| hungryDays < 0 || hungryDays > observations || streak < 0 || streak > hungryDays
+			|| (observations < Long.MAX_VALUE && hungryDays == observations && streak == 0)) {
+			throw new IllegalArgumentException("Invalid food day history");
+		}
+		observedFoodDays = observations;
+		hungerDays = hungryDays;
+		hungerStreak = streak;
+		lastObservedFoodDay = coreDay;
+		lastObservedFoodGameDay = gameDay;
+	}
+
 	void recordHungerDay() {
-		hungerDays++;
-		hungerStreak++;
+		if (hungerDays < Long.MAX_VALUE) hungerDays++;
+		if (hungerStreak < Integer.MAX_VALUE) hungerStreak++;
 	}
 
 	void recordFoodAccessDay() {

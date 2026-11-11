@@ -107,23 +107,41 @@ def split_path(path: str) -> List[str]:
 
 
 def resolve_path(value: Any, path: str) -> Tuple[bool, Any]:
-    current = value
-    for part in split_path(path):
+    def resolve(current: Any, parts: List[str]) -> Tuple[bool, Any]:
+        if not parts:
+            return True, current
+        part, remaining = parts[0], parts[1:]
+        if part == "*":
+            if not isinstance(current, list):
+                return False, None
+            values = []
+            for item in current:
+                found, resolved = resolve(item, remaining)
+                if found:
+                    if isinstance(resolved, list) and "*" in remaining:
+                        values.extend(resolved)
+                    else:
+                        values.append(resolved)
+            return bool(values), values
         if isinstance(current, dict):
             if part not in current:
                 return False, None
-            current = current[part]
-        elif isinstance(current, list):
+            return resolve(current[part], remaining)
+        if isinstance(current, list):
             try:
                 index = int(part)
             except ValueError:
                 return False, None
             if index < 0 or index >= len(current):
                 return False, None
-            current = current[index]
-        else:
-            return False, None
-    return True, current
+            return resolve(current[index], remaining)
+        return False, None
+
+    parts = split_path(path)
+    found, resolved = resolve(value, parts)
+    if not found and path.startswith("data.") and isinstance(value, dict) and "data" in value:
+        return resolve(value["data"], parts)
+    return found, resolved
 
 
 def compare(actual: Any, op: str, expected: Any) -> bool:
@@ -139,6 +157,15 @@ def compare(actual: Any, op: str, expected: Any) -> bool:
             return str(expected) in actual
         if isinstance(actual, (list, dict)):
             return expected in actual
+        return False
+    if op == "not_contains":
+        return not compare(actual, "contains", expected)
+    if op == "contains_any":
+        alternatives = expected if isinstance(expected, list) else [expected]
+        if isinstance(actual, str):
+            return any(str(alternative) in actual for alternative in alternatives)
+        if isinstance(actual, (list, dict)):
+            return any(alternative in actual for alternative in alternatives)
         return False
     if op in ("gt", "gte", "lt", "lte"):
         try:
@@ -171,27 +198,61 @@ class CardRunner:
             return self.server
         raise CardError(f"unknown side: {name}")
 
-    def fetch(self, side_name: str, endpoint: str = "status") -> Dict[str, Any]:
-        path = "/ui/snapshot" if endpoint == "ui" else "/status"
-        result = self.side(side_name).call(path)
+    def fetch(self, side_name: str, endpoint: str = "status", payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        if endpoint == "ui":
+            path = "/ui/snapshot"
+        elif endpoint == "status":
+            path = "/status"
+        elif endpoint.startswith("/"):
+            path = endpoint
+        else:
+            raise CardError(f"unknown endpoint alias: {endpoint}")
+        result = self.side(side_name).call(path, payload)
         if endpoint == "ui":
             self.last_ui = result
-        else:
+        elif endpoint == "status":
             self.last_status[side_name] = result
         return result
 
     def assert_json(self, spec: Dict[str, Any]) -> None:
+        if "request_any" in spec:
+            candidates = spec["request_any"]
+            if "request" in spec or not isinstance(candidates, list) or not candidates:
+                raise CardError("request_any requires a non-empty list and cannot be combined with request")
+            failures = []
+            for candidate in candidates:
+                attempt = dict(spec)
+                attempt.pop("request_any")
+                attempt["request"] = candidate
+                try:
+                    self.assert_json(attempt)
+                    return
+                except (CardError, ProbeError) as error:
+                    failures.append(str(error))
+            raise CardError("all request candidates failed: " + " | ".join(failures))
         side_name = spec.get("side", "server")
         endpoint = spec.get("endpoint", "status")
         path = spec.get("path", "")
         op = spec.get("op", "eq")
         expected = spec.get("value")
-        data = self.fetch(side_name, endpoint)
+        data = self.fetch(side_name, endpoint, spec.get("request"))
         found, actual = resolve_path(data, path)
         if not found:
             raise CardError(f"path not found: {side_name}/{endpoint}:{path}")
         if not compare(actual, op, expected):
             raise CardError(f"assert failed: {path} {op} {expected!r}, actual={actual!r}")
+
+    def assert_json_with_wait(self, spec: Dict[str, Any]) -> None:
+        timeout_ms = max(0, int(spec.get("timeout_ms", 0)))
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while True:
+            try:
+                self.assert_json(spec)
+                return
+            except CardError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
 
     def assert_ui(self, spec: Dict[str, Any]) -> None:
         data = self.fetch("client", "ui")
@@ -215,6 +276,34 @@ class CardRunner:
         if "screen_contains" in spec and str(spec["screen_contains"]) not in str(data.get("screen", "")):
             raise CardError(f"screen class mismatch: expected {spec['screen_contains']!r}, actual={data.get('screen')!r}")
 
+    def assert_ui_with_wait(self, spec: Dict[str, Any]) -> None:
+        timeout_ms = max(0, int(spec.get("timeout_ms", 0)))
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while True:
+            try:
+                self.assert_ui(spec)
+                return
+            except CardError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
+
+    def player_use_until(self, spec: Dict[str, Any]) -> None:
+        if "screen_contains" not in spec:
+            raise CardError("player_use_until requires screen_contains")
+        payload = {key: spec[key] for key in ("x", "y", "z", "face", "shift") if key in spec}
+        timeout_ms = max(0, int(spec.get("timeout_ms", 10000)))
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while True:
+            self.client.call("/player/use", payload)
+            try:
+                self.assert_ui({"screen_contains": spec["screen_contains"]})
+                return
+            except CardError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.5)
+
     def click_text(self, text: Any) -> None:
         alternatives = [text] if isinstance(text, str) else list(text)
         data = self.fetch("client", "ui")
@@ -227,6 +316,26 @@ class CardRunner:
                     self.client.call("/ui/click", {"x": x, "y": y})
                     return
         raise CardError(f"clickable widget not found: {alternatives!r}")
+
+    def click_text_until(self, spec: Dict[str, Any]) -> int:
+        target = spec.get("text_any", spec.get("text"))
+        if not target:
+            raise CardError("click_text_until requires text_any")
+        alternatives = target if isinstance(target, list) else [target]
+        button = spec.get("button", ["下一页", "Next"])
+        max_clicks = max(0, int(spec.get("max_clicks", 5)))
+        interval_ms = max(0, int(spec.get("interval_ms", 300)))
+        for page in range(max_clicks + 1):
+            self.client.call("/ui/reset")
+            time.sleep(interval_ms / 1000.0)
+            try:
+                self.assert_ui({"text_contains_any": alternatives})
+                return page + 1
+            except CardError:
+                if page >= max_clicks:
+                    raise
+                self.click_text(button)
+        raise AssertionError("unreachable")
 
     def screenshot(self, name: str) -> str:
         response = self.client.call("/screenshot", {"name": name})
@@ -269,12 +378,18 @@ class CardRunner:
                 detail = {"mapping": response.get("mapping")}
             else:
                 detail = payload
-        elif kind == "player_use":
+        elif kind in ("player_use", "player_use_entity"):
             payload = dict(value) if isinstance(value, dict) else {}
             if not self.dry_run:
-                detail = self.client.call("/player/use", payload)
+                endpoint = "/player/use-entity" if kind == "player_use_entity" else "/player/use"
+                detail = self.client.call(endpoint, payload)
             else:
                 detail = payload
+        elif kind == "player_use_until":
+            spec = dict(value) if isinstance(value, dict) else {}
+            if not self.dry_run:
+                self.player_use_until(spec)
+            detail = spec
         elif kind == "ui_click":
             payload = dict(value) if isinstance(value, dict) else {}
             if not self.dry_run:
@@ -289,6 +404,12 @@ class CardRunner:
             if not self.dry_run:
                 self.click_text(value)
             detail = {"text": value}
+        elif kind == "click_text_until":
+            spec = dict(value) if isinstance(value, dict) else {}
+            if not self.dry_run:
+                detail = {"page": self.click_text_until(spec)}
+            else:
+                detail = spec
         elif kind == "screenshot":
             name = str(value) if value not in (True, None) else f"card-{int(time.time())}"
             if not self.dry_run:
@@ -298,12 +419,12 @@ class CardRunner:
         elif kind == "assert_ui":
             spec = dict(value) if isinstance(value, dict) else {}
             if not self.dry_run:
-                self.assert_ui(spec)
+                self.assert_ui_with_wait(spec)
             detail = spec
         elif kind == "assert_json":
             spec = dict(value) if isinstance(value, dict) else {}
             if not self.dry_run:
-                self.assert_json(spec)
+                self.assert_json_with_wait(spec)
             detail = spec
         elif kind == "assert_block":
             spec = dict(value) if isinstance(value, dict) else {}

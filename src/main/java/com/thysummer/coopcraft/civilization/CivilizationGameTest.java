@@ -1,5 +1,9 @@
 package com.thysummer.coopcraft.civilization;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -34,12 +38,15 @@ public final class CivilizationGameTest implements FabricGameTest {
 	private static final BlockPos GRINDING_STATION = new BlockPos(1, 0, 5);
 
 	@SuppressWarnings("removal")
-	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 60000)
+	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 60000, batch = "civilization_founding")
 	public void foundsAndReusesSettlement(GameTestHelper helper) {
+		CivilizationGameTestSupport.loadWorkArea(helper);
+		CivilizationGameTestSupport.clearAround(helper, BELL, 32);
 		helper.setBlock(BELL, Blocks.BELL);
 		ServerPlayer player = helper.makeMockServerPlayerInLevel();
 		player.setGameMode(GameType.SURVIVAL);
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		CivilizationGameTestSupport.resetSettlements(data);
 		BlockPos bell = helper.absolutePos(BELL);
 
 		useBlock(helper, player, BELL);
@@ -131,39 +138,72 @@ public final class CivilizationGameTest implements FabricGameTest {
 				helper.assertTrue(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_B)), "The second stone must be marked");
 				helper.assertTrue(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_C)), "The third stone must be marked");
 
-				helper.runAfterDelay(500, () -> {
-					runStockpileCycles(helper, data, settlement);
-					helper.assertFalse(helper.getBlockState(LOG).is(Blocks.OAK_LOG), "The log must be gathered");
-					helper.assertFalse(helper.getBlockState(STONE_A).is(Blocks.STONE), "The first stone must be gathered");
-					helper.assertFalse(helper.getBlockState(STONE_B).is(Blocks.STONE), "The second stone must be gathered");
-					helper.assertFalse(helper.getBlockState(STONE_C).is(Blocks.STONE), "The third stone must be gathered");
-					helper.assertFalse(first.getItemInHand(InteractionHand.MAIN_HAND).is(Items.STONE_PICKAXE), "No station means no pickaxe yet");
-					helper.assertValueEqual(1, stockpile.countItem(Items.OAK_LOG), "The log must be communal before toolmaking");
-					helper.assertValueEqual(3, stockpile.countItem(Items.COBBLESTONE), "All stone must be communal before toolmaking");
-					helper.assertValueEqual(0, stockpile.countItem(Items.STICK) + first.getInventory().countItem(Items.STICK), "No sticks exist before crafting");
+				var stage = new AtomicReference<>(FoundationStage.GATHER);
+				var stageStarted = new AtomicLong();
+				var construction = new AtomicReference<ConstructionVerification>();
+				var foodBeforeEating = new AtomicInteger();
+				var sequence = helper.startSequence();
+				sequence.thenWaitUntil(() -> {
+					switch (stage.get()) {
+						case GATHER -> {
+							CivilizationGameTestSupport.arriveAtWork(helper, first,
+								helper.absolutePos(LOG), helper.absolutePos(STONE_A), helper.absolutePos(STONE_B), helper.absolutePos(STONE_C), helper.absolutePos(CHEST));
+							helper.assertTrue(!helper.getBlockState(LOG).is(Blocks.OAK_LOG) && !helper.getBlockState(STONE_A).is(Blocks.STONE)
+								&& !helper.getBlockState(STONE_B).is(Blocks.STONE) && !helper.getBlockState(STONE_C).is(Blocks.STONE)
+								&& stockpile.countItem(Items.OAK_LOG) + first.getInventory().countItem(Items.OAK_LOG) == 0
+								&& stockpile.countItem(Items.COBBLESTONE) == 3,
+								"Waiting for gathering, delivery and the first workbench at tick " + helper.getTick() + ": "
+									+ VillagerWorkGoal.statusOf(first) + ", inventory=" + first.getInventory()
+									+ ", stockLog=" + stockpile.countItem(Items.OAK_LOG)
+									+ ", stockCobble=" + stockpile.countItem(Items.COBBLESTONE));
+							runStockpileCycles(helper, data, settlement);
+							helper.assertFalse(helper.getBlockState(LOG).is(Blocks.OAK_LOG), "The log must be gathered");
+							helper.assertFalse(helper.getBlockState(STONE_A).is(Blocks.STONE), "The first stone must be gathered; "
+								+ VillagerWorkGoal.statusOf(first) + ", villager=" + first.blockPosition() + ", inventory=" + first.getInventory()
+								+ ", stockLog=" + stockpile.countItem(Items.OAK_LOG) + ", stockCobble=" + stockpile.countItem(Items.COBBLESTONE));
+							helper.assertFalse(helper.getBlockState(STONE_B).is(Blocks.STONE), "The second stone must be gathered");
+							helper.assertFalse(helper.getBlockState(STONE_C).is(Blocks.STONE), "The third stone must be gathered");
+							helper.assertFalse(first.getItemInHand(InteractionHand.MAIN_HAND).is(Items.STONE_PICKAXE), "The first log must make a workbench before sticks");
+							helper.assertValueEqual(0, stockpile.countItem(Items.OAK_LOG) + first.getInventory().countItem(Items.OAK_LOG), "The first communal log must make the starter workbench");
+							helper.assertValueEqual(3, stockpile.countItem(Items.COBBLESTONE), "All stone must be communal before toolmaking");
+							helper.assertValueEqual(0, stockpile.countItem(Items.STICK) + first.getInventory().countItem(Items.STICK), "No sticks exist before crafting");
 
-					helper.setBlock(CRAFTING_TABLE, Blocks.CRAFTING_TABLE);
-					player.setShiftKeyDown(true);
-					useBlock(helper, player, CRAFTING_TABLE);
-					player.setShiftKeyDown(false);
-					helper.assertValueEqual(
-						helper.absolutePos(CRAFTING_TABLE),
-						data.getCraftingStation(settlement).orElseThrow(),
-						"The crafting table must become the knapping station"
-					);
-					helper.runAfterDelay(300, () -> {
-						runStockpileCycles(helper, data, settlement);
-						helper.assertTrue(first.getItemInHand(InteractionHand.MAIN_HAND).is(Items.STONE_PICKAXE), "The first pickaxe must use communal materials");
-						helper.assertValueEqual(0, stockpile.countItem(Items.OAK_LOG) + first.getInventory().countItem(Items.OAK_LOG), "The communal log must become sticks");
-						helper.assertValueEqual(0, stockpile.countItem(Items.COBBLESTONE) + first.getInventory().countItem(Items.COBBLESTONE), "The pickaxe must consume three communal cobblestone");
-						helper.assertValueEqual(6, stockpile.countItem(Items.STICK) + first.getInventory().countItem(Items.STICK), "Two of eight crafted sticks must be consumed");
+							SettlementStockpile.insert(stockpile, new ItemStack(Items.OAK_LOG));
+							helper.setBlock(CRAFTING_TABLE, Blocks.CRAFTING_TABLE);
+							player.setShiftKeyDown(true);
+							useBlock(helper, player, CRAFTING_TABLE);
+							player.setShiftKeyDown(false);
+							helper.assertValueEqual(
+								helper.absolutePos(CRAFTING_TABLE),
+								data.getCraftingStation(settlement).orElseThrow(),
+								"The crafting table must become the knapping station"
+							);
+							stage.set(FoundationStage.FIRST_PICKAXE);
+						}
+						case FIRST_PICKAXE -> {
+							CivilizationGameTestSupport.arriveAtWork(helper, first, helper.absolutePos(CHEST), helper.absolutePos(CRAFTING_TABLE));
+							helper.assertTrue(first.getItemInHand(InteractionHand.MAIN_HAND).is(Items.STONE_PICKAXE),
+								"Waiting for the first pickaxe at tick " + helper.getTick() + ": " + VillagerWorkGoal.statusOf(first));
+							runStockpileCycles(helper, data, settlement);
+							helper.assertTrue(first.getItemInHand(InteractionHand.MAIN_HAND).is(Items.STONE_PICKAXE), "The first pickaxe must use communal materials");
+							helper.assertValueEqual(0, stockpile.countItem(Items.OAK_LOG) + first.getInventory().countItem(Items.OAK_LOG), "The communal log must become sticks");
+							helper.assertValueEqual(0, stockpile.countItem(Items.COBBLESTONE) + first.getInventory().countItem(Items.COBBLESTONE), "The pickaxe must consume three communal cobblestone");
+							helper.assertValueEqual(6, stockpile.countItem(Items.STICK) + first.getInventory().countItem(Items.STICK), "Two of eight crafted sticks must be consumed");
 
-						helper.setBlock(STONE_D, Blocks.STONE);
-						player.setShiftKeyDown(true);
-						useBlock(helper, player, STONE_D);
-						player.setShiftKeyDown(false);
-						helper.assertTrue(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_D)), "The fourth stone must be marked");
-						helper.runAfterDelay(300, () -> {
+							helper.setBlock(STONE_D, Blocks.STONE);
+							player.setShiftKeyDown(true);
+							useBlock(helper, player, STONE_D);
+							player.setShiftKeyDown(false);
+							helper.assertTrue(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_D)), "The fourth stone must be marked");
+							stage.set(FoundationStage.FOURTH_STONE);
+						}
+						case FOURTH_STONE -> {
+							CivilizationGameTestSupport.arriveAtWork(helper, first, helper.absolutePos(STONE_D), helper.absolutePos(CHEST));
+							helper.assertFalse(helper.getBlockState(STONE_D).is(Blocks.STONE),
+								"Waiting for the fourth stone at tick " + helper.getTick() + ": " + VillagerWorkGoal.statusOf(first));
+							helper.assertTrue(stockpile.countItem(Items.COBBLESTONE) >= 1,
+								"Waiting for the fourth stone delivery at tick " + helper.getTick() + ": " + VillagerWorkGoal.statusOf(first)
+									+ ", inventory=" + first.getInventory());
 							runStockpileCycles(helper, data, settlement);
 							helper.assertFalse(helper.getBlockState(STONE_D).is(Blocks.STONE), "The fourth stone must be gathered with the tool");
 							helper.assertTrue(stockpile.countItem(Items.COBBLESTONE) >= 1, "The chest must receive gathered cobblestone");
@@ -172,15 +212,44 @@ public final class CivilizationGameTest implements FabricGameTest {
 							helper.assertFalse(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_B)), "The second stone marker must be removed");
 							helper.assertFalse(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_C)), "The third stone marker must be removed");
 							helper.assertFalse(data.resourcesOf(settlement).contains(helper.absolutePos(STONE_D)), "The fourth stone marker must be removed");
-							beginConstructionAndGrinding(helper, player, data, settlement, first, stockpile);
-						});
-					});
+							construction.set(prepareConstructionAndGrinding(helper, player, data, settlement, first, stockpile));
+							stage.set(FoundationStage.CONSTRUCTION);
+						}
+						case CONSTRUCTION -> {
+							verifyConstructionAndGrinding(helper, data, settlement, first, stockpile, construction.get());
+							stageStarted.set(helper.getTick());
+							stage.set(FoundationStage.IDLE);
+						}
+						case IDLE -> {
+							await(helper, helper.getTick() - stageStarted.get() >= 200, "the completed cottage to remain idle");
+							ConstructionVerification expected = construction.get();
+							int remainingCobblestone = expected.initialCobblestone() - expected.plan().materials().get(Items.COBBLESTONE) - 3;
+							int remainingPlanks = expected.initialPlanks() - expected.plan().materials().get(Items.OAK_PLANKS);
+							helper.assertValueEqual(1, data.housingCapacity(settlement), "Housing must not be counted twice");
+							helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "A completed cottage must not restart");
+							helper.assertValueEqual(remainingCobblestone, stockpile.countItem(Items.COBBLESTONE), "An idle village must not consume cobblestone repeatedly");
+							helper.assertValueEqual(remainingPlanks, stockpile.countItem(Items.OAK_PLANKS), "An idle village must not consume planks repeatedly");
+							helper.assertValueEqual(expected.initialSticks() - 2, stockpile.countItem(Items.STICK) + first.getInventory().countItem(Items.STICK), "A polished pickaxe must not be polished repeatedly");
+							SettlementStockpile.insert(stockpile, new ItemStack(Items.BREAD, 4));
+							data.setSatiety(settlement, first.getUUID(), 10);
+							foodBeforeEating.set(stockpile.countItem(Items.BREAD) + first.getInventory().countItem(Items.BREAD));
+							stageStarted.set(helper.getTick());
+							stage.set(FoundationStage.MEAL);
+						}
+						case MEAL -> {
+							await(helper, helper.getTick() - stageStarted.get() >= 200, "the hungry villager to eat");
+							helper.assertTrue(data.needsOf(settlement, first.getUUID()).satiety() > 10, "A hungry villager must eat real food");
+							helper.assertTrue(foodBeforeEating.get() > stockpile.countItem(Items.BREAD) + first.getInventory().countItem(Items.BREAD), "Eating must consume real bread");
+							helper.getLevel().getDataStorage().save();
+						}
+					}
 				});
+				sequence.thenSucceed();
 			});
 		});
 	}
 
-	private static void beginConstructionAndGrinding(
+	private static ConstructionVerification prepareConstructionAndGrinding(
 		GameTestHelper helper,
 		ServerPlayer player,
 		SettlementSavedData data,
@@ -213,6 +282,10 @@ public final class CivilizationGameTest implements FabricGameTest {
 			data.getGrindingStation(settlement).orElseThrow(),
 			"The stonecutter must become the grinding station"
 		);
+		// Keep this legacy cottage/material regression explicit when the default future house changes.
+		BlockPos legacyOrigin = ConstructionSystem.inspectSites(helper.getLevel(), data, settlement, plan).stream()
+			.filter(ConstructionSite.Result::ready).map(ConstructionSite.Result::origin).findFirst().orElseThrow();
+		data.setConstructionJob(settlement, ConstructionJob.start(plan, legacyOrigin));
 		ConstructionSystem.BuildTarget firstTarget = ConstructionSystem.nextBuildTarget(
 			helper.getLevel(), data, settlement
 		).orElseThrow();
@@ -224,82 +297,96 @@ public final class CivilizationGameTest implements FabricGameTest {
 				"The construction origin must keep the whole cottage inside entity-ticking chunks: " + position
 			);
 		}
+		return new ConstructionVerification(plan, origin, initialCobblestone, initialPlanks, initialSticks);
+	}
 
-		helper.succeedWhen(() -> {
+	private static void verifyConstructionAndGrinding(
+		GameTestHelper helper,
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager,
+		Container stockpile,
+		ConstructionVerification verification
+	) {
+		ConstructionPlan plan = verification.plan();
+		BlockPos origin = verification.origin();
+		CivilizationGameTestSupport.arriveAtWork(helper, villager, java.util.stream.Stream.concat(
+			java.util.stream.Stream.of(origin, helper.absolutePos(CHEST), helper.absolutePos(CRAFTING_TABLE), helper.absolutePos(GRINDING_STATION)),
+			plan.instructions().stream().map(instruction -> origin.offset(instruction.offset()))
+		).toArray(BlockPos[]::new));
+		helper.assertValueEqual(1, data.housingCapacity(settlement),
+			"Waiting for the cottage at tick " + helper.getTick() + ": " + VillagerWorkGoal.statusOf(villager));
+		helper.assertTrue(
+			helper.getLevel().isPositionEntityTicking(villager.blockPosition()),
+			"Construction entered a non-entity-ticking chunk at " + villager.blockPosition() + ", target=" + origin
+		);
+		String constructionProgress = data.getConstructionJob(settlement)
+			.map(job -> job.nextIndex() + "/" + plan.instructions().size() + " at " + job.origin()
+				+ (job.nextIndex() < plan.instructions().size()
+					? ", next=" + plan.instructions().get(job.nextIndex()).item() : ""))
+			.orElse("not started");
+		String nextTargetState = ConstructionSystem.nextBuildTarget(helper.getLevel(), data, settlement)
+			.map(target -> "present at " + target.position() + ", distance=" + villager.distanceToSqr(target.position().getCenter()))
+			.orElse("empty");
+		String workState = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()
+			.filter(prioritized -> prioritized.getGoal() instanceof VillagerWorkGoal)
+			.map(prioritized -> ((VillagerWorkGoal) prioritized.getGoal()).debugState())
+			.findFirst()
+			.orElse("missing work goal");
+		helper.assertTrue(
+			data.housingCapacity(settlement) == 1,
+			"Cottage incomplete: job=" + constructionProgress + ", villager=" + villager.blockPosition()
+				+ ", cobblestone=" + stockpile.countItem(Items.COBBLESTONE) + ", planks=" + stockpile.countItem(Items.OAK_PLANKS)
+				+ ", door=" + stockpile.countItem(Items.OAK_DOOR) + ", bed=" + stockpile.countItem(Items.WHITE_BED)
+				+ ", torches=" + stockpile.countItem(Items.TORCH) + ", nextTarget=" + nextTargetState
+				+ ", work=" + workState + ", testTick=" + helper.getTick()
+		);
+		// Let the worker visit the warehouse and stonecutter; pinning it above the station blocks pickup.
+		ItemStack tool = villager.getItemInHand(InteractionHand.MAIN_HAND);
+		helper.assertTrue(tool.is(Items.STONE_PICKAXE), "Polishing must retain a stone pickaxe");
+		var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+		helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)), "The tool must have Efficiency I");
+		helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)), "The tool must have Unbreaking I");
+		helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "A completed cottage must clear its construction job");
+		for (ConstructionInstruction instruction : plan.instructions()) {
+			BlockPos expected = origin.offset(instruction.offset());
 			helper.assertTrue(
-				helper.getLevel().isPositionEntityTicking(villager.blockPosition()),
-				"Construction entered a non-entity-ticking chunk at " + villager.blockPosition() + ", target=" + origin
+				helper.getLevel().getBlockState(expected).is(instruction.state().getBlock()),
+				"Incorrect cottage block at " + instruction.offset()
 			);
-			String constructionProgress = data.getConstructionJob(settlement)
-				.map(job -> job.nextIndex() + "/" + plan.instructions().size() + " at " + job.origin()
-					+ (job.nextIndex() < plan.instructions().size()
-						? ", next=" + plan.instructions().get(job.nextIndex()).item() : ""))
-				.orElse("not started");
-			String nextTargetState = ConstructionSystem.nextBuildTarget(helper.getLevel(), data, settlement)
-				.map(target -> "present at " + target.position() + ", distance=" + villager.distanceToSqr(target.position().getCenter()))
-				.orElse("empty");
-			String workState = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()
-				.filter(prioritized -> prioritized.getGoal() instanceof VillagerWorkGoal)
-				.map(prioritized -> ((VillagerWorkGoal) prioritized.getGoal()).debugState())
-				.findFirst()
-				.orElse("missing work goal");
-			helper.assertTrue(
-				data.housingCapacity(settlement) == 1,
-				"Cottage incomplete: job=" + constructionProgress + ", villager=" + villager.blockPosition()
-					+ ", cobblestone=" + stockpile.countItem(Items.COBBLESTONE) + ", planks=" + stockpile.countItem(Items.OAK_PLANKS)
-					+ ", door=" + stockpile.countItem(Items.OAK_DOOR) + ", bed=" + stockpile.countItem(Items.WHITE_BED)
-					+ ", torches=" + stockpile.countItem(Items.TORCH) + ", nextTarget=" + nextTargetState
-					+ ", work=" + workState + ", testTick=" + helper.getTick()
-			);
-			BlockPos grindingStation = helper.absolutePos(GRINDING_STATION);
-			if (villager.distanceToSqr(grindingStation.getCenter()) > 9.0) {
-				villager.teleportTo(grindingStation.getX() + 0.5, grindingStation.getY() + 1.0, grindingStation.getZ() + 0.5);
-				villager.getNavigation().stop();
-			}
-			ItemStack tool = villager.getItemInHand(InteractionHand.MAIN_HAND);
-			helper.assertTrue(tool.is(Items.STONE_PICKAXE), "Polishing must retain a stone pickaxe");
-			var enchantments = helper.getLevel().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
-			helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)), "The tool must have Efficiency I");
-			helper.assertValueEqual(1, tool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.UNBREAKING)), "The tool must have Unbreaking I");
-			helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "A completed cottage must clear its construction job");
-			for (ConstructionInstruction instruction : plan.instructions()) {
-				BlockPos expected = origin.offset(instruction.offset());
-				helper.assertTrue(
-					helper.getLevel().getBlockState(expected).is(instruction.state().getBlock()),
-					"Incorrect cottage block at " + instruction.offset()
-				);
-			}
-			helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 0)).is(Blocks.OAK_DOOR), "The lower door must survive");
-			helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 2, 0)).is(Blocks.OAK_DOOR), "The upper door must survive");
-			helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 3)).is(Blocks.WHITE_BED), "The bed foot must survive");
-			helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 4)).is(Blocks.WHITE_BED), "The bed head must survive");
-			int remainingCobblestone = initialCobblestone - plan.materials().get(Items.COBBLESTONE) - 3;
-			int remainingPlanks = initialPlanks - plan.materials().get(Items.OAK_PLANKS);
-			helper.assertValueEqual(remainingCobblestone, stockpile.countItem(Items.COBBLESTONE), "Construction and grinding must consume the exact cobblestone count");
-			helper.assertValueEqual(remainingPlanks, stockpile.countItem(Items.OAK_PLANKS), "Construction must consume the exact plank count");
-			helper.assertValueEqual(0, stockpile.countItem(Items.OAK_DOOR), "The door must come from the stockpile");
-			helper.assertValueEqual(0, stockpile.countItem(Items.WHITE_BED), "The bed must come from the stockpile");
-			helper.assertValueEqual(0, stockpile.countItem(Items.TORCH), "Both torches must come from the stockpile");
-			helper.assertValueEqual(initialSticks - 2, stockpile.countItem(Items.STICK) + villager.getInventory().countItem(Items.STICK), "Polishing must consume two real sticks");
-			helper.assertValueEqual(0, stockpile.countItem(Items.SMOOTH_STONE) + villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume all three smooth stones");
+		}
+		helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 0)).is(Blocks.OAK_DOOR), "The lower door must survive");
+		helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 2, 0)).is(Blocks.OAK_DOOR), "The upper door must survive");
+		helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 3)).is(Blocks.WHITE_BED), "The bed foot must survive");
+		helper.assertTrue(helper.getLevel().getBlockState(origin.offset(2, 1, 4)).is(Blocks.WHITE_BED), "The bed head must survive");
+		int remainingCobblestone = verification.initialCobblestone() - plan.materials().get(Items.COBBLESTONE) - 3;
+		int remainingPlanks = verification.initialPlanks() - plan.materials().get(Items.OAK_PLANKS);
+		helper.assertValueEqual(remainingCobblestone, stockpile.countItem(Items.COBBLESTONE), "Construction and grinding must consume the exact cobblestone count");
+		helper.assertValueEqual(remainingPlanks, stockpile.countItem(Items.OAK_PLANKS), "Construction must consume the exact plank count");
+		helper.assertValueEqual(0, stockpile.countItem(Items.OAK_DOOR), "The door must come from the stockpile");
+		helper.assertValueEqual(0, stockpile.countItem(Items.WHITE_BED), "The bed must come from the stockpile");
+		helper.assertValueEqual(0, stockpile.countItem(Items.TORCH), "Both torches must come from the stockpile");
+		helper.assertValueEqual(verification.initialSticks() - 2, stockpile.countItem(Items.STICK) + villager.getInventory().countItem(Items.STICK), "Polishing must consume two real sticks");
+		helper.assertValueEqual(0, stockpile.countItem(Items.SMOOTH_STONE) + villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume all three smooth stones");
+	}
 
-			helper.runAfterDelay(200, () -> {
-				helper.assertValueEqual(1, data.housingCapacity(settlement), "Housing must not be counted twice");
-				helper.assertTrue(data.getConstructionJob(settlement).isEmpty(), "A completed cottage must not restart");
-				helper.assertValueEqual(remainingCobblestone, stockpile.countItem(Items.COBBLESTONE), "An idle village must not consume cobblestone repeatedly");
-				helper.assertValueEqual(remainingPlanks, stockpile.countItem(Items.OAK_PLANKS), "An idle village must not consume planks repeatedly");
-				helper.assertValueEqual(initialSticks - 2, stockpile.countItem(Items.STICK) + villager.getInventory().countItem(Items.STICK), "A polished pickaxe must not be polished repeatedly");
-				SettlementStockpile.insert(stockpile, new ItemStack(Items.BREAD, 4));
-				data.setSatiety(settlement, villager.getUUID(), 10);
-				int foodBeforeEating = stockpile.countItem(Items.BREAD) + villager.getInventory().countItem(Items.BREAD);
-				helper.runAfterDelay(200, () -> {
-					helper.assertTrue(data.needsOf(settlement, villager.getUUID()).satiety() > 10, "A hungry villager must eat real food");
-					helper.assertTrue(foodBeforeEating > stockpile.countItem(Items.BREAD) + villager.getInventory().countItem(Items.BREAD), "Eating must consume real bread");
-					helper.getLevel().getDataStorage().save();
-					helper.succeed();
-				});
-			});
-		});
+	private static void await(GameTestHelper helper, boolean condition, String description) {
+		if (!condition) throw new net.minecraft.gametest.framework.GameTestAssertException(
+			"Waiting for " + description + " at tick " + helper.getTick()
+		);
+	}
+
+	private enum FoundationStage {
+		GATHER, FIRST_PICKAXE, FOURTH_STONE, CONSTRUCTION, IDLE, MEAL
+	}
+
+	private record ConstructionVerification(
+		ConstructionPlan plan,
+		BlockPos origin,
+		int initialCobblestone,
+		int initialPlanks,
+		int initialSticks
+	) {
 	}
 
 	private static void runStockpileCycles(GameTestHelper helper, SettlementSavedData data, Settlement settlement) {

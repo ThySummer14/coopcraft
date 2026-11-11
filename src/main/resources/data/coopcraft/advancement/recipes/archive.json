@@ -1,0 +1,13 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_bookshelf": {
+      "conditions": {
+        "items": [{ "items": "minecraft:bookshelf" }]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "requirements": [["has_bookshelf"]],
+  "rewards": { "recipes": ["coopcraft:archive"] }
+}

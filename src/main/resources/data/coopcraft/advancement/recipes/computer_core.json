@@ -1,0 +1,13 @@
+{
+  "parent": "minecraft:recipes/root",
+  "criteria": {
+    "has_redstone": {
+      "conditions": {
+        "items": [{ "items": "minecraft:redstone" }]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "requirements": [["has_redstone"]],
+  "rewards": { "recipes": ["coopcraft:computer_core"] }
+}

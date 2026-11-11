@@ -1,34 +1,46 @@
 package com.thysummer.coopcraft.civilization;
 
 import java.util.List;
-import java.util.Set;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.ChestBlock;
 
 public final class SettlementStockpile {
 	private static final long WORK_INTERVAL_TICKS = 40;
 	private static final int BASIC_FOOD_POINTS = 12;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
-	private static final Set<Item> COMMUNAL_RESOURCES = Set.of(Items.COBBLESTONE, Items.STICK, Items.SMOOTH_STONE);
-
 	private SettlementStockpile() {
 	}
 
 	public static void tick(ServerLevel level, SettlementSavedData data, Settlement settlement, long gameTime) {
+		tick(data, settlement, gameTime, () -> getStockpile(level, data, settlement), villagerId -> {
+			if (level.getEntity(villagerId) instanceof Villager villager
+				&& villager.isAlive()
+				&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED) {
+				return villager.getInventory();
+			}
+			return null;
+		});
+	}
+
+	/** The supplied inventory is only for a currently loaded, living, nearby member. */
+	static void tick(SettlementSavedData data, Settlement settlement, long gameTime,
+		Supplier<Container> stockpileAccess, Function<UUID, Container> eligibleInventory) {
 		if (data.getStockpile(settlement).isEmpty()
 			|| Math.floorMod(gameTime + settlement.id().getLeastSignificantBits(), WORK_INTERVAL_TICKS) != 0) {
 			return;
 		}
 
-		Container stockpile = getStockpile(level, data, settlement);
+		Container stockpile = stockpileAccess.get();
 		if (stockpile == null) {
 			return;
 		}
@@ -40,21 +52,30 @@ public final class SettlementStockpile {
 		long cycle = Math.floorDiv(gameTime, WORK_INTERVAL_TICKS) + settlement.id().getLeastSignificantBits();
 		int index = (int) Math.floorMod(cycle, (long) members.size());
 		SettlementMember member = members.get(index);
-		if (level.getEntity(member.villagerId()) instanceof Villager villager
-			&& villager.isAlive()
-			&& villager.distanceToSqr(settlement.center().getCenter()) <= MEMBER_RADIUS_SQUARED) {
-			depositExcessFood(stockpile, villager.getInventory(), member.personality().foodRetentionPoints(BASIC_FOOD_POINTS));
-			distributeBasicFood(stockpile, villager.getInventory(), member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
-			depositGatheredResources(stockpile, villager.getInventory());
+		Container inventory = eligibleInventory.apply(member.villagerId());
+		if (inventory != null) {
+			// Survival rations belong solely to the abstract common store. Legacy food handoffs
+			// would hide pending imports in personal inventories without feeding the resident.
+			if (!SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+				depositExcessFood(stockpile, inventory, member.personality().foodRetentionPoints(BASIC_FOOD_POINTS),
+					stack -> !SettlementFoodCargo.isFood(stack));
+				distributeBasicFood(stockpile, inventory, member.personality().basicFoodPoints(BASIC_FOOD_POINTS));
+			}
+			// Materials and berry/potato surplus require arrival through SettlementCargoDelivery.
 		}
 	}
 
 	static Container getStockpile(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		BlockPos pos = data.getStockpile(settlement).orElse(null);
-		if (pos == null) {
+		if (pos == null || !level.isLoaded(pos)) {
 			return null;
 		}
 		if (level.getBlockState(pos).getBlock() instanceof ChestBlock chest) {
+			for (Direction direction : Direction.Plane.HORIZONTAL) {
+				if (!level.isLoaded(pos.relative(direction))) {
+					return null;
+				}
+			}
 			return ChestBlock.getContainer(chest, level.getBlockState(pos), level, pos, false);
 		}
 		return level.getBlockEntity(pos) instanceof Container container ? container : null;
@@ -103,18 +124,55 @@ public final class SettlementStockpile {
 		return inserted;
 	}
 
+	/**
+	 * Moves real stacks between distinct, non-overlapping standard containers on the server thread.
+	 * Insert copies first, then deduct only accepted items; unaccepted components stay in their source slot.
+	 * As with insert, this relies on normal Container mutation semantics, without reentrant inventory edits.
+	 */
+	static int transferItem(Container source, Container target, Item item, int count) {
+		if (source == target || count <= 0) {
+			return 0;
+		}
+		int transferred = 0;
+		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
+			ItemStack stack = source.getItem(slot);
+			if (stack.isEmpty() || !stack.is(item) || SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)) {
+				continue;
+			}
+			ItemStack offered = stack.copy();
+			offered.setCount(Math.min(stack.getCount(), count - transferred));
+			int inserted = insert(target, offered);
+			if (inserted == 0) {
+				continue;
+			}
+			stack.shrink(inserted);
+			source.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+			transferred += inserted;
+		}
+		if (transferred > 0) {
+			source.setChanged();
+		}
+		return transferred;
+	}
+
 	static int depositExcessFood(Container stockpile, Container villagerInventory) {
 		return depositExcessFood(stockpile, villagerInventory, BASIC_FOOD_POINTS);
 	}
 
 	static int depositExcessFood(Container stockpile, Container villagerInventory, int retainedFoodPoints) {
+		return depositExcessFood(stockpile, villagerInventory, retainedFoodPoints, stack -> true);
+	}
+
+	private static int depositExcessFood(Container stockpile, Container villagerInventory, int retainedFoodPoints,
+		java.util.function.Predicate<ItemStack> eligible) {
 		int retained = Math.max(BASIC_FOOD_POINTS, retainedFoodPoints);
 		int remainingFoodPoints = foodPoints(villagerInventory);
 		int insertedTotal = 0;
 		for (int slot = 0; slot < villagerInventory.getContainerSize() && remainingFoodPoints > retained; slot++) {
 			ItemStack stack = villagerInventory.getItem(slot);
-			Integer points = Villager.FOOD_POINTS.get(stack.getItem());
-			if (points == null || points <= 0) {
+			if (!eligible.test(stack)) continue;
+			int points = SettlementFood.points(stack);
+			if (points <= 0) {
 				continue;
 			}
 
@@ -152,8 +210,8 @@ public final class SettlementStockpile {
 		int insertedTotal = 0;
 		for (int slot = 0; slot < stockpile.getContainerSize() && missingFoodPoints > 0; slot++) {
 			ItemStack stack = stockpile.getItem(slot);
-			Integer points = Villager.FOOD_POINTS.get(stack.getItem());
-			if (points == null || points <= 0) {
+			int points = SettlementFood.points(stack);
+			if (points <= 0) {
 				continue;
 			}
 
@@ -179,10 +237,11 @@ public final class SettlementStockpile {
 	}
 
 	static int depositGatheredResources(Container stockpile, Container villagerInventory) {
+		if (stockpile == null || villagerInventory == null || stockpile == villagerInventory) return 0;
 		int insertedTotal = 0;
 		for (int slot = 0; slot < villagerInventory.getContainerSize(); slot++) {
 			ItemStack stack = villagerInventory.getItem(slot);
-			if (!stack.is(ItemTags.LOGS) && !COMMUNAL_RESOURCES.contains(stack.getItem())) {
+			if (!SettlementCargo.isMaterial(stack)) {
 				continue;
 			}
 
@@ -191,9 +250,7 @@ public final class SettlementStockpile {
 				continue;
 			}
 			stack.shrink(inserted);
-			if (stack.isEmpty()) {
-				villagerInventory.setItem(slot, ItemStack.EMPTY);
-			}
+			villagerInventory.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
 			insertedTotal += inserted;
 		}
 
@@ -207,7 +264,7 @@ public final class SettlementStockpile {
 		int insertedTotal = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item)) {
+			if (!stack.is(item) || SettlementFoodAge.isMarked(stack) || SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)) {
 				continue;
 			}
 			int inserted = insert(stockpile, stack);
@@ -237,7 +294,7 @@ public final class SettlementStockpile {
 		int total = 0;
 		for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
 			ItemStack stack = stockpile.getItem(slot);
-			if (stack.is(ItemTags.LOGS) || COMMUNAL_RESOURCES.contains(stack.getItem())) {
+			if (SettlementCargo.isMaterial(stack)) {
 				total += stack.getCount();
 			}
 		}
@@ -248,8 +305,8 @@ public final class SettlementStockpile {
 		int total = 0;
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			Integer points = Villager.FOOD_POINTS.get(stack.getItem());
-			if (points != null) {
+			int points = SettlementFood.points(stack);
+			if (points > 0) {
 				total += stack.getCount() * points;
 			}
 		}

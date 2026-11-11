@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "particle": "minecraft:block/oak_planks",
+    "top": "minecraft:block/oak_planks",
+    "front": "minecraft:block/piston_top",
+    "side": "minecraft:block/oak_planks"
+  }
+}

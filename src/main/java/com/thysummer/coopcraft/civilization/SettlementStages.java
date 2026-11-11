@@ -11,7 +11,6 @@ import com.thysummer.coopcraft.civilization.simulation.ResourceBatch;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.npc.Villager;
@@ -36,6 +35,9 @@ public final class SettlementStages {
 		Blocks.BLAST_FURNACE,
 		Blocks.SMOKER,
 		Blocks.SMITHING_TABLE,
+		Blocks.ANVIL,
+		Blocks.CHIPPED_ANVIL,
+		Blocks.DAMAGED_ANVIL,
 		Blocks.CARTOGRAPHY_TABLE,
 		Blocks.FLETCHING_TABLE,
 		Blocks.LECTERN,
@@ -69,13 +71,16 @@ public final class SettlementStages {
 			data.setStage(settlement, survey.stage());
 		}
 		for (BlockPos bed : survey.bedPositions()) {
-			data.addHousingBed(settlement, bed);
+			SettlementHousing.registerBed(level, data, settlement, bed);
 		}
 		if (data.getCraftingStation(settlement).isEmpty()) {
 			survey.craftingTable().ifPresent(pos -> data.setCraftingStation(settlement, pos));
 		}
 		if (data.getGrindingStation(settlement).isEmpty()) {
 			survey.stonecutter().ifPresent(pos -> data.setGrindingStation(settlement, pos));
+		}
+		if (data.getSmeltingStation(settlement).isEmpty()) {
+			survey.furnace().ifPresent(pos -> data.setSmeltingStation(settlement, pos));
 		}
 		if (data.getHearth(settlement).isEmpty()) {
 			survey.campfire().ifPresent(pos -> data.setHearth(settlement, pos));
@@ -87,6 +92,7 @@ public final class SettlementStages {
 		if (Math.floorMod(gameTime + settlement.id().getLeastSignificantBits(), PROGRESS_INTERVAL_TICKS) != 0) {
 			return;
 		}
+		SettlementHousing.reconcile(level, data, settlement);
 		SettlementStage achieved = progressionStage(level, data, settlement);
 		if (achieved.ordinal() <= data.stageOf(settlement).ordinal()) {
 			return;
@@ -116,12 +122,18 @@ public final class SettlementStages {
 	static Survey survey(ServerLevel level, BlockPos center, int villagers, int radius) {
 		List<BlockPos> beds = new ArrayList<>();
 		int farmland = 0;
+		int plantedCrops = 0;
+		int wheatCrops = 0;
 		Set<Block> workstationTypes = new HashSet<>();
 		BlockPos craftingTable = null;
 		BlockPos stonecutter = null;
+		BlockPos furnace = null;
 		BlockPos campfire = null;
+		boolean smithing = false;
+		boolean smelting = false;
 		double craftingDistance = Double.MAX_VALUE;
 		double stonecutterDistance = Double.MAX_VALUE;
+		double furnaceDistance = Double.MAX_VALUE;
 		double campfireDistance = Double.MAX_VALUE;
 		int radiusSquared = radius * radius;
 		int minY = center.getY() - SCAN_DOWN;
@@ -137,10 +149,16 @@ public final class SettlementStages {
 						continue;
 					}
 					BlockState state = level.getBlockState(pos);
-					if (state.is(BlockTags.BEDS) && state.getValue(BedBlock.PART) == BedPart.FOOT) {
+					if (state.getBlock() instanceof BedBlock && state.getValue(BedBlock.PART) == BedPart.FOOT
+						&& SettlementHousing.inspectBed(level, pos).status() == SettlementHousing.BedStatus.VALID) {
 						beds.add(pos.immutable());
 					} else if (state.is(Blocks.FARMLAND)) {
 						farmland++;
+					} else if (state.is(Blocks.CARROTS) || state.is(Blocks.POTATOES) || state.is(Blocks.BEETROOTS)) {
+						plantedCrops++;
+					} else if (state.is(Blocks.WHEAT)) {
+						plantedCrops++;
+						wheatCrops++;
 					}
 					Block block = state.getBlock();
 					if (WORKSTATIONS.contains(block)) {
@@ -152,7 +170,16 @@ public final class SettlementStages {
 						} else if (block == Blocks.STONECUTTER && distance < stonecutterDistance) {
 							stonecutter = pos.immutable();
 							stonecutterDistance = distance;
+						} else if (block == Blocks.FURNACE && distance < furnaceDistance) {
+							furnace = pos.immutable();
+							furnaceDistance = distance;
 						}
+					}
+					if (block == Blocks.SMITHING_TABLE || block == Blocks.ANVIL || block == Blocks.CHIPPED_ANVIL || block == Blocks.DAMAGED_ANVIL) {
+						smithing = true;
+					}
+					if (SettlementMetallurgy.isSmeltingStation(state)) {
+						smelting = true;
 					}
 					if (state.is(Blocks.CAMPFIRE) || state.is(Blocks.SOUL_CAMPFIRE)) {
 						double distance = center.distSqr(pos);
@@ -164,6 +191,7 @@ public final class SettlementStages {
 				}
 			}
 		}
+		boolean smithy = smithing && smelting;
 		boolean villageStructure = level.structureManager()
 			.getStructureWithPieceAt(center, StructureTags.VILLAGE)
 			.isValid();
@@ -172,12 +200,16 @@ public final class SettlementStages {
 			stage,
 			beds.size(),
 			farmland,
+			plantedCrops,
+			wheatCrops,
 			workstationTypes.size(),
 			villagers,
 			villageStructure,
+			smithy,
 			List.copyOf(beds),
 			Optional.ofNullable(craftingTable),
 			Optional.ofNullable(stonecutter),
+			Optional.ofNullable(furnace),
 			Optional.ofNullable(campfire)
 		);
 	}
@@ -204,7 +236,7 @@ public final class SettlementStages {
 		return SettlementStage.PRIMITIVE;
 	}
 
-	private static int foodUnits(ServerLevel level, SettlementSavedData data, Settlement settlement) {
+	static int foodUnits(ServerLevel level, SettlementSavedData data, Settlement settlement) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state != null && state.survivalEnabled()) {
 			return clampToInt(state.world().batchesAt(state.campOwner()).stream()
@@ -235,12 +267,16 @@ public final class SettlementStages {
 		SettlementStage stage,
 		int beds,
 		int farmland,
+		int plantedCrops,
+		int wheatCrops,
 		int workstationTypes,
 		int villagers,
 		boolean villageStructure,
+		boolean smithy,
 		List<BlockPos> bedPositions,
 		Optional<BlockPos> craftingTable,
 		Optional<BlockPos> stonecutter,
+		Optional<BlockPos> furnace,
 		Optional<BlockPos> campfire
 	) {
 		Survey {
@@ -248,6 +284,7 @@ public final class SettlementStages {
 			bedPositions = List.copyOf(bedPositions);
 			Objects.requireNonNull(craftingTable, "craftingTable");
 			Objects.requireNonNull(stonecutter, "stonecutter");
+			Objects.requireNonNull(furnace, "furnace");
 			Objects.requireNonNull(campfire, "campfire");
 		}
 	}

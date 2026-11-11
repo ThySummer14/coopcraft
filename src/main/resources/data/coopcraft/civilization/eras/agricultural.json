@@ -1,0 +1,11 @@
+{
+  "order": 10,
+  "milestones": [
+    "coopcraft:common_stockpile",
+    "coopcraft:hearth",
+    "coopcraft:four_residents",
+    "coopcraft:two_beds",
+    "coopcraft:food_reserve",
+    "coopcraft:cultivation"
+  ]
+}

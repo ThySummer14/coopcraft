@@ -4,18 +4,25 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -29,28 +36,94 @@ public class VillagerWorkGoal extends Goal {
 	private static final int SEARCH_INTERVAL = 20;
 	private static final int SEARCH_RADIUS_SQUARED = 12 * 12;
 	private static final double INTERACTION_DISTANCE_SQUARED = 9.0;
-	private static final double BUILD_INTERACTION_DISTANCE_SQUARED = 36.0;
+	private static final double BUILD_INTERACTION_DISTANCE_SQUARED = ConstructionApproach.REACH_SQUARED;
 	private static final int HAND_GATHER_TICKS = 60;
 	private static final int TOOL_GATHER_TICKS = 30;
+	private static final int IRON_TOOL_GATHER_TICKS = 20;
 	private static final int CRAFT_TICKS = 60;
 	private static final int BUILD_TICKS = 20;
 	private static final int EAT_TICKS = 40;
+	private static final int CHILD_CARE_TICKS = 40;
 	private static final int FORAGE_TICKS = 40;
 	private static final long FORAGE_RETRY_TICKS = 200;
-	private static final int FOOD_RESERVE_POINTS_PER_MEMBER = 8;
+	private static final int SHEARING_TICKS = 40;
+	private static final int SHEARING_MAX_TRAVEL_TICKS = 600;
+	private static final int SHEARING_REPATH_TICKS = 10;
 
 	private final Villager villager;
 	private Action action;
+	private SettlementFoodSharingScene.Session foodSharingSession;
+	private SettlementFoodDeliveryScene.Delivery foodDelivery;
+	private final ProposalConversationCooldown foodSharingCooldown = new ProposalConversationCooldown();
+	private SettlementPersonalMeal.Ticket personalMealTicket;
+	private SettlementPersonalMeal.Ticket personalMealOrigin;
+	private SettlementPersonalMeal.Clock personalMealClock;
+	private SettlementAutonomousTeaching.Session teachingSession;
+	private SettlementProposalConversation.Session proposalConversationSession;
+	private final ProposalConversationCooldown proposalConversationCooldown = new ProposalConversationCooldown();
+	private SettlementAutonomousMeetings.Session autonomousMeetingSession;
+	private final SettlementCargoApproach.Cooldown autonomousMeetingCooldown = new SettlementCargoApproach.Cooldown();
+	private final SettlementCargoApproach.Search teachingApproach = new SettlementCargoApproach.Search();
+	private final SettlementCargoApproach.Cooldown teachingCooldown = new SettlementCargoApproach.Cooldown();
+	private BlockPos teachingPathTarget;
+	private BlockPos selectedGatherTarget;
+	private SettlementMaterialScouting.Session scoutingSession;
+	private final SettlementMaterialScouting.Cooldown scoutingCooldown = new SettlementMaterialScouting.Cooldown();
+	private net.minecraft.world.level.pathfinder.Path scoutingPath;
+	private BlockPos scoutingLegStart;
+	private List<SettlementMaterialGathering.Choice> materialCandidates = List.of();
+	private SettlementMaterialGathering.Ticket materialTicket;
+	private SettlementMaterialLeases materialRegistry;
+	private SettlementMaterialLeases.Lease materialLease;
 	private BlockPos target;
 	private BlockPos forageTarget;
+	private SettlementCropHarvest.Permission cropPermission;
+	private long lastChildCareContactTick;
+	private SettlementChildCare.Ticket childCareTicket;
+	private SettlementChildCareClaims childCareRegistry;
+	private SettlementChildCareClaims.Lease childCareLease;
+	private final SettlementCargoApproach.Search childCareApproach = new SettlementCargoApproach.Search();
+	private final SettlementCargoApproach.Cooldown childCareCooldown = new SettlementCargoApproach.Cooldown();
+	private SettlementSowing.Ticket sowingTicket;
+	private SettlementMaterialLeases sowingRegistry;
+	private SettlementMaterialLeases.Lease sowingLease;
+	private final SettlementCargoApproach.Search sowingApproach = new SettlementCargoApproach.Search();
+	private final SettlementCargoApproach.Cooldown sowingCooldown = new SettlementCargoApproach.Cooldown();
+	private SettlementForagingLeases forageRegistry;
+	private SettlementForagingLeases.Lease forageLease;
+	private SettlementShearing.Session shearingSession;
+	private SettlementShearing.LoanTicket shearsLoanTicket;
+	private final SettlementCargoApproach.Cooldown shearsLoanCooldown = new SettlementCargoApproach.Cooldown();
+	private final SettlementCargoApproach.Cooldown shearingCooldown = new SettlementCargoApproach.Cooldown();
+	private BlockPos shearingPathTarget;
+	private int shearingPathAge;
 	private ConstructionSystem.BuildTarget currentBuildTarget;
+	private SettlementMaterialCrafting.Recipe currentMaterialRecipe;
+	private SettlementStarterCrafting.Ticket currentStarterCraft;
+	private SettlementWorkbenchCrafting.Ticket workbenchTicket;
+	private boolean toolStickDemand;
+	private SettlementToolDistribution.Ticket publicPickaxeTicket;
+	private final SettlementCargoApproach.Cooldown publicPickaxeCooldown = new SettlementCargoApproach.Cooldown();
+	private HousingRecipes.Recipe currentHousingRecipe;
+	private java.util.UUID sheepId;
 	private Settlement settlement;
+	private WorkReservation workReservation;
 	private WorkRole role = WorkRole.GENERALIST;
 	private int progress;
 	private int searchCooldown;
 	private int travelTicks;
-	private int approachIndex;
+	private final ConstructionApproach.Search constructionApproach = new ConstructionApproach.Search();
 	private long forageCooldownUntil;
+	private SettlementFoodRequests.Ticket foodTicket;
+	private SettlementMeetingInvitations.Ticket meetingTicket;
+	private BlockPos meetingStore;
+	private SettlementCargoDelivery.Ticket cargoTicket;
+	private final SettlementCargoApproach.Search cargoApproach = new SettlementCargoApproach.Search();
+	private final SettlementCargoApproach.Cooldown cargoCooldown = new SettlementCargoApproach.Cooldown();
+	private String cargoBlocker;
+	private java.util.function.BooleanSupplier supplyAuthorization;
+	private BlockPos supplyStore;
+	private final SettlementCargoApproach.Cooldown supplyCooldown = new SettlementCargoApproach.Cooldown();
 
 	public VillagerWorkGoal(Villager villager) {
 		this.villager = villager;
@@ -59,86 +132,372 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public boolean canUse() {
-		Optional<Settlement> workSettlement = findWorkSettlement();
-		if (workSettlement.isEmpty()) {
-			action = null;
-			target = null;
-			return false;
-		}
-		settlement = workSettlement.get();
-		role = LaborAllocator.roleOf(
-			(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
-		);
-		if (action == Action.EAT && isTargetValid()) {
-			return true;
-		}
-		if (shouldEat()) {
-			action = Action.EAT;
-			target = settlementData().getStockpile(settlement).orElse(null);
-			progress = 0;
-			return target != null;
-		}
-		if (villager.isBaby()) {
-			action = null;
-			target = null;
-			return false;
-		}
-		if (searchCooldown > 0) {
-			searchCooldown--;
-			return false;
-		}
-		if (shouldForage()) {
-			BlockPos bush = findRipeBerryBush();
-			if (bush != null) {
-				action = Action.FORAGE;
-				forageTarget = bush;
-				target = bush;
-				progress = 0;
+		try {
+			// A physical public meal may be unreachable; own food needs no trip to that store.
+			if (action == Action.EAT && preparePersonalMeal()) return true;
+			if (action == Action.BUILD && settlement != null && starvingWithoutFood()) {
+				pauseWorkReservation("personal_hunger");
+				SettlementCoordination.pause((ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID(), "personal_hunger");
+				return false;
+			}
+			// Selection is a boundary, never a licence to interrupt a valid current job.
+			if (action == Action.FORAGE && settlement != null && isTargetValid()
+				&& SettlementCoordination.pausedCause((ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID())
+					.filter("forage_unavailable"::equals).isPresent()) {
+				workReservation = SettlementCoordination.begin(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+				);
+			}
+			if (action != null && isTargetValid()) {
+				if (!isFoodSharingAction() && !isFoodDeliveryAction()) SettlementFoodSharingScene.cancelOnUnload(villager);
 				return true;
 			}
-			forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
-		}
-		if (action != Action.BUILD) {
-			Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
-				(ServerLevel) villager.level(), settlementData(), settlement
+			cancelPersonalMeal();
+			if (foodSharingSession != null) cancelFoodSharing();
+			if (foodDelivery != null) cancelFoodSharing();
+			cancelScouting();
+			if (action == Action.COLLECT_STONE_PICKAXE) publicPickaxeCooldown.defer(villager.level().getGameTime());
+			cancelChildCare(); cancelSowing();
+			cropPermission = null;
+			if (teachingSession != null) cancelTeaching();
+			if (proposalConversationSession != null) cancelProposalConversation();
+			if (autonomousMeetingSession != null) cancelAutonomousMeeting();
+			releaseMaterialLease();
+			cancelShearing();
+			cancelWorkbenchCrafting(); cancelPublicPickaxeCollection();
+			// A released claim must never leave an old GATHER action eligible for an early return.
+			if (action == Action.GATHER) { action = null; target = null; }
+			selectedGatherTarget = null;
+			materialCandidates = List.of();
+			releaseForageLease();
+			refreshMeetingInvitation();
+			if (preparePersonalMeal()) return true;
+			// Existing work already returned above. Own eating and meeting invitations win.
+			if (action != null && !isTargetValid()) { action = null; target = null; }
+			if (prepareFoodSharing()) return true;
+			Optional<Settlement> workSettlement = findWorkSettlement();
+			if (workSettlement.isEmpty()) {
+				cargoTicket = null;
+				if (!villager.isBaby() && hasReturnCargo()) cargoBlocker = "cargo_store_unavailable";
+				action = null;
+				target = null;
+				return false;
+			}
+			settlement = workSettlement.get();
+			// A persisted tool is return custody, never permission to resume a pre-stop sheep job.
+			if (hasAnyShearsLoan()) {
+				// Feeding is safe with custody in hand; a full/unreachable store must not cause starvation.
+				if (shouldEat()) {
+					action = Action.EAT; target = settlementData().getStockpile(settlement).orElse(null); progress = 0;
+					return target != null;
+				}
+				action = null; target = null;
+				return shearsLoanCooldown.ready(villager.level().getGameTime()) && prepareShearsLoan(true);
+			}
+			role = LaborAllocator.roleOf(
+				(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
 			);
-			if (buildTarget.isPresent()) {
-				currentBuildTarget = buildTarget.get();
-				action = Action.BUILD;
-				target = currentBuildTarget.position();
+			if (action == Action.EAT && isTargetValid()) {
+				return true;
+			}
+			if (shouldEat()) {
+				pauseWorkReservation("personal_hunger");
+				action = Action.EAT;
+				target = settlementData().getStockpile(settlement).orElse(null);
+				progress = 0;
+				return target != null;
+			}
+			if (meetingTicket != null && action != null && action != Action.ATTEND_MEETING && action != Action.RETURN_TO_STOCKPILE && isTargetValid()) return true;
+			if (meetingTicket != null) {
+				action = Action.ATTEND_MEETING;
+				target = meetingStore;
+				return true;
+			}
+			if (villager.isBaby()) {
+				pauseWorkReservation("not_available");
+				action = null;
+				target = null;
+				return false;
+			}
+			Optional<CareAssignment> care = activeCare();
+			if (care.isPresent()) {
+				pauseWorkReservation("care_commitment");
+				action = Action.CARE;
+				target = careDependent(care.get()).blockPosition();
 				progress = 0;
 				return true;
 			}
-		}
-		if (action != null && isTargetValid()) {
-			return true;
-		}
+			if (action == Action.BUILD && starvingWithoutFood()) {
+				pauseWorkReservation("personal_hunger");
+				action = null;
+				target = null;
+				currentBuildTarget = null;
+			}
+			// Own eating, invitations and borrowed-tool custody always precede voluntary child care.
+			if (childCareCooldown.ready(villager.level().getGameTime()) && prepareChildCare()) return true;
+			// Ordinary surplus potatoes get one bounded sowing attempt before food unloading.
+			if (sowingCooldown.ready(villager.level().getGameTime()) && prepareSowing()) return true;
+			boolean carrying = hasReturnCargo();
+			if (!carrying) cargoBlocker = null;
+			// Emergency food still wins; reserve replenishment must not indefinitely postpone cargo.
+			if (carrying && !emergencyForage() && cargoCooldown.ready(villager.level().getGameTime())) {
+				if (prepareCargoReturn()) return true;
+			}
+			// Existing invitations are read without scanning nearby residents, even during search backoff.
+			if (action == null && prepareAutonomousMeeting(false)) return true;
+			if (action == null && prepareTeaching(false)) return true;
+			if (action == null && prepareProposalConversation(false)) return true;
+			if (settlementData().getStockpile(settlement).isPresent() && shouldForage() && (!carrying || emergencyForage())) {
+				BlockPos food = findFoodSource();
+				if (food != null) {
+					action = cropPermission != null ? Action.HARVEST_CROP : Action.FORAGE;
+					forageTarget = food;
+					target = food;
+					progress = 0;
+					if (SettlementCoordination.pausedCause((ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID())
+						.filter("forage_unavailable"::equals).isPresent()) {
+						workReservation = SettlementCoordination.begin(
+							(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+						);
+					}
+					return true;
+				}
+				forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
+			}
+			if (carrying && cargoCooldown.ready(villager.level().getGameTime())) {
+				if (prepareCargoReturn()) return true;
+			}
+			if (isSupplyAction() && isTargetValid()) return true;
+			if (supplyCooldown.ready(villager.level().getGameTime()) && hasReturnableSupply()) {
+				if (prepareBuildSupply(true)) return true;
+			}
+			if (action != null && isTargetValid()) return true;
+			action = null; target = null;
+			if (prepareAutonomousMeeting(true)) return true;
+			if (prepareTeaching(true)) return true;
+			if (prepareProposalConversation(true)) return true;
+			ServerLevel level = (ServerLevel) villager.level();
+			Optional<WorkReservation> offered = SettlementCoordination.availableFor(
+				level, settlementData(), settlement, villager.getUUID()
+			);
+			if (offered.filter(reservation -> reservation.task() == WorkReservation.Task.BUILD).isPresent()
+				&& starvingWithoutFood()) {
+				pauseWorkReservation("personal_hunger");
+				SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "personal_hunger");
+				offered = Optional.empty();
+			}
+			if (offered.filter(reservation -> reservation.task() == WorkReservation.Task.FORAGE).isPresent()
+				&& villager.level().getGameTime() < forageCooldownUntil) {
+				SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "forage_unavailable");
+				pauseWorkReservation("forage_unavailable");
+				action = null;
+				target = null;
+				forageTarget = null;
+				return false;
+			}
+			if (workReservation != null && (action == Action.BUILD || action == Action.FORAGE)
+				&& (offered.isEmpty() || !offered.get().id().equals(workReservation.id()))) {
+				action = null;
+				target = null;
+				forageTarget = null;
+				currentBuildTarget = null;
+				workReservation = null;
+			}
+			if (offered.isPresent() && (action == null || action == Action.BUILD || action == Action.FORAGE)) {
+				WorkReservation candidate = offered.get();
+				if (candidate.task() == WorkReservation.Task.FORAGE && (action != Action.FORAGE || workReservation == null)) {
+					BlockPos bush = findFoodSource();
+					if (bush != null) {
+						action = Action.FORAGE;
+						forageTarget = bush;
+						target = bush;
+						workReservation = SettlementCoordination.begin(level, settlementData(), settlement, villager.getUUID());
+						progress = 0;
+						return true;
+					}
+					forageCooldownUntil = villager.level().getGameTime() + FORAGE_RETRY_TICKS;
+					SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "forage_unavailable");
+					action = null;
+					target = null;
+					forageTarget = null;
+					return false;
+				} else if (candidate.task() == WorkReservation.Task.BUILD && (action != Action.BUILD || workReservation == null)) {
+					Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
+						level, settlementData(), settlement, villager
+					);
+					if (buildTarget.isPresent()) {
+						currentBuildTarget = buildTarget.get();
+						action = Action.BUILD;
+						target = currentBuildTarget.position();
+						workReservation = SettlementCoordination.begin(level, settlementData(), settlement, villager.getUUID());
+						progress = 0;
+						return true;
+					}
+					SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), "construction_blocked");
+				}
+			}
+			if (offered.isPresent()) return false;
+			if (action != Action.BUILD && !starvingWithoutFood()) {
+				Optional<ConstructionSystem.BuildTarget> buildTarget = ConstructionSystem.nextBuildTarget(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager
+				);
+				if (buildTarget.isPresent()) {
+					currentBuildTarget = buildTarget.get();
+					if (requiresBuildSupply() && !hasCurrentSupply()) {
+						if (supplyCooldown.ready(villager.level().getGameTime())
+							&& !ConstructionSupply.hasAny(villager.getInventory()) && prepareBuildSupply(false)) return true;
+						currentBuildTarget = null;
+					} else {
+						action = Action.BUILD;
+						target = currentBuildTarget.position();
+						progress = 0;
+						return true;
+					}
+				}
+			}
+			if (action != null && isTargetValid()) {
+				return true;
+			}
+			if (searchCooldown > 0) {
+				searchCooldown--;
+				return false;
+			}
 
-		action = chooseAction();
-		searchCooldown = SEARCH_INTERVAL;
-		target = chooseTarget(action);
-		progress = 0;
-		return action != null;
+			action = chooseAction();
+			searchCooldown = SEARCH_INTERVAL;
+			target = chooseTarget(action);
+			if (action == Action.GATHER && !claimGatherTarget()) { action = null; target = null; }
+			progress = 0;
+			return action != null;
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public boolean canContinueToUse() {
-		return action != null && isTargetValid() && findWorkSettlement().isPresent();
+		try {
+			if (action == null || settlement == null) return false;
+			if (action == Action.EAT && preparePersonalMeal()) return true;
+			if (action == Action.EAT_PERSONAL) {
+				if (personalMealValid()) return true;
+				cancelPersonalMeal(); return false;
+			}
+			if (isFoodDeliveryAction()) {
+				if (foodDeliveryValid()) return true;
+				cancelFoodSharing(); return false;
+			}
+			if (isFoodSharingAction()) {
+				if (foodSharingValid()) return true;
+				cancelFoodSharing(); return false;
+			}
+			refreshMeetingInvitation();
+			if (action == Action.SCOUT_MATERIAL_AREA && !scoutingValid()) { cancelScouting(); return false; }
+			if (action == Action.COLLECT_STONE_PICKAXE && !isTargetValid()) {
+				publicPickaxeCooldown.defer(villager.level().getGameTime()); cancelPublicPickaxeCollection(); return false;
+			}
+			if (isProposalConversationAction() && !proposalConversationValid()) { cancelProposalConversation(); return false; }
+			if (action == Action.FEED_CHILD && !childCareValid()) { cancelChildCare(); return false; }
+			if (action == Action.SOW_POTATO && !sowingValid()) { cancelSowing(); return false; }
+			if (action == Action.DISCUSS_COUNCIL && !autonomousMeetingValid()) { cancelAutonomousMeeting(); return false; }
+			if (action == Action.ATTEND_LESSON && !teachingValid()) { cancelTeaching(); return false; }
+			if (hasAnyShearsLoan() && action != Action.SHEAR_SHEEP && action != Action.RETURN_SHEARS && action != Action.EAT) {
+				cancelShearing(); return false;
+			}
+			if (action != null && action != Action.EAT && action != Action.ATTEND_MEETING
+				&& action != Action.RETURN_TO_STOCKPILE && action != Action.RETURN_SHEARS
+				&& action != Action.FEED_CHILD && action != Action.SOW_POTATO && !villager.isBaby()
+				&& !isWorkbenchAction() && settlement != null && hasReturnCargo()
+				&& cargoCooldown.ready(villager.level().getGameTime()) && !emergencyForage()) {
+				releaseForageLease();
+				releaseMaterialLease();
+				cancelShearing();
+				return false;
+			}
+			if ((isWorkbenchAction() || action == Action.SHEAR_SHEEP || action == Action.BORROW_SHEARS) && (shouldEat() || meetingTicket != null || emergencyForage())) {
+				cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); return false;
+			}
+			if (action != Action.EAT && shouldEat() || action == Action.BUILD && starvingWithoutFood()) {
+				return false;
+			}
+			if (workReservation != null && (action == Action.BUILD || action == Action.FORAGE)
+				&& SettlementCoordination.availableFor(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+				).filter(reservation -> reservation.id().equals(workReservation.id())).isEmpty()) {
+				return false;
+			}
+			boolean continuing = action != null && isTargetValid() && findWorkSettlement().isPresent();
+			if (!continuing) { cancelScouting(); cancelChildCare(); cancelSowing(); releaseForageLease(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); }
+			return continuing;
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public void start() {
-		progress = 0;
-		travelTicks = 0;
-		navigateToTarget();
+		try {
+			progress = 0;
+			travelTicks = 0;
+			if (workReservation != null) {
+				workReservation = SettlementCoordination.begin(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+				);
+			}
+			if (action == Action.EAT_PERSONAL) { villager.getNavigation().stop(); tickPersonalMeal(); }
+			else if (isFoodDeliveryAction()) { tickFoodDelivery(); }
+			else if (isFoodSharingAction()) { villager.getNavigation().stop(); tickFoodSharing(); }
+			else if (action == Action.SCOUT_MATERIAL_AREA) { villager.getNavigation().stop(); tickScouting(); }
+			else if (isProposalConversationAction()) { villager.getNavigation().stop(); tickProposalConversation(); }
+			else if (action == Action.DISCUSS_COUNCIL) { villager.getNavigation().stop(); tickAutonomousMeeting(); }
+			else if (action == Action.ATTEND_LESSON) { villager.getNavigation().stop(); tickTeaching(); }
+			else if (isShearsLoanAction()) { villager.getNavigation().stop(); tickShearsLoan(); }
+			else if (action == Action.COLLECT_STONE_PICKAXE) { villager.getNavigation().stop(); tickPublicPickaxeCollection(); }
+			else if (isWorkbenchAction()) { villager.getNavigation().stop(); tickWorkbenchCrafting(); }
+			else if (action == Action.SHEAR_SHEEP) { villager.getNavigation().stop(); tickShearing(); }
+			else if (action == Action.ATTEND_MEETING) { villager.getNavigation().stop(); tickMeeting(); }
+			else if (isSupplyAction()) { villager.getNavigation().stop(); tickBuildSupply(); }
+			else if (action == Action.RETURN_TO_STOCKPILE) { villager.getNavigation().stop(); tickCargoReturn(); }
+			else if (action == Action.FEED_CHILD) { villager.getNavigation().stop(); tickChildCare(); }
+			else if (action == Action.SOW_POTATO) { villager.getNavigation().stop(); tickSowing(); }
+			else navigateToTarget();
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
 	}
 
 	@Override
 	public void stop() {
+		cancelFoodSharing();
+		cancelPersonalMeal();
+		cancelScouting();
+		cancelProposalConversation();
+		cancelChildCare(); cancelSowing();
+		cropPermission = null;
+		cancelAutonomousMeeting();
+		cancelTeaching();
+		cancelWorkbenchCrafting(); cancelPublicPickaxeCollection();
+		cancelShearing();
+		releaseMaterialLease();
+		releaseForageLease();
+		if (SettlementMeetingInvitations.cancelOnStop(action == Action.ATTEND_MEETING)) cancelMeetingInvitation();
+		if (foodTicket != null) foodTicket.cancel();
+		foodTicket = null;
+		supplyStore = null;
+		supplyAuthorization = null; // Physical supply remains in the bag across interruption/unload.
+		cargoTicket = null; // Never retain a cargo claim over stop/unload/interruption.
+		if (workReservation != null && settlement != null) {
+			if (action == Action.BUILD && starvingWithoutFood()) {
+				SettlementCoordination.pause(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID(), "personal_hunger"
+				);
+			} else {
+				SettlementCoordination.rest((ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID());
+			}
+		}
+		workReservation = null;
 		action = null;
 		target = null;
 		forageTarget = null;
 		currentBuildTarget = null;
+		currentMaterialRecipe = null;
+		currentStarterCraft = null;
+		currentHousingRecipe = null;
+		sheepId = null;
 		settlement = null;
 		progress = 0;
 		searchCooldown = 0;
@@ -146,14 +505,821 @@ public class VillagerWorkGoal extends Goal {
 		villager.getNavigation().stop();
 	}
 
+	private boolean isFoodDeliveryAction() { return action == Action.DELIVER_FOOD || action == Action.REQUEST_FOOD; }
+
+	private boolean isFoodSharingAction() { return action == Action.SHARE_FOOD || action == Action.RECEIVE_FOOD; }
+
+	/** Read-only: a reservation cannot commandeer another Goal's valid task or custody. */
+	static boolean readyForFoodSharing(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && !goal.isFoodSharingAction() && !goal.isFoodDeliveryAction()) || goal.personalMealTicket != null
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.cargoTicket != null
+			|| goal.teachingSession != null || goal.autonomousMeetingSession != null || goal.proposalConversationSession != null
+			|| goal.childCareTicket != null || goal.childCareLease != null || goal.sowingTicket != null
+			|| goal.materialLease != null || goal.forageLease != null || goal.workbenchTicket != null
+			|| goal.hasAnyShearsLoan() || goal.hasTeachingCustody() || ConstructionSupply.hasAny(resident.getInventory())
+			|| SettlementCargo.hasCargo(resident.getInventory())
+			|| resident.getInventory().hasAnyMatching(stack -> SettlementFoodAge.isMarked(stack) || SettlementShearingCargo.isMarked(stack)
+				|| SettlementWorkbenchCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack))
+			|| !resident.getMainHandItem().isEmpty() || !resident.getOffhandItem().isEmpty()) return false;
+		var data = SettlementSavedData.get(level);
+		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
+			&& !data.councilSessions().claimed(resident.getUUID()) && !SettlementProposalConversation.claimed(resident)
+			&& !data.childCareClaims().claimed(resident.getUUID(), level.getGameTime());
+	}
+	static SettlementFoodSharingScene.Session foodSharingSessionOf(Villager resident) {
+		var goal = goalOf(resident);
+		return goal != null && goal.isFoodSharingAction() ? goal.foodSharingSession : null;
+	}
+	private boolean prepareFoodSharing() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		var data = SettlementSavedData.get(level);
+		var camp = data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		if (camp == null || !readyForFoodSharing(villager)) {
+			SettlementFoodSharingScene.cancelOnUnload(villager); return false;
+		}
+		var session = SettlementFoodSharingScene.current(villager, data);
+		if (session == null && foodSharingCooldown.attempt(level.getGameTime())) {
+			session = SettlementFoodSharingScene.poll(villager, data, camp);
+			if (session == null) {
+				foodDelivery = SettlementFoodDeliveryScene.pollRequest(villager, data, camp);
+				if (foodDelivery == null) foodDelivery = SettlementFoodDeliveryScene.poll(villager, data, camp);
+				if (foodDelivery != null) {
+					settlement = camp; action = foodDelivery.mover == foodDelivery.recipient ? Action.REQUEST_FOOD : Action.DELIVER_FOOD; target = foodDelivery.nodes.getLast(); progress = 0;
+					return true;
+				}
+			}
+		}
+		if (session == null) return false;
+		settlement = camp; foodSharingSession = session;
+		action = session.giver == villager ? Action.SHARE_FOOD : Action.RECEIVE_FOOD;
+		target = villager.blockPosition().immutable(); progress = 0;
+		if (!SettlementFoodSharingScene.join(session, villager)) { cancelFoodSharing(); return false; }
+		return true;
+	}
+	private boolean foodSharingValid() {
+		refreshMeetingInvitation();
+		return foodSharingSession != null && target != null && target.equals(villager.blockPosition())
+			&& readyForFoodSharing(villager) && SettlementFoodSharingScene.valid(foodSharingSession);
+	}
+	private void tickFoodSharing() {
+		if (!foodSharingValid()) { stop(); return; }
+		var session = foodSharingSession;
+		villager.getNavigation().stop();
+		villager.getLookControl().setLookAt(session.giver == villager ? session.recipient : session.giver, 30, 30);
+		SettlementFoodSharingScene.pulse(session, villager);
+		if (!foodSharingValid()) stop();
+	}
+	private boolean foodDeliveryValid() {
+		refreshMeetingInvitation();
+		return isFoodDeliveryAction() && foodDelivery != null && target != null
+			&& target.equals(foodDelivery.nodes.getLast()) && SettlementFoodDeliveryScene.valid(foodDelivery);
+	}
+	private void tickFoodDelivery() {
+		if (!foodDeliveryValid()) { stop(); return; }
+		var delivery = foodDelivery;
+		villager.getLookControl().setLookAt(delivery.stationary, 30, 30);
+		if (villager.blockPosition().equals(target)) {
+			if (!SettlementFoodDeliveryScene.settled(delivery)) return;
+			var session = SettlementFoodDeliveryScene.arrive(delivery);
+			if (session == null) { stop(); return; }
+			foodDelivery = null; foodSharingSession = session;
+			action = session.giver == villager ? Action.SHARE_FOOD : Action.RECEIVE_FOOD; target = villager.blockPosition().immutable(); progress = 0;
+			if (!SettlementFoodSharingScene.join(session, villager)) { stop(); return; }
+			tickFoodSharing(); return;
+		}
+		if (!delivery.started) {
+			if (!SettlementFoodDeliveryScene.start(delivery)) stop();
+		} else if (villager.getNavigation().isDone()) stop();
+	}
+
+	private void cancelFoodSharing() {
+		SettlementFoodSharingScene.cancelOnUnload(villager);
+		SettlementFoodSharingScene.cancel(foodSharingSession); foodSharingSession = null;
+		SettlementFoodDeliveryScene.cancel(foodDelivery); foodDelivery = null;
+		if (isFoodDeliveryAction()) { action = null; target = null; }
+		if (isFoodSharingAction()) { action = null; target = null; }
+	}
+
+	/** One failed-scan clock per Goal, retained across stop/start; invitations bypass this clock. */
+	static final class ProposalConversationCooldown {
+		private long lastAttempt = -1;
+		boolean attempt(long now) {
+			if (now < 0) return false;
+			if (lastAttempt >= 0 && now >= lastAttempt && now - lastAttempt < SettlementProposalConversationSessions.RETRY)
+				return false;
+			lastAttempt = now; // A clock rewind starts a fresh bounded interval, without subtraction overflow.
+			return true;
+		}
+	}
+
+	private boolean isProposalConversationAction() {
+		return action == Action.TELL_PROPOSAL || action == Action.HEAR_PROPOSAL;
+	}
+
+	/** Read-only inspection. The scene checks the loaded bodies, food state and public station. */
+	static boolean readyForProposalConversation(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && !goal.isProposalConversationAction())
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.cargoTicket != null
+			|| goal.teachingSession != null || goal.autonomousMeetingSession != null
+			|| goal.childCareTicket != null || goal.childCareLease != null || goal.sowingTicket != null
+			|| goal.materialLease != null || goal.forageLease != null || goal.workbenchTicket != null
+			|| goal.hasAnyShearsLoan() || goal.hasReturnCargo() || goal.hasTeachingCustody()
+			|| !resident.getNavigation().isDone()
+			|| !resident.getMainHandItem().isEmpty() || !resident.getOffhandItem().isEmpty()) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
+			&& !data.councilSessions().claimed(resident.getUUID())
+			&& !data.childCareClaims().claimed(resident.getUUID(), level.getGameTime())
+			&& !SettlementFoodSharingScene.claimed(resident);
+	}
+
+	static SettlementProposalConversation.Session proposalConversationSessionOf(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		return goal != null && goal.isProposalConversationAction() ? goal.proposalConversationSession : null;
+	}
+
+	private boolean prepareProposalConversation(boolean allowSearch) {
+		if (settlement == null) return false;
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		if (state == null || !state.survivalEnabled() || !state.normsEnabled()
+			|| !readyForProposalConversation(villager)) return false;
+		var session = SettlementProposalConversation.current(villager, settlementData());
+		if (session == null && allowSearch && proposalConversationCooldown.attempt(villager.level().getGameTime()))
+			session = SettlementProposalConversation.poll(villager, settlementData(), settlement);
+		if (session == null) return false;
+		proposalConversationSession = session;
+		action = session.speaker == villager ? Action.TELL_PROPOSAL : Action.HEAR_PROPOSAL;
+		target = session.station;
+		if (!SettlementProposalConversation.join(session, villager)) { cancelProposalConversation(); return false; }
+		return true;
+	}
+
+	private boolean proposalConversationValid() {
+		return proposalConversationSession != null && target != null && target.equals(proposalConversationSession.station)
+			&& readyForProposalConversation(villager) && SettlementProposalConversation.valid(proposalConversationSession);
+	}
+
+	private void cancelProposalConversation() {
+		SettlementProposalConversation.cancelOnUnload(villager); // Release even an invitation not yet joined.
+		SettlementProposalConversation.cancel(proposalConversationSession);
+		proposalConversationSession = null;
+		if (isProposalConversationAction()) { action = null; target = null; }
+	}
+
+	private void tickProposalConversation() {
+		if (!proposalConversationValid()) { stop(); return; }
+		var session = proposalConversationSession;
+		Villager other = session.speaker == villager ? session.listener : session.speaker;
+		villager.getNavigation().stop();
+		villager.getLookControl().setLookAt(other, 30, 30);
+		SettlementProposalConversation.pulse(session, villager);
+		if (!proposalConversationValid()) stop();
+	}
+
+	/** Read-only candidate gate: never call another resident's lifecycle methods. */
+	static boolean readyForTeaching(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && goal.action != Action.ATTEND_LESSON)
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.hasAnyShearsLoan()
+			|| goal.hasReturnCargo() || goal.hasTeachingCustody()) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		if (data.councilSessions().claimed(resident.getUUID()) || (SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident))) return false;
+		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
+		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
+	}
+
+	/** Read-only eligibility inspection, including reservations that have not joined a Goal yet. */
+	static boolean readyForAutonomousMeeting(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| (goal.action != null && goal.action != Action.DISCUSS_COUNCIL)
+			|| goal.foodTicket != null || goal.meetingTicket != null || goal.teachingSession != null
+			|| goal.hasAnyShearsLoan() || goal.hasReturnCargo() || goal.hasTeachingCustody()
+			|| SettlementCargo.isMaterial(resident.getMainHandItem())
+			|| SettlementCargo.isMaterial(resident.getOffhandItem())) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		if (data.teachingSessions().find(resident.getUUID(), level.getGameTime()) != null
+			|| (SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident))) return false;
+		Settlement camp = data.findSettlementForVillager(resident.getUUID()).orElse(null);
+		return camp != null && SettlementTeachingScene.residentBodyReady(level, data, camp, resident);
+	}
+
+	static SettlementAutonomousMeetings.Session autonomousMeetingSessionOf(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		return goal != null && goal.action == Action.DISCUSS_COUNCIL ? goal.autonomousMeetingSession : null;
+	}
+
+	private boolean prepareAutonomousMeeting(boolean allowSearch) {
+		// Default-OFF residents must not pay the candidate/body inspection cost.
+		if (settlement == null) return false;
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		if (state == null || !state.autonomousMeetingsAvailable() || !state.autonomousMeetingsEnabled()
+			|| !state.survivalEnabled() || !state.normsEnabled()) return false;
+		if (!readyForAutonomousMeeting(villager)) return false;
+		var session = SettlementAutonomousMeetings.current(villager, settlementData());
+		if (session == null && allowSearch && autonomousMeetingCooldown.ready(villager.level().getGameTime())) {
+			autonomousMeetingCooldown.defer(villager.level().getGameTime());
+			session = SettlementAutonomousMeetings.poll(villager, settlementData(), settlement);
+		}
+		if (session == null) return false;
+		autonomousMeetingSession = session;
+		action = Action.DISCUSS_COUNCIL;
+		target = session.store;
+		if (!SettlementAutonomousMeetings.join(session, villager)) { cancelAutonomousMeeting(); return false; }
+		return true;
+	}
+
+	private boolean autonomousMeetingValid() {
+		return autonomousMeetingSession != null && target != null && target.equals(autonomousMeetingSession.store)
+			&& readyForAutonomousMeeting(villager) && SettlementAutonomousMeetings.valid(autonomousMeetingSession);
+	}
+
+	private void cancelAutonomousMeeting() {
+		SettlementAutonomousMeetings.cancelOnUnload(villager); // Also releases a pending group reservation.
+		SettlementAutonomousMeetings.cancel(autonomousMeetingSession);
+		autonomousMeetingSession = null;
+		if (action == Action.DISCUSS_COUNCIL) { action = null; target = null; }
+	}
+
+	private void tickAutonomousMeeting() {
+		if (!autonomousMeetingValid()) { stop(); return; }
+		var session = autonomousMeetingSession;
+		villager.getNavigation().stop();
+		Villager other = session.participants.stream().filter(participant -> participant != villager).findFirst().orElse(null);
+		boolean safe = other != null && villager.hasLineOfSight(other) && other.hasLineOfSight(villager);
+		SettlementAutonomousMeetings.pulse(session, villager, safe);
+		if (!autonomousMeetingValid()) { stop(); return; }
+		if (other != null) villager.getLookControl().setLookAt(other, 30, 30);
+	}
+
+	static boolean teachingPurpose(ItemStack stack) {
+		return ConstructionSupply.isMarked(stack) || SettlementWorkbenchCargo.isMarked(stack)
+			|| SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)
+			|| SettlementFoodAge.isMarked(stack);
+	}
+
+	private boolean hasTeachingCustody() {
+		return ConstructionSupply.hasAny(villager.getInventory())
+			|| villager.getInventory().hasAnyMatching(VillagerWorkGoal::teachingPurpose)
+			|| teachingPurpose(villager.getMainHandItem()) || teachingPurpose(villager.getOffhandItem());
+	}
+
+	static SettlementAutonomousTeaching.Session teachingSessionOf(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		return goal != null && goal.action == Action.ATTEND_LESSON ? goal.teachingSession : null;
+	}
+
+	private boolean prepareTeaching(boolean allowSearch) {
+		if (!readyForTeaching(villager)) return false;
+		var session = SettlementAutonomousTeaching.current(villager, settlementData());
+		if (session == null && allowSearch && teachingCooldown.ready(villager.level().getGameTime())) {
+			teachingCooldown.defer(villager.level().getGameTime());
+			session = SettlementAutonomousTeaching.poll(villager, settlementData(), settlement);
+		}
+		if (session == null) return false;
+		teachingSession = session;
+		action = Action.ATTEND_LESSON;
+		target = session.station;
+		if (!SettlementAutonomousTeaching.join(session, villager)) { cancelTeaching(); return false; }
+		return true;
+	}
+
+	private boolean teachingValid() {
+		return teachingSession != null && target != null && target.equals(teachingSession.station)
+			&& readyForTeaching(villager) && SettlementAutonomousTeaching.valid(teachingSession);
+	}
+
+	private void cancelTeaching() {
+		SettlementAutonomousTeaching.cancelOnUnload(villager); // Includes a reservation not joined yet.
+		SettlementAutonomousTeaching.cancel(teachingSession);
+		teachingSession = null;
+		teachingPathTarget = null;
+		if (action == Action.ATTEND_LESSON) { action = null; target = null; }
+	}
+
+	private boolean teachingCell(ServerLevel level, BlockPos position) {
+		return foragePositionAccessible(level, position) && !settlementData().protectedAreas().blocked()
+			&& !settlementData().protectedAreas().contains(position);
+	}
+
+	private ConstructionApproach.Probe teachingProbe(ServerLevel level) {
+		return new ConstructionApproach.Probe() {
+			public boolean inBounds(BlockPos pos) { return teachingCell(level, pos); }
+			public boolean loaded(BlockPos pos) { return level.isLoaded(pos); }
+			public boolean ticking(BlockPos pos) { return level.isPositionEntityTicking(pos); }
+			public BlockState state(BlockPos pos) { return level.getBlockState(pos); }
+		};
+	}
+
+	private boolean atTeachingStation() {
+		return teachingSession != null && villager.level() instanceof ServerLevel level
+			&& SettlementCargoApproach.arrived(teachingSession.station, villager.position(), teachingProbe(level));
+	}
+
+	private boolean teachingPathSafe(ServerLevel level, net.minecraft.world.level.pathfinder.Path path) {
+		if (path == null) return true;
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			BlockPos pos = path.getNodePos(i);
+			if (!teachingCell(level, pos) || !teachingCell(level, pos.above()) || !teachingCell(level, pos.below())) return false;
+		}
+		return true;
+	}
+
+	private void tickTeaching() {
+		if (!(villager.level() instanceof ServerLevel level) || !teachingValid()) { stop(); return; }
+		var session = teachingSession;
+		Villager other = session.teacher == villager ? session.learner : session.teacher;
+		boolean arrived = atTeachingStation();
+		boolean separate = !villager.blockPosition().equals(other.blockPosition());
+		SettlementAutonomousTeaching.pulse(session, villager, arrived && separate
+			&& villager.hasLineOfSight(other) && other.hasLineOfSight(villager));
+		if (!teachingValid()) { stop(); return; }
+		if (arrived && separate) {
+			villager.getNavigation().stop();
+			villager.getLookControl().setLookAt(other, 30, 30);
+			return;
+		}
+		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS
+			|| !teachingPathSafe(level, villager.getNavigation().getPath())) {
+			teachingCooldown.defer(level.getGameTime()); stop(); return;
+		}
+		VillagerWorkGoal partner = goalOf(other);
+		if (teachingPathTarget != null && (teachingPathTarget.equals(other.blockPosition())
+			|| partner != null && teachingPathTarget.equals(partner.teachingPathTarget))) villager.getNavigation().stop();
+		if (!villager.getNavigation().isDone()) return;
+		var outcome = teachingApproach.attempt(target, villager.position(), level.getGameTime(), teachingProbe(level),
+			this::navigationSearchRegionLoaded, candidate -> {
+				if (candidate.equals(other.blockPosition()) || partner != null && candidate.equals(partner.teachingPathTarget)) return false;
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach() || !teachingPathSafe(level, path) || !teachingValid()) return false;
+				teachingPathTarget = candidate;
+				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+			});
+		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { teachingCooldown.defer(level.getGameTime()); stop(); }
+	}
+
+	/** Inspection only: the child stays free to start eating or any ordinary behavior. */
+	static boolean readyForChildCareRecipient(Villager resident) {
+		VillagerWorkGoal goal = goalOf(resident);
+		if (goal == null || !(resident.level() instanceof ServerLevel level)
+			|| goal.action != null || goal.foodTicket != null || goal.meetingTicket != null
+			|| goal.teachingSession != null || goal.autonomousMeetingSession != null
+			|| goal.hasAnyShearsLoan() || goal.hasTeachingCustody()
+			|| SettlementCargo.hasCargo(resident.getInventory())
+			|| !resident.getMainHandItem().isEmpty() || !resident.getOffhandItem().isEmpty()) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		return data.teachingSessions().find(resident.getUUID(), level.getGameTime()) == null
+			&& !data.councilSessions().claimed(resident.getUUID())
+			&& !(SettlementProposalConversation.claimed(resident) || SettlementFoodSharingScene.claimed(resident));
+	}
+
+	private boolean childCareInterrupted() {
+		return sowingInterrupted() || foodTicket != null || teachingSession != null || autonomousMeetingSession != null
+			|| !villager.getMainHandItem().isEmpty() || !villager.getOffhandItem().isEmpty();
+	}
+
+	private boolean prepareChildCare() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		// Failed eligibility and empty candidate searches also back off for 100 ticks.
+		childCareCooldown.defer(level.getGameTime());
+		if (childCareInterrupted()) return false;
+		SettlementSavedData data = settlementData();
+		for (Villager child : SettlementChildCare.candidates(level, data, settlement, villager)) {
+			var ticket = SettlementChildCare.prepare(level, data, settlement, villager, child);
+			if (ticket == null) continue;
+			var registry = data.childCareClaims();
+			var lease = registry.claim(villager.getUUID(), child.getUUID(), level.getGameTime());
+			if (lease == null) { SettlementChildCare.cancel(ticket); continue; }
+			childCareTicket = ticket;
+			childCareRegistry = registry;
+			childCareLease = lease;
+			action = Action.FEED_CHILD;
+			target = ticket.position();
+			progress = 0;
+			return true;
+		}
+		return false;
+	}
+
+	private boolean childCareValid() {
+		return childCareTicket != null && target != null && target.equals(childCareTicket.position())
+			&& !childCareInterrupted() && childCareRegistry != null
+			&& childCareRegistry.active(childCareLease, villager.level().getGameTime())
+			&& SettlementChildCare.valid(childCareTicket, villager);
+	}
+
+	private void cancelChildCare() {
+		if (childCareTicket != null) childCareCooldown.defer(villager.level().getGameTime());
+		SettlementChildCare.cancel(childCareTicket);
+		if (childCareRegistry != null) childCareRegistry.release(childCareLease, villager.level().getGameTime());
+		childCareTicket = null;
+		childCareRegistry = null;
+		childCareLease = null;
+		lastChildCareContactTick = 0;
+		if (action == Action.FEED_CHILD) { action = null; target = null; }
+	}
+
+	private boolean atChildCareRecipient(ServerLevel level) {
+		return villager.level() == level && target != null && childCareTicket != null
+			&& target.equals(childCareTicket.position()) && SettlementChildCare.contactReady(childCareTicket, villager);
+	}
+
+	/** Repeated calls in one tick earn nothing; skipped/reversed ticks break continuity. */
+	static int childCareContactStep(long previous, long now) {
+		if (previous < 0 || now < previous) return -1;
+		if (now == previous) return 0;
+		return now - previous == 1 ? 1 : -1;
+	}
+
+	private void tickChildCare() {
+		if (!(villager.level() instanceof ServerLevel level) || !childCareValid()) { stop(); return; }
+		if (atChildCareRecipient(level)) {
+			villager.getNavigation().stop();
+			villager.getLookControl().setLookAt(childCareTicket.recipient(), 30, 30);
+			long now = level.getGameTime();
+			if (progress > 0) {
+				int step = childCareContactStep(lastChildCareContactTick, now);
+				if (step < 0) { stop(); return; }
+				if (step == 0) return; // start() and tick() can run during the same game tick.
+			}
+			lastChildCareContactTick = now;
+			if (++progress < CHILD_CARE_TICKS) return;
+			if (SettlementChildCare.finish(childCareTicket, villager,
+				() -> childCareValid() && atChildCareRecipient(level))) villager.swing(InteractionHand.MAIN_HAND);
+			stop();
+			return;
+		}
+		// Once contact starts, any loss of footing or sight cancels rather than accumulating progress.
+		if (progress > 0) { stop(); return; }
+		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS
+			|| !sowingPathSafe(level, villager.getNavigation().getPath())) { stop(); return; }
+		if (!villager.getNavigation().isDone()) return;
+		var outcome = childCareApproach.attempt(target, villager.position(), level.getGameTime(), cargoProbe(level),
+			this::navigationSearchRegionLoaded, candidate -> {
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach() || !sowingPathSafe(level, path) || !childCareValid()) return false;
+				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+			});
+		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { stop(); }
+	}
+
+	/** Purpose cargo always wins; only ordinary surplus food may remain during sowing. */
+	private boolean sowingInterrupted() {
+		return settlement == null || shouldEat() || meetingTicket != null || emergencyForage()
+			|| SettlementProposalConversation.claimed(villager)
+			|| settlementData().teachingSessions().find(villager.getUUID(), villager.level().getGameTime()) != null
+			|| settlementData().councilSessions().claimed(villager.getUUID())
+			|| hasAnyShearsLoan() || hasTeachingCustody() || SettlementCargo.hasCargo(villager.getInventory())
+			|| SettlementCargo.isMaterial(villager.getMainHandItem()) || SettlementCargo.isMaterial(villager.getOffhandItem())
+			|| SettlementCargoDelivery.hasMarkedHarvestFood(villager.getInventory());
+	}
+
+	private boolean prepareSowing() {
+		if (!(villager.level() instanceof ServerLevel level) || sowingInterrupted()) return false;
+		SettlementSavedData data = settlementData();
+		if (!SettlementSowing.hasSeed(data, settlement, villager.getUUID(), villager.getInventory())) return false;
+		sowingCooldown.defer(level.getGameTime());
+		for (BlockPos pos : SettlementSowing.candidates(level, data, settlement, villager)) {
+			var ticket = SettlementSowing.prepare(level, data, settlement, villager, pos);
+			if (ticket == null) continue;
+			var registry = data.materialLeases();
+			var lease = registry.claim(data, settlement, villager.getUUID(), pos, level.getGameTime());
+			if (lease == null) continue;
+			sowingTicket = ticket;
+			sowingRegistry = registry;
+			sowingLease = lease;
+			action = Action.SOW_POTATO;
+			target = ticket.position();
+			progress = 0;
+			return true;
+		}
+		return false;
+	}
+
+	private boolean sowingValid() {
+		return sowingTicket != null && target != null && target.equals(sowingTicket.position())
+			&& !sowingInterrupted() && sowingRegistry != null
+			&& sowingRegistry.valid(sowingLease, settlementData(), settlement, villager.getUUID(), target, villager.level().getGameTime())
+			&& SettlementSowing.valid(sowingTicket, villager);
+	}
+
+	private void cancelSowing() {
+		if (sowingRegistry != null) sowingRegistry.release(sowingLease);
+		sowingTicket = null;
+		sowingLease = null;
+		sowingRegistry = null;
+		if (action == Action.SOW_POTATO) { action = null; target = null; }
+	}
+
+	private boolean sowingPathSafe(ServerLevel level, net.minecraft.world.level.pathfinder.Path path) {
+		if (path == null) return true;
+		// All cells must be available before inspecting any support, and never walk across farmland.
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			BlockPos pos = path.getNodePos(i);
+			for (BlockPos cell : List.of(pos, pos.above(), pos.below()))
+				if (!foragePositionAccessible(level, cell)) return false;
+		}
+		for (int i = 0; i < path.getNodeCount(); i++)
+			if (path.getNodePos(i).equals(target) || level.getBlockState(path.getNodePos(i).below()).is(Blocks.FARMLAND)) return false;
+		return true;
+	}
+
+	private void tickSowing() {
+		if (!(villager.level() instanceof ServerLevel level) || !sowingValid()) { stop(); return; }
+		if (SettlementCargoApproach.arrived(target, villager.position(), cargoProbe(level))) {
+			villager.getNavigation().stop();
+			villager.getLookControl().setLookAt(target.getX() + 0.5, target.getY() + 0.5, target.getZ() + 0.5);
+			int duration = settlementData().personalityOf(settlement, villager.getUUID())
+				.workDuration(FORAGE_TICKS, VillagerPersonality.WorkType.GATHER);
+			if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
+			if (++progress < duration) return;
+			if (SettlementSowing.finish(sowingTicket, villager,
+				() -> sowingValid() && SettlementCargoApproach.arrived(target, villager.position(), cargoProbe(level))))
+				villager.swing(InteractionHand.MAIN_HAND);
+			stop();
+			return;
+		}
+		progress = 0;
+		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS
+			|| !sowingPathSafe(level, villager.getNavigation().getPath())) {
+			sowingCooldown.defer(level.getGameTime()); stop(); return;
+		}
+		if (!villager.getNavigation().isDone()) return;
+		var outcome = sowingApproach.attempt(target, villager.position(), level.getGameTime(), cargoProbe(level),
+			this::navigationSearchRegionLoaded, candidate -> {
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach() || !sowingPathSafe(level, path) || !sowingValid()) return false;
+				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+			});
+		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) {
+			sowingCooldown.defer(level.getGameTime()); stop();
+		}
+	}
+
+	private void releaseMaterialLease() {
+		if (materialRegistry != null) materialRegistry.release(materialLease);
+		if (materialTicket != null) materialTicket.cancelled = true;
+		materialLease = null;
+		materialRegistry = null;
+		materialTicket = null;
+	}
+
+	private boolean claimGatherTarget() {
+		if (target == null || !(villager.level() instanceof ServerLevel level)) return false;
+		SettlementSavedData data = settlementData();
+		// A coordinate selected from an explicit manual mark keeps the old manual semantics.
+		if (!SettlementGathering.validTarget(level, data, settlement, villager, target)) {
+			var choice = materialCandidates.stream().filter(candidate -> candidate.position().equals(target)).findFirst().orElse(null);
+			materialTicket = SettlementMaterialGathering.prepare(data, settlement, villager.getUUID(), choice,
+				SettlementMaterialGathering.probe(level, data, settlement, villager));
+			if (materialTicket == null) return false;
+		}
+		materialRegistry = data.materialLeases();
+		materialLease = materialRegistry.claim(data, settlement, villager.getUUID(), target, level.getGameTime());
+		if (materialLease == null) { releaseMaterialLease(); return false; }
+		return true;
+	}
+
+	private void releaseForageLease() {
+		if (forageRegistry != null) forageRegistry.release(forageLease);
+		forageLease = null;
+		forageRegistry = null;
+	}
+
+	private void cancelShearing() {
+		SettlementShearing.cancelLoan(shearsLoanTicket);
+		shearsLoanTicket = null;
+		SettlementShearing.cancel(shearingSession);
+		shearingSession = null;
+		shearingPathTarget = null;
+		shearingPathAge = 0;
+		if (action == Action.SHEAR_SHEEP || isShearsLoanAction()) { action = null; target = null; }
+	}
+
+	/** Entity unload is not guaranteed to invoke Goal.stop; release transient livestock and sowing claims. */
+	static void cancelShearingOnUnload(Villager villager) {
+		SettlementProposalConversation.cancelOnUnload(villager);
+		VillagerWorkGoal goal = goalOf(villager);
+		SettlementFoodSharingScene.cancelOnUnload(villager);
+		if (goal != null) { goal.cancelFoodSharing(); goal.cancelPersonalMeal(); goal.cancelShearing(); goal.cancelChildCare(); goal.cancelSowing(); goal.cancelProposalConversation(); }
+		if (villager.level() instanceof ServerLevel level)
+			SettlementSavedData.get(level).childCareClaims().cancelResident(villager.getUUID());
+	}
+
+	private static VillagerWorkGoal goalOf(Villager villager) {
+		for (var wrapped : ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals()) {
+			if (wrapped.getGoal() instanceof VillagerWorkGoal goal) return goal;
+		}
+		return null;
+	}
+
+	static String inviteToMeeting(net.minecraft.server.level.ServerPlayer player, Villager villager,
+		SettlementSavedData data, Settlement settlement) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "unavailable";
+		return goal.toggleInvitation(player, data, settlement);
+	}
+
+	/** Opaque, ephemeral identity for a server-owned dialog snapshot. Inspection has no side effects. */
+	static Object invitationIdentity(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		return goal != null && goal.hasValidInvitation() ? goal.meetingTicket : null;
+	}
+
+	static boolean invitationOwnedBy(Villager villager, java.util.UUID inviter) {
+		Object ticket = invitationIdentity(villager);
+		return ticket instanceof SettlementMeetingInvitations.Ticket invitation && invitation.inviter().equals(inviter);
+	}
+
+	static String requestMeetingInvitation(net.minecraft.server.level.ServerPlayer player, Villager villager,
+		SettlementSavedData data, Settlement settlement, boolean cancel, Object expectedTicket) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "unavailable";
+		return goal.requestInvitation(player, data, settlement, false, cancel, expectedTicket);
+	}
+
+	static void cancelMeetingInvitation(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal != null) {
+			if (goal.action == Action.ATTEND_MEETING) goal.stop();
+			else goal.cancelMeetingInvitation();
+		}
+	}
+
+	static String invitationStatus(Villager villager) {
+		VillagerWorkGoal goal = goalOf(villager);
+		if (goal == null) return "none";
+		if (!goal.hasValidInvitation()) return "none";
+		if (goal.meetingTicket.waiting()) return "waiting";
+		return goal.action == Action.ATTEND_MEETING ? "travelling" : "pending";
+	}
+
+	private String toggleInvitation(net.minecraft.server.level.ServerPlayer player, SettlementSavedData data, Settlement requested) {
+		return requestInvitation(player, data, requested, true, false, null);
+	}
+
+	private String requestInvitation(net.minecraft.server.level.ServerPlayer player, SettlementSavedData data,
+		Settlement requested, boolean toggle, boolean cancel, Object expectedTicket) {
+		if (!(villager.level() instanceof ServerLevel level) || player.level() != level
+			|| !player.isAlive() || player.isRemoved() || player.isSpectator() || !villager.isAlive()
+			|| player.distanceToSqr(villager) > 16) return "unavailable";
+		refreshMeetingInvitation();
+		String decision = toggle
+			? (meetingTicket == null ? "ready" : SettlementMeetingInvitations.existing(meetingTicket, player.getUUID()))
+			: SettlementMeetingInvitations.explicitRequest(meetingTicket, SettlementSavedData.get(level), level.getGameTime(),
+				level.getDayTime() / 24000L, player.getUUID(), cancel, expectedTicket);
+		if (decision.equals("cancelled")) {
+			if (action == Action.ATTEND_MEETING) stop();
+			else cancelMeetingInvitation();
+			return decision;
+		}
+		if (!decision.equals("ready")) return decision;
+		String gate = SettlementMeetingInvitations.gate(data, requested, villager.getUUID(), level.getDayTime() / 24000L);
+		if (!gate.equals("ready")) return gate;
+		if (action == Action.EAT || action == Action.EAT_PERSONAL || foodTicket != null) return "eating";
+		BlockPos store = data.getStockpile(requested).orElse(null);
+		if (store == null || !level.isLoaded(store) || !level.isPositionEntityTicking(store)) return "store_unavailable";
+		Map<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> identities = new java.util.LinkedHashMap<>();
+		Map<BlockPos, BlockState> states = new java.util.LinkedHashMap<>();
+		states.put(store, level.getBlockState(store));
+		if (!(states.get(store).is(Blocks.CHEST) || states.get(store).is(Blocks.BARREL))) return "store_unavailable";
+		if (states.get(store).getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+			&& states.get(store).getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+				!= net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+			BlockPos partner = store.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(states.get(store)));
+			if (!level.isLoaded(partner) || !level.isPositionEntityTicking(partner)) return "store_unavailable";
+			states.put(partner, level.getBlockState(partner));
+		}
+		for (BlockPos pos : states.keySet()) {
+			var entity = level.getBlockEntity(pos);
+			if (entity == null || entity.isRemoved() || entity.getLevel() != level) return "store_unavailable";
+			identities.put(pos, entity);
+		}
+		meetingTicket = SettlementMeetingInvitations.create(data, requested, villager.getUUID(), player.getUUID(),
+			level.getGameTime(), level.getDayTime() / 24000L, () -> SettlementSavedData.get(level) == data
+				&& new SettlementMeetingInvitations.Presence(villager.isAlive() && !villager.isRemoved(),
+					level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition()),
+					level.isPositionEntityTicking(villager.blockPosition()), villager.level() == level,
+					!villager.isBaby(), !villager.isNoAi(), !villager.isSleeping(), !villager.isTrading(),
+					!villager.isPassenger(), villager.hurtTime == 0 && villager.getHealth() >= villager.getMaxHealth(),
+					action != Action.EAT && action != Action.EAT_PERSONAL && foodTicket == null, villager.distanceToSqr(requested.center().getCenter())).eligible()
+				&& player.level() == level && player.isAlive() && !player.isRemoved() && !player.isSpectator()
+				&& level.getServer().getPlayerList().getPlayer(player.getUUID()) == player
+				&& SettlementMeetingInvitations.withinSettlement(player.distanceToSqr(requested.center().getCenter()))
+				&& (meetingTicket == null || !meetingTicket.waiting()
+					|| SettlementMeetingInvitations.arrived(villager.distanceToSqr(store.getCenter())))
+				&& data.getStockpile(requested).filter(store::equals).isPresent()
+				&& identities.entrySet().stream().allMatch(entry -> level.isLoaded(entry.getKey())
+					&& level.isPositionEntityTicking(entry.getKey()) && level.getBlockEntity(entry.getKey()) == entry.getValue()
+					&& !entry.getValue().isRemoved() && entry.getValue().getLevel() == level)
+				&& states.entrySet().stream().allMatch(entry -> SettlementFoodRequests.sameStoreState(entry.getValue(), level.getBlockState(entry.getKey())))
+				&& SettlementStockpile.getStockpile(level, data, requested) != null);
+		if (meetingTicket == null) return "unavailable";
+		meetingStore = store;
+		return "accepted";
+	}
+
+	private void cancelMeetingInvitation() {
+		if (meetingTicket != null) meetingTicket.cancel();
+		meetingTicket = null;
+		meetingStore = null;
+	}
+
+	private boolean hasValidInvitation() {
+		return meetingTicket != null && meetingStore != null && villager.level() instanceof ServerLevel level
+			&& SettlementMeetingInvitations.waitingPositionValid(meetingTicket.waiting(), villager.distanceToSqr(meetingStore.getCenter()))
+			&& meetingTicket.matches(SettlementSavedData.get(level), level.getGameTime(), level.getDayTime() / 24000L);
+	}
+
+	private void refreshMeetingInvitation() {
+		if (meetingTicket == null) return;
+		if (!(villager.level() instanceof ServerLevel level)
+			|| !meetingTicket.valid(SettlementSavedData.get(level), level.getGameTime(), level.getDayTime() / 24000L)) {
+			cancelMeetingInvitation();
+			if (action == Action.ATTEND_MEETING) stop();
+		}
+	}
+
+	private void tickMeeting() {
+		if (meetingTicket == null || target == null) { stop(); return; }
+		ServerLevel level = (ServerLevel) villager.level();
+		boolean arrived = SettlementMeetingInvitations.arrived(villager.distanceToSqr(target.getCenter()));
+		if (!SettlementMeetingInvitations.waitingPositionValid(meetingTicket.waiting(), villager.distanceToSqr(target.getCenter()))) { stop(); return; }
+		if (arrived) {
+			villager.getNavigation().stop();
+			villager.getLookControl().setLookAt(target.getCenter());
+			meetingTicket.arrive(level.getGameTime());
+			return;
+		}
+		if (++travelTicks >= SettlementMeetingInvitations.MAX_TRAVEL_TICKS || !meetingPathTicking()) { stop(); return; }
+		if (!villager.getNavigation().isDone()) return;
+		if (travelTicks > 1 || !navigationSearchRegionLoaded()) { stop(); return; }
+		for (int vertical : new int[] {0, 1, -1}) {
+			for (Direction direction : Direction.Plane.HORIZONTAL) {
+				BlockPos candidate = target.relative(direction).above(vertical);
+				if (!level.isLoaded(candidate) || !level.isLoaded(candidate.above()) || !level.isLoaded(candidate.below())
+					|| !level.isPositionEntityTicking(candidate) || !level.isPositionEntityTicking(candidate.above())
+					|| !level.isPositionEntityTicking(candidate.below())
+					|| !level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
+					|| !level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
+					|| !level.getBlockState(candidate).getFluidState().isEmpty()
+					|| !level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) continue;
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach()) continue;
+				boolean safe = true;
+				for (int i = 0; i < path.getNodeCount(); i++) {
+					if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) { safe = false; break; }
+				}
+				if (safe && villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())) return;
+			}
+		}
+		stop();
+	}
+
+	/** PathNavigation builds a chunk-backed search region before returning any nodes. */
+	private boolean navigationSearchRegionLoaded() {
+		ServerLevel level = (ServerLevel) villager.level();
+		double followRange = villager.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
+		if (!Double.isFinite(followRange) || followRange < 0 || followRange > 256) return false;
+		int radius = (int) Math.ceil(followRange) + 16;
+		BlockPos origin = villager.blockPosition();
+		if ((long) origin.getX() - radius < Integer.MIN_VALUE || (long) origin.getX() + radius > Integer.MAX_VALUE
+			|| (long) origin.getZ() - radius < Integer.MIN_VALUE || (long) origin.getZ() + radius > Integer.MAX_VALUE) return false;
+		for (int x = (origin.getX() - radius) >> 4; x <= (origin.getX() + radius) >> 4; x++) {
+			for (int z = (origin.getZ() - radius) >> 4; z <= (origin.getZ() + radius) >> 4; z++) {
+				if (!level.isLoaded(new BlockPos(x << 4, origin.getY(), z << 4))) return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean meetingPathTicking() {
+		var path = villager.getNavigation().getPath();
+		if (path == null) return true;
+		ServerLevel level = (ServerLevel) villager.level();
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) return false;
+		}
+		return true;
+	}
+
 	String debugState() {
 		boolean running = ((com.thysummer.coopcraft.mixin.MobAccessor) villager).getGoalSelector().getAvailableGoals().stream()
 			.anyMatch(goal -> goal.getGoal() == this && goal.isRunning());
-		return "action=" + action + ", target=" + target + ", progress=" + progress + ", running=" + running
+		String reservation = findWorkSettlement()
+			.flatMap(current -> settlementData().simulationOf(current))
+			.flatMap(state -> state.coordinationPlan().reservationFor(villager.getUUID()))
+			.map(Object::toString).orElse("none");
+		return "reservation=" + reservation + ", action=" + action + ", target=" + target + ", progress=" + progress + ", running=" + running
 			+ ", canContinue=" + canContinueToUse() + ", alive=" + villager.isAlive() + ", villagerTick=" + villager.tickCount
 			+ ", gameTime=" + villager.level().getGameTime()
 			+ ", entityTicking=" + ((ServerLevel) villager.level()).isPositionEntityTicking(villager.blockPosition())
-			+ ", travel=" + travelTicks + ", approach=" + approachIndex
+			+ ", travel=" + travelTicks + ", approach=" + constructionApproach.cursor()
 			+ ", navigationDone=" + villager.getNavigation().isDone() + ", path=" + villager.getNavigation().getPath()
 			+ ", pathTarget=" + (villager.getNavigation().getPath() == null ? null : villager.getNavigation().getPath().getTarget());
 	}
@@ -168,8 +1334,35 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	public WorkStatus status() {
+		if (action == Action.EAT_PERSONAL) return new WorkStatus(action.id(), target, null);
+		if (isProposalConversationAction() && proposalConversationSession != null) {
+			String phase = proposalConversationSession.phase();
+			return new WorkStatus(phase.equals("closed") || phase.equals("shared") ? "idle" : action.id(), target, null);
+		}
+		if (action == Action.FEED_CHILD && childCareTicket != null)
+			return new WorkStatus(action.id(), childCareTicket.position(), travelTicks >= 100 ? "path_blocked" : null);
+		if (action == Action.DISCUSS_COUNCIL && autonomousMeetingSession != null) {
+			String phase = autonomousMeetingSession.phase();
+			return new WorkStatus(phase.equals("closed") ? "idle" : phase.equals("discussing") ? "discuss_council" : "council_waiting", target, null);
+		}
+		if (action == Action.ATTEND_LESSON && teachingSession != null) {
+			String phase = teachingSession.phase();
+			return new WorkStatus(phase.equals("closed") ? "idle" : phase.equals("teaching") ? "lesson_learning"
+				: atTeachingStation() ? "lesson_waiting" : "attend_lesson", target, null);
+		}
+		if (action == Action.SHEAR_SHEEP && shearingSession != null)
+			return new WorkStatus(action.id(), shearingSession.position(), travelTicks >= 100 ? "path_blocked" : null);
+		if (action == Action.ATTEND_MEETING && !hasValidInvitation()) return new WorkStatus("idle", null, null);
+		if (action == Action.ATTEND_MEETING && meetingTicket != null)
+			return new WorkStatus(meetingTicket.waiting() ? "meeting_wait" : "attend_meeting", meetingStore, null);
+		if (action == Action.RETURN_TO_STOCKPILE) return new WorkStatus(action.id(), target, cargoBlocker);
+		if (SettlementCargoDelivery.hasMarkedHarvestFood(villager.getInventory()) && !hasDeliverableFoodCargo())
+			return new WorkStatus(action == null ? "idle" : action.id(), target, "cargo_food_unavailable");
+		if (action == null && cargoBlocker != null && hasReturnCargo())
+			return new WorkStatus("idle", null, cargoBlocker);
 		if (action != null) {
-			if (action == Action.EAT && !hasFoodAvailable()) {
+			if (foodTicket != null && foodTicket.waiting()) return new WorkStatus("eat", target, "food_request_waiting");
+			if (action == Action.EAT && !hasFoodAvailable() && !hasPendingFoodRefusal()) {
 				return new WorkStatus("idle", null, "hungry_no_food");
 			}
 			return new WorkStatus(action.id(), target, travelTicks >= 100 ? "path_blocked" : null);
@@ -178,14 +1371,28 @@ public class VillagerWorkGoal extends Goal {
 			return new WorkStatus("idle", null, "unknown");
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
-		Optional<Settlement> workSettlement = data.findSettlementForVillager(villager.getUUID())
-			.filter(candidate -> data.getStockpile(candidate).isPresent());
+		Optional<Settlement> workSettlement = data.findSettlementForVillager(villager.getUUID());
 		if (workSettlement.isEmpty()) {
 			return new WorkStatus("idle", null, "no_stockpile");
 		}
 		Settlement current = workSettlement.get();
+		Optional<CareAssignment> receivingCare = SettlementCareService.activeForDependent(
+			level, data, current, villager.getUUID()
+		);
+		if (receivingCare.isPresent()
+			&& level.getEntity(receivingCare.get().caregiverId()) instanceof Villager caregiver) {
+			return new WorkStatus("receiving_care", caregiver.blockPosition(), null);
+		}
 		if (villager.isBaby()) {
 			return new WorkStatus("idle", null, "child");
+		}
+		Optional<String> paused = SettlementCoordination.pausedCause(level, data, current, villager.getUUID());
+		if (paused.isPresent()) {
+			BlockPos project = data.getConstructionJob(current).map(ConstructionJob::origin).orElse(null);
+			return new WorkStatus("idle", project, paused.get());
+		}
+		if (data.getStockpile(current).isEmpty()) {
+			return new WorkStatus("idle", null, "no_stockpile");
 		}
 		int satiety = data.needsOf(current, villager.getUUID()).satiety();
 		boolean foodAvailable = SettlementSimulationService.isSurvivalEnabled(data, current)
@@ -194,13 +1401,20 @@ public class VillagerWorkGoal extends Goal {
 		if (satiety <= SettlementNeeds.HUNGRY_AT && !foodAvailable) {
 			return new WorkStatus("idle", null, "hungry_no_food");
 		}
-		if (data.getConstructionJob(current).isPresent()) {
-			return new WorkStatus("idle", null, "construction_blocked");
+		var construction = ConstructionSystem.inspect(level, data, current);
+		if (construction.isPresent()) {
+			return constructionStatus(construction.get());
 		}
-		if (data.resourcesOf(current).isEmpty()) {
+		if (data.resourcesOf(current).isEmpty() && data.gatheringAreaOf(current).isEmpty()) {
 			return new WorkStatus("idle", null, "no_resources");
 		}
 		return new WorkStatus("idle", null, null);
+	}
+
+	/** An available next step does not mean an idle resident has started building or is blocked. */
+	static WorkStatus constructionStatus(ConstructionReadiness readiness) {
+		return new WorkStatus("idle", null, readiness.blocker().equals("ready")
+			? null : "construction_" + readiness.blocker());
 	}
 
 	public record WorkStatus(String action, BlockPos target, String blocker) {
@@ -218,91 +1432,786 @@ public class VillagerWorkGoal extends Goal {
 
 	@Override
 	public void tick() {
-		if (!navigateToTarget()) {
-			return;
-		}
-		progress++;
-		int baseDuration = switch (action) {
-			case GATHER -> hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
-			case FORAGE -> FORAGE_TICKS;
-			case BUILD -> BUILD_TICKS;
-			case EAT -> EAT_TICKS;
-			default -> CRAFT_TICKS;
-		};
-		var workType = switch (action) {
-			case GATHER -> VillagerPersonality.WorkType.GATHER;
-			case FORAGE -> VillagerPersonality.WorkType.GATHER;
-			case BUILD -> VillagerPersonality.WorkType.BUILD;
-			case EAT -> VillagerPersonality.WorkType.GENERAL;
-			default -> VillagerPersonality.WorkType.CRAFT;
-		};
-		int duration = settlementData().personalityOf(settlement, villager.getUUID()).workDuration(baseDuration, workType);
-		if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
-			duration = duration * 5 / 4;
-		}
-		if (action == Action.GATHER) {
-			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
-		} else if (action != Action.BUILD && action != Action.EAT) {
-			duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
-		}
-		if (progress < duration) {
-			return;
-		}
+		try {
+			if (action == Action.EAT_PERSONAL) { tickPersonalMeal(); return; }
+			if (isFoodDeliveryAction()) { tickFoodDelivery(); return; }
+			if (isFoodSharingAction()) { tickFoodSharing(); return; }
+			refreshMeetingInvitation();
+			if (action == Action.SCOUT_MATERIAL_AREA) { tickScouting(); return; }
+			if (isProposalConversationAction()) { tickProposalConversation(); return; }
+			if (action == Action.DISCUSS_COUNCIL) { tickAutonomousMeeting(); return; }
+			if (action == Action.ATTEND_LESSON) { tickTeaching(); return; }
+			if (hasAnyShearsLoan() && action != Action.SHEAR_SHEEP && action != Action.RETURN_SHEARS && action != Action.EAT) { stop(); return; }
+			if (isShearsLoanAction()) { tickShearsLoan(); return; }
+			if (action == Action.ATTEND_MEETING) { tickMeeting(); return; }
+			if (action == null) return;
+			if (action == Action.FEED_CHILD) { tickChildCare(); return; }
+			if (action == Action.SOW_POTATO) { tickSowing(); return; }
+			if (action == Action.SHEAR_SHEEP) { tickShearing(); return; }
+			if (action == Action.COLLECT_STONE_PICKAXE) { tickPublicPickaxeCollection(); return; }
+			if (isWorkbenchAction()) { tickWorkbenchCrafting(); return; }
+			if (isSupplyAction()) { tickBuildSupply(); return; }
+			if (action == Action.RETURN_TO_STOCKPILE) { tickCargoReturn(); return; }
+			if ((action == Action.GATHER || action == Action.CRAFT_FIRST_WORKBENCH || action == Action.FORAGE || action == Action.HARVEST_CROP)
+				&& !isTargetValid()) { stop(); return; }
+			if (action == Action.CARE) {
+				Optional<CareAssignment> care = activeCare();
+				if (care.isEmpty()) {
+					stop();
+					return;
+				}
+				target = careDependent(care.get()).blockPosition();
+				if (navigateToTarget() && SettlementCareService.progressCare(
+					(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+				)) {
+					stop();
+				}
+				return;
+			}
+			if (foodTicket != null) {
+				villager.getNavigation().stop();
+				if (!foodTicket.waiting()) {
+					foodTicket = null;
+					progress = 0;
+					if (!isTargetValid()) stop();
+				}
+				return;
+			}
+			if (!navigateToTarget()) {
+				return;
+			}
+			progress++;
+			int baseDuration = switch (action) {
+				case GATHER -> hasStonePickaxe() ? TOOL_GATHER_TICKS : HAND_GATHER_TICKS;
+				case FORAGE, HARVEST_CROP -> FORAGE_TICKS;
+				case BUILD -> BUILD_TICKS;
+				case EAT -> EAT_TICKS;
+				default -> CRAFT_TICKS;
+			};
+			var workType = switch (action) {
+				case GATHER -> VillagerPersonality.WorkType.GATHER;
+				case FORAGE, HARVEST_CROP -> VillagerPersonality.WorkType.GATHER;
+				case BUILD -> VillagerPersonality.WorkType.BUILD;
+				case EAT -> VillagerPersonality.WorkType.GENERAL;
+				default -> VillagerPersonality.WorkType.CRAFT;
+			};
+			int duration = settlementData().personalityOf(settlement, villager.getUUID()).workDuration(baseDuration, workType);
+			if (action != Action.EAT && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) {
+				duration = duration * 5 / 4;
+			}
+			if (action == Action.GATHER || (action == Action.FORAGE || action == Action.HARVEST_CROP)) {
+				duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+			} else if (action == Action.BUILD) {
+				duration = SettlementSimulationService.constructionWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+			} else if (action != Action.EAT) {
+				duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+			}
+			if (progress < duration) {
+				return;
+			}
 
-		switch (action) {
-			case GATHER -> gather();
-			case FORAGE -> forage();
-			case CRAFT_PICKAXE -> craftPickaxe();
-			case CRAFT_STICKS -> craftSticks();
-			case BUILD -> ConstructionSystem.buildNext(
-				(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
-			);
-			case POLISH_PICKAXE -> craftPolishedPickaxe();
-			case GRIND_SMOOTH_STONE -> grindSmoothStone();
-			case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
+			if (action == Action.EAT && queuePreparedMeal()) return;
+			switch (action) {
+				case GATHER -> gather();
+				case FORAGE, HARVEST_CROP -> forage();
+				case CRAFT_MATERIALS -> craftMaterials();
+				case CRAFT_FIRST_WORKBENCH -> craftFirstWorkbench();
+				case BAKE_BREAD -> bakeBread();
+				case CRAFT_HOUSING -> craftHousing();
+				case CRAFT_SHEARS -> craftShears();
+				case COLLECT_IRON -> collectIron();
+				case SMELT_IRON -> smeltIron();
+				case CRAFT_IRON_PICKAXE -> craftIronPickaxe();
+				case BUILD -> {
+					if (ConstructionSystem.buildNext(
+						(ServerLevel) villager.level(), settlementData(), settlement, currentBuildTarget, villager
+					) && settlementData().getConstructionJob(settlement).isEmpty()) {
+						SettlementCoordination.complete(
+							(ServerLevel) villager.level(), settlementData(), settlement, villager.getUUID()
+						);
+					}
+				}
+				case POLISH_PICKAXE, COLLECT_POLISHING_MATERIALS, GRIND_SMOOTH_STONE, COLLECT_GRINDING_MATERIALS, FEED_CHILD, SOW_POTATO, DISCUSS_COUNCIL, ATTEND_LESSON, BORROW_SHEARS, RETURN_SHEARS, SHEAR_SHEEP, ATTEND_MEETING, RETURN_TO_STOCKPILE, COLLECT_BUILD_SUPPLY, RETURN_BUILD_SUPPLY, COLLECT_PICKAXE_MATERIALS, WORKBENCH_PICKAXE, COLLECT_STICK_INPUTS, CRAFT_STICKS_AT_WORKBENCH, COLLECT_PLANK_MATERIALS, WORKBENCH_PLANKS, COLLECT_DOOR_MATERIALS, WORKBENCH_DOORS, COLLECT_BED_MATERIALS, WORKBENCH_BEDS, COLLECT_WOOL_MATERIALS, WORKBENCH_WOOL, COLLECT_TORCH_MATERIALS, WORKBENCH_TORCHES -> { return; }
+				case EAT -> SettlementNeeds.eat((ServerLevel) villager.level(), settlementData(), settlement, villager);
+			}
+			if (action == Action.EAT && isTargetValid()) {
+				progress = 0;
+				return;
+			}
+			stop();
+		} catch (RuntimeException | Error failure) { cancelFoodSharing(); cancelPersonalMeal(); cancelScouting(); cancelChildCare(); cancelSowing(); releaseMaterialLease(); cancelWorkbenchCrafting(); cancelPublicPickaxeCollection(); cancelShearing(); cancelTeaching(); cancelAutonomousMeeting(); cancelProposalConversation(); throw failure; }
+	}
+
+	/** Capture actual block entities, never the fresh wrapper returned for a double chest. */
+	private boolean queuePreparedMeal() {
+		SettlementSavedData data = settlementData();
+		Settlement requestSettlement = settlement;
+		ServerLevel level = (ServerLevel) villager.level();
+		java.util.function.Supplier<java.util.List<com.thysummer.coopcraft.civilization.simulation.Person>> candidates =
+			() -> SettlementSupervision.candidates(level, data, requestSettlement);
+		if (!SettlementFoodRequests.enabled(data, requestSettlement, candidates)) return false;
+		BlockPos store = target;
+		Map<BlockPos, net.minecraft.world.level.block.entity.BlockEntity> identities = new java.util.LinkedHashMap<>();
+		if (!level.isLoaded(store) || SettlementStockpile.getStockpile(level, data, requestSettlement) == null) {
+			stop();
+			return true;
 		}
-		if (action == Action.EAT && isTargetValid()) {
-			progress = 0;
-			return;
+		identities.put(store, level.getBlockEntity(store));
+		Map<BlockPos, BlockState> states = new java.util.LinkedHashMap<>();
+		states.put(store, level.getBlockState(store));
+		if (states.get(store).getBlock() instanceof net.minecraft.world.level.block.ChestBlock
+			&& states.get(store).getValue(net.minecraft.world.level.block.ChestBlock.TYPE)
+				!= net.minecraft.world.level.block.state.properties.ChestType.SINGLE) {
+			BlockPos partner = store.relative(net.minecraft.world.level.block.ChestBlock.getConnectedDirection(states.get(store)));
+			if (!level.isLoaded(partner)) { stop(); return true; }
+			identities.put(partner, level.getBlockEntity(partner));
+			states.put(partner, level.getBlockState(partner));
 		}
-		stop();
+		foodTicket = data.foodRequests().submit(data, requestSettlement, villager.getUUID(), level.getGameTime(),
+			level.getDayTime() / 24000L, foodTicket, () -> action == Action.EAT && settlement == requestSettlement
+				&& store.equals(target) && villager.isAlive() && !villager.isRemoved()
+				&& level.getEntity(villager.getUUID()) == villager
+				&& level.isPositionEntityTicking(villager.blockPosition()) && level.isPositionEntityTicking(store)
+				&& villager.distanceToSqr(store.getCenter()) <= INTERACTION_DISTANCE_SQUARED
+				&& data.getStockpile(requestSettlement).filter(store::equals).isPresent()
+				&& identities.entrySet().stream().allMatch(entry -> level.isLoaded(entry.getKey())
+					&& level.getBlockEntity(entry.getKey()) == entry.getValue())
+				&& states.entrySet().stream().allMatch(entry -> SettlementFoodRequests.sameStoreState(
+					entry.getValue(), level.getBlockState(entry.getKey())))
+				&& SettlementStockpile.getStockpile(level, data, requestSettlement) != null,
+			() -> SettlementNeeds.eat(level, data, requestSettlement, villager), candidates);
+		if (foodTicket == null) return false;
+		villager.getNavigation().stop();
+		return true;
 	}
 
 	private Action chooseAction() {
+		toolStickDemand = false;
+		if (settlementData().getStockpile(settlement).isEmpty()) return null;
 		if (shouldEat()) {
 			return Action.EAT;
 		}
-		if (canCraftPickaxe()) {
-			return Action.CRAFT_PICKAXE;
+		if (!hasReturnCargo() && shearingCooldown.ready(villager.level().getGameTime())) {
+			ServerLevel level = (ServerLevel) villager.level();
+			SettlementSavedData data = settlementData();
+			Settlement camp = settlement;
+			shearingSession = SettlementShearing.prepare(level, data, camp, villager,
+				() -> woolDemandStillNeeded(level, data, camp, ConstructionPlanner.materialDemands(data, camp)));
+			if (shearingSession != null) return Action.SHEAR_SHEEP;
+			if (shearsLoanCooldown.ready(level.getGameTime()) && prepareShearsLoan(false)) return Action.BORROW_SHEARS;
 		}
-		if (canCraftSticks()) {
-			return Action.CRAFT_STICKS;
+		if (preparePublicPickaxeCollection()) return Action.COLLECT_STONE_PICKAXE;
+		currentStarterCraft = prepareStarterCrafting();
+		if (currentStarterCraft != null) return Action.CRAFT_FIRST_WORKBENCH;
+		if (prepareFirstPickaxeCrafting()) return Action.COLLECT_PICKAXE_MATERIALS;
+		if (prepareToolStickCrafting()) return Action.COLLECT_STICK_INPUTS;
+		if (canBakeBread()) {
+			return Action.BAKE_BREAD;
+		}
+		if (canCollectIron()) {
+			return Action.COLLECT_IRON;
+		}
+		if (canCraftIronPickaxe()) {
+			return Action.CRAFT_IRON_PICKAXE;
+		}
+		if (canCraftShears()) {
+			return Action.CRAFT_SHEARS;
+		}
+		if (canSmeltIron()) {
+			return Action.SMELT_IRON;
 		}
 		if (canPolishPickaxe()) {
-			return Action.POLISH_PICKAXE;
+			workbenchTicket = preparePolishingCrafting();
+			if (workbenchTicket != null) return Action.COLLECT_POLISHING_MATERIALS;
 		}
 		if (canGrindSmoothStone()) {
-			return Action.GRIND_SMOOTH_STONE;
+			currentMaterialRecipe = SettlementMaterialCrafting.Recipe.SMOOTH_STONE;
+			workbenchTicket = prepareWorkbenchCrafting();
+			if (workbenchTicket != null) return Action.COLLECT_GRINDING_MATERIALS;
 		}
-		BlockPos gatherTarget = chooseGatherTarget();
-		return gatherTarget == null ? null : Action.GATHER;
+		currentMaterialRecipe = chooseMaterialRecipe();
+		toolStickDemand = false;
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.STICKS) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_STICK_INPUTS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_PLANK_MATERIALS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.DOOR) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_DOOR_MATERIALS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.BED) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_BED_MATERIALS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.WOOL) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_WOOL_MATERIALS;
+		}
+		if (currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_COAL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL) {
+			workbenchTicket = prepareWorkbenchCrafting();
+			return workbenchTicket == null ? null : Action.COLLECT_TORCH_MATERIALS;
+		}
+		if (currentMaterialRecipe != null) {
+			return Action.CRAFT_MATERIALS;
+		}
+		if (hasReturnCargo()) return null;
+		selectedGatherTarget = chooseGatherTarget();
+		return selectedGatherTarget != null ? Action.GATHER : prepareScouting() ? Action.SCOUT_MATERIAL_AREA : null;
+	}
+
+	private boolean scoutingBodyReady(ServerLevel level) {
+		return publicPickaxeBodyReady(level) && settlement != null
+			&& settlementData().needsOf(settlement, villager.getUUID()).satiety() > SettlementNeeds.HUNGRY_AT && !shouldEat() && !emergencyForage() && meetingTicket == null
+			&& !hasReturnCargo() && !hasTeachingCustody() && !hasAnyShearsLoan()
+			&& !ConstructionSupply.hasAny(villager.getInventory())
+			&& !villager.getInventory().hasAnyMatching(SettlementWorkbenchCargo::isMarked);
+	}
+
+	private boolean scoutingDemand(SettlementGatheringAreas.Area area) {
+		if (area == null) return false;
+		return area.mode().permits(SettlementResourceObservations.Kind.OAK_LOG)
+				&& (needsConstructionLogs() || role == WorkRole.WOODCUTTER || needsSticks())
+			|| area.mode().permits(SettlementResourceObservations.Kind.STONE)
+				&& (role == WorkRole.MINER || needsCobblestone());
+	}
+
+	private boolean prepareScouting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null
+			|| !scoutingCooldown.ready(level.getGameTime()) || !scoutingBodyReady(level)) return false;
+		SettlementSavedData data = settlementData();
+		if (!scoutingDemand(data.gatheringAreaOf(settlement).orElse(null)) || !data.canObserveResource(settlement)) return false;
+		scoutingCooldown.defer(level.getGameTime());
+		scoutingSession = new SettlementMaterialScouting.Session(data, settlement, villager.getUUID(), villager.blockPosition(), level.getGameTime());
+		if (!scoutingValid()) { cancelScouting(); return false; }
+		return true;
+	}
+
+	private SettlementMaterialScouting.Probe scoutingProbe(ServerLevel level) {
+		return new SettlementMaterialScouting.Probe() {
+			public boolean inBounds(BlockPos pos) { return settlement != null && SettlementMaterialScouting.withinCamp(pos, settlement)
+				&& !level.isOutsideBuildHeight(pos) && level.getWorldBorder().isWithinBounds(pos); }
+			public boolean loaded(BlockPos pos) { return level.isLoaded(pos); }
+			public boolean ticking(BlockPos pos) { return level.isPositionEntityTicking(pos); }
+			public boolean blocked(BlockPos pos) { return settlementData().isResidentModificationBlocked(pos); }
+			public BlockState state(BlockPos pos) { return level.getBlockState(pos); }
+		};
+	}
+
+	private boolean scoutingAuthority(ServerLevel level) {
+		var session = scoutingSession;
+		if (session == null || session.camp != settlement
+			|| !session.valid(settlementData(), scoutingBodyReady(level), level.getGameTime())) return false;
+		var probe = SettlementMaterialGathering.probe(level, session.data, session.camp, villager);
+		var simulation = session.data.simulationOf(session.camp).orElse(null);
+		if (simulation != null && simulation.survivalEnabled()) {
+			String id = simulation.residentId(villager.getUUID()).orElse(null);
+			if (id == null) return false;
+			try {
+				var person = simulation.world().person(id);
+				if (!person.isAlive() || !person.campId().equals(simulation.campOwner().id())) return false;
+			} catch (IllegalArgumentException missingPerson) { return false; }
+		}
+		if (!scoutingDemand(session.area) || session.data.isResidentModificationBlocked(
+			session.area.centerX() - session.area.radius(), session.area.centerZ() - session.area.radius(),
+			session.area.centerX() + session.area.radius(), session.area.centerZ() + session.area.radius())) return false;
+		return probe.activeAdult() && SettlementSimulationService.hasGatherTime(session.data, session.camp, villager.getUUID());
+	}
+
+	private boolean scoutingValid() {
+		if (!(villager.level() instanceof ServerLevel level) || !scoutingAuthority(level)) return false;
+		var session = scoutingSession;
+		if (villager.blockPosition().getY() != session.height
+			|| !SettlementMaterialScouting.safe(villager.blockPosition(), scoutingProbe(level))) return false;
+		// Existing candidates win even when this trip has not reached its waypoint. No new scan or reservation.
+		if (chooseGatherTarget() != null) return false;
+		if (scoutingPath != null && (!SettlementMaterialScouting.onLeg(villager.blockPosition(), scoutingLegStart, target)
+			|| villager.getNavigation().getPath() != scoutingPath || !scoutingPathSafe(level, scoutingPath))) return false;
+		return scoutingAuthority(level);
+	}
+
+	private boolean scoutingPathSafe(ServerLevel level, net.minecraft.world.level.pathfinder.Path path) {
+		if (path.getNodeCount() > SettlementMaterialScouting.STEP + 2) return false;
+		List<BlockPos> nodes = new ArrayList<>();
+		for (int i = 0; i < path.getNodeCount(); i++) nodes.add(path.getNodePos(i));
+		return SettlementMaterialScouting.pathSafe(nodes, scoutingLegStart, target, scoutingProbe(level));
+	}
+
+	private void tickScouting() {
+		if (!(villager.level() instanceof ServerLevel level) || !scoutingValid()) { stop(); return; }
+		BlockPos from = villager.blockPosition();
+		BlockPos next = SettlementMaterialScouting.waypoint(from, scoutingSession.area);
+		if (next.equals(from)) {
+			villager.getNavigation().stop(); scoutingPath = null;
+			scoutingSession.observe(level.getGameTime());
+			return;
+		}
+		if (scoutingPath != null) {
+			if (!villager.getNavigation().isDone()) return;
+			if (!from.equals(target)) { stop(); return; }
+			scoutingPath = null;
+		}
+		if (!scoutingSession.attemptPath() || !navigationSearchRegionLoaded()
+			|| !SettlementMaterialScouting.safe(next, scoutingProbe(level)) || !scoutingAuthority(level)) { stop(); return; }
+		scoutingLegStart = from; target = next;
+		var path = villager.getNavigation().createPath(next, 0);
+		if (path == null || !path.canReach() || !scoutingPathSafe(level, path) || !scoutingAuthority(level)) { stop(); return; }
+		scoutingPath = path;
+		if (!villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())
+			|| !scoutingValid()) { stop(); }
+	}
+
+	private void cancelScouting() {
+		if (scoutingSession != null) {
+			scoutingSession.cancel(); scoutingCooldown.defer(villager.level().getGameTime());
+			scoutingSession = null; scoutingPath = null; scoutingLegStart = null;
+			villager.getNavigation().stop();
+		}
+		if (action == Action.SCOUT_MATERIAL_AREA) { action = null; target = null; }
+	}
+
+	private boolean isShearsLoanAction() { return action == Action.BORROW_SHEARS || action == Action.RETURN_SHEARS; }
+
+	private boolean hasAnyShearsLoan() {
+		return SettlementShearsLoan.isMarked(villager.getMainHandItem()) || SettlementShearsLoan.isMarked(villager.getOffhandItem())
+			|| villager.getInventory().hasAnyMatching(SettlementShearsLoan::isMarked);
+	}
+
+	private SettlementShearsLoan.Hand mainShearsHand() {
+		return new SettlementShearsLoan.Hand() {
+			public ItemStack get() { return villager.getMainHandItem(); }
+			public void set(ItemStack stack) {
+				if (stack.isEmpty() && SettlementShearsLoan.isMarked(get())) {
+					if (!SettlementShearsEquipment.clear(villager, get())) throw new IllegalStateException("Loan hand changed before clear");
+				} else villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
+			}
+		};
+	}
+
+	/** Bag custody returns directly; a personal main or off hand is never swapped or overwritten. */
+	private SettlementShearsLoan.Hand returnShearsHand() {
+		var dimension = villager.level().dimension().location();
+		if (SettlementShearsLoan.ownedBy(villager.getMainHandItem(), dimension, settlement.id(), villager.getUUID())) return mainShearsHand();
+		var bag = villager.getInventory();
+		for (int slot = 0; slot < bag.getContainerSize(); slot++) {
+			if (!SettlementShearsLoan.ownedBy(bag.getItem(slot), dimension, settlement.id(), villager.getUUID())) continue;
+			int captured = slot;
+			return new SettlementShearsLoan.Hand() {
+				public ItemStack get() { return bag.getItem(captured); }
+				public void set(ItemStack stack) { bag.setItem(captured, stack); }
+			};
+		}
+		return null;
+	}
+
+	private boolean prepareShearsLoan(boolean returning) {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return false;
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		if (!returning && (!SettlementCargoRecovery.get(level).available() || hasReturnCargo()
+			|| ConstructionSupply.hasAny(villager.getInventory()) || hasAnyShearsLoan())) return false;
+		var hand = returning ? returnShearsHand() : mainShearsHand();
+		if (hand == null) return false;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		var binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return false;
+		if (!returning) {
+			Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+			boolean available = false;
+			if (stockpile != null) for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+				ItemStack stack = stockpile.getItem(slot);
+				if (SettlementShearsLoan.borrowable(stack)) { available = true; break; }
+			}
+			if (!available) return false;
+		}
+		shearsLoanTicket = SettlementShearing.prepareLoan(level, data, camp, villager, hand, returning,
+			() -> settlement == camp && binding.valid(),
+			() -> SettlementCargoRecovery.get(level).available() && !hasReturnCargo() && !ConstructionSupply.hasAny(villager.getInventory())
+				&& woolDemandStillNeeded(level, data, camp, ConstructionPlanner.materialDemands(data, camp)));
+		if (shearsLoanTicket == null) return false;
+		action = returning ? Action.RETURN_SHEARS : Action.BORROW_SHEARS;
+		target = store; progress = 0; travelTicks = 0;
+		return true;
+	}
+
+	private void tickShearsLoan() {
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) { stop(); return; }
+		if (shouldEat() || (action == Action.BORROW_SHEARS && (meetingTicket != null || emergencyForage()))) { stop(); return; }
+		if (!atCargoStore()) { tickStoreTravel(false); return; }
+		villager.getNavigation().stop();
+		// The transfer helper invokes the same ticket and physical-arrival checks at the actual mutation.
+		SettlementShearing.LoanTicket ticket = shearsLoanTicket;
+		Container stockpile = SettlementStockpile.getStockpile(level, ticket.data, ticket.camp);
+		java.util.function.BooleanSupplier authorized = () -> shearsLoanTicket == ticket && isTargetValid() && atCargoStore();
+		if (action == Action.RETURN_SHEARS) {
+			java.util.function.BooleanSupplier returning = () -> shearsLoanTicket == ticket && action == Action.RETURN_SHEARS
+				&& ticket.store.equals(target) && SettlementShearing.returnLoanAuthority(ticket) && atCargoStore();
+			if (!SettlementShearsLoan.returnFromHand(ticket.hand, stockpile, ticket.dimension, ticket.camp.id(), ticket.actor, returning))
+				shearsLoanCooldown.defer(level.getGameTime());
+			stop(); return;
+		}
+		boolean borrowed = SettlementShearsLoan.borrow(stockpile, ticket.hand, ticket.dimension, ticket.camp.id(), ticket.actor, authorized);
+		SettlementShearing.cancelLoan(ticket); shearsLoanTicket = null;
+		if (!borrowed) { shearsLoanCooldown.defer(level.getGameTime()); stop(); return; }
+		// Only this uninterrupted, real pickup may start one new session. Reloaded loans only return.
+		shearingSession = SettlementShearing.prepare(level, ticket.data, ticket.camp, villager,
+			() -> woolDemandStillNeeded(level, ticket.data, ticket.camp, ConstructionPlanner.materialDemands(ticket.data, ticket.camp)));
+		if (shearingSession == null) { stop(); return; }
+		action = Action.SHEAR_SHEEP; target = shearingSession.position(); progress = 0; travelTicks = 0;
+	}
+
+	private boolean isWorkbenchAction() {
+		return isCollectWorkbenchAction() || action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE || action == Action.CRAFT_STICKS_AT_WORKBENCH || action == Action.WORKBENCH_PICKAXE || action == Action.WORKBENCH_PLANKS || action == Action.WORKBENCH_DOORS || action == Action.WORKBENCH_BEDS || action == Action.WORKBENCH_WOOL || action == Action.WORKBENCH_TORCHES;
+	}
+
+	/** The live sheep position, not the originally selected block, drives both travel and work. */
+	private void tickShearing() {
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()
+			|| shouldEat() || meetingTicket != null || emergencyForage() || hasReturnCargo()) {
+			stop(); return;
+		}
+		var sheep = shearingSession.sheep();
+		target = shearingSession.position();
+		if (!constructionPathIsTicking() || !workbenchPathInBounds(level)) { deferShearing(); return; }
+		villager.getLookControl().setLookAt(sheep);
+		if (villager.distanceToSqr(sheep) <= INTERACTION_DISTANCE_SQUARED
+			&& navigationSearchRegionLoaded() && villager.hasLineOfSight(sheep)) {
+			villager.getNavigation().stop();
+			int duration = settlementData().personalityOf(settlement, villager.getUUID())
+				.workDuration(SHEARING_TICKS, VillagerPersonality.WorkType.GATHER);
+			if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
+			duration = SettlementSimulationService.gatherWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+			if (++progress < duration) return;
+			try {
+				// finish owns the final live gates, the sole vanilla shear call, and real tool damage.
+				SettlementShearing.finish(shearingSession);
+			} finally { stop(); }
+			return;
+		}
+		progress = 0; // A moving/occluded sheep must be reached again before any work can complete.
+		if (++travelTicks >= SHEARING_MAX_TRAVEL_TICKS) { deferShearing(); return; }
+		if (!shearingRepathRequired(shearingPathTarget, target, villager.getNavigation().isDone(), ++shearingPathAge)) return;
+		if (!navigationSearchRegionLoaded() || !foragePositionAccessible(level, target)) { deferShearing(); return; }
+		var path = villager.getNavigation().createPath(target, 0);
+		if (path == null || !path.canReach()) { deferShearing(); return; }
+		for (int index = 0; index < path.getNodeCount(); index++) {
+			if (!foragePositionAccessible(level, path.getNodePos(index))) { deferShearing(); return; }
+		}
+		// Path callbacks cannot replace the pinned sheep, hand, membership or permit unnoticed.
+		if (!isTargetValid()) { stop(); return; }
+		if (!villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed())) {
+			deferShearing(); return;
+		}
+		shearingPathTarget = target.immutable();
+		shearingPathAge = 0;
+	}
+
+	static boolean shearingRepathRequired(BlockPos previous, BlockPos current, boolean navigationDone, int age) {
+		return current != null && (previous == null || !previous.equals(current) || navigationDone || age >= SHEARING_REPATH_TICKS);
+	}
+
+	private void deferShearing() {
+		shearingCooldown.defer(villager.level().getGameTime());
+		stop();
+	}
+
+	private boolean isCollectWorkbenchAction() {
+		return action == Action.COLLECT_POLISHING_MATERIALS || action == Action.COLLECT_GRINDING_MATERIALS || action == Action.COLLECT_STICK_INPUTS || action == Action.COLLECT_PICKAXE_MATERIALS || action == Action.COLLECT_PLANK_MATERIALS || action == Action.COLLECT_DOOR_MATERIALS || action == Action.COLLECT_BED_MATERIALS || action == Action.COLLECT_WOOL_MATERIALS || action == Action.COLLECT_TORCH_MATERIALS;
+	}
+
+	private void cancelWorkbenchCrafting() {
+		SettlementWorkbenchCrafting.cancel(workbenchTicket);
+		workbenchTicket = null;
+		if (isWorkbenchAction()) { action = null; target = null; }
+	}
+
+	private SettlementWorkbenchCrafting.Ticket prepareWorkbenchCrafting() {
+		SettlementMaterialCrafting.Recipe recipe = currentMaterialRecipe;
+		boolean toolSticks = recipe == SettlementMaterialCrafting.Recipe.STICKS && toolStickDemand;
+		if (recipe != SettlementMaterialCrafting.Recipe.SMOOTH_STONE
+			&& recipe != SettlementMaterialCrafting.Recipe.STONE_PICKAXE
+			&& recipe != SettlementMaterialCrafting.Recipe.STICKS
+			&& recipe != SettlementMaterialCrafting.Recipe.PLANKS && recipe != SettlementMaterialCrafting.Recipe.DOOR
+			&& recipe != SettlementMaterialCrafting.Recipe.BED && recipe != SettlementMaterialCrafting.Recipe.WOOL
+			&& recipe != SettlementMaterialCrafting.Recipe.TORCH_COAL && recipe != SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL) return null;
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		boolean grinding = recipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE;
+		ItemStack grindingTool = villager.getMainHandItem().copy();
+		BlockPos station = (grinding ? data.getGrindingStation(camp) : data.getCraftingStation(camp)).orElse(null);
+		if (store == null || station == null || !ConstructionWorkshop.withinWorkRange(camp.center(), store)
+			|| !ConstructionWorkshop.withinWorkRange(camp.center(), station) || !foragePositionAccessible(level, station)) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		BlockState stationState = level.getBlockState(station);
+		if (binding == null || !stationState.is(grinding ? Blocks.STONECUTTER : Blocks.CRAFTING_TABLE)) return null;
+		ConstructionJob job = data.getConstructionJob(camp).orElse(null);
+		var projects = ConstructionPlanner.projects(data, camp);
+		var planIds = job == null ? projects.stream().map(ConstructionPlanner.Project::blueprintId).toList() : List.of(job.blueprintId());
+		var plans = planIds.stream().map(BlueprintManager::get).toList();
+		var demands = ConstructionPlanner.materialDemands(data, camp);
+		return SettlementWorkbenchCrafting.prepare(data, camp, villager.getUUID(), villager.getInventory(), recipe,
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+				&& level.getEntity(villager.getUUID()) == villager && foragePositionAccessible(level, villager.blockPosition())
+				&& !shouldEat() && meetingTicket == null && !emergencyForage()
+				&& binding.valid() && foragePositionAccessible(level, station)
+				&& (!grinding || ItemStack.matches(grindingTool, villager.getMainHandItem()))
+				&& level.getBlockState(station).equals(stationState)
+				&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+					level.dimension(), data, camp),
+			() -> grinding ? smoothStoneDemandStillNeeded()
+				: recipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE ? firstPickaxeDemandStillNeeded()
+				: toolSticks ? toolStickDemandStillNeeded()
+				: java.util.Objects.equals(job, data.getConstructionJob(camp).orElse(null))
+				&& projects.equals(ConstructionPlanner.projects(data, camp))
+				&& plans.equals(planIds.stream().map(BlueprintManager::get).toList())
+				&& demands.equals(ConstructionPlanner.materialDemands(data, camp))
+				&& (recipe == SettlementMaterialCrafting.Recipe.STICKS
+					? stickDemandStillNeeded(demands, SettlementStockpile.getStockpile(level, data, camp))
+					: recipe == SettlementMaterialCrafting.Recipe.WOOL ? woolDemandStillNeeded(level, data, camp, demands)
+					: isTorchRecipe(recipe) ? torchDemandStillNeeded(demands, SettlementStockpile.getStockpile(level, data, camp))
+					: recipe == SettlementMaterialCrafting.Recipe.BED ? bedDemandStillNeeded(level, data, camp, demands)
+					: recipe == SettlementMaterialCrafting.Recipe.PLANKS
+					? plankDemandStillNeeded(level, data, camp, demands) : doorDemandStillNeeded(level, data, camp, demands)));
+	}
+
+	/** Recheck output/prerequisite shortage without asking for a second log after pickup. */
+	private boolean plankDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		int planks = SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_PLANKS);
+		for (Map<Item, Integer> demand : demands) {
+			if (demand.getOrDefault(Items.OAK_PLANKS, 0) > planks) return true;
+			for (var recipe : SettlementMaterialCrafting.Recipe.values()) {
+				long available = recipe.output() == Items.WHITE_BED
+					? ConstructionMaterials.available(stockpile, data.simulationOf(camp).orElse(null), recipe.output())
+					: SettlementMaterialCrafting.countPlain(stockpile, recipe.output());
+				if (demand.getOrDefault(recipe.output(), 0) > available
+					&& recipe.ingredients().getOrDefault(Items.OAK_PLANKS, 0) > planks) return true;
+			}
+		}
+		return false;
+	}
+
+	/** Recheck direct and prerequisite output shortage, never the log already carried to the table. */
+	static boolean stickDemandStillNeeded(List<Map<Item, Integer>> demands, Container stockpile) {
+		if (stockpile == null) return false;
+		int sticks = SettlementMaterialCrafting.countPlain(stockpile, Items.STICK);
+		for (Map<Item, Integer> demand : demands) {
+			if (demand.getOrDefault(Items.STICK, 0) > sticks) return true;
+			for (var recipe : SettlementMaterialCrafting.Recipe.values()) {
+				if (recipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE || recipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE) continue;
+				if (demand.getOrDefault(recipe.output(), 0) > SettlementMaterialCrafting.countPlain(stockpile, recipe.output())
+					&& recipe.ingredients().getOrDefault(Items.STICK, 0) > sticks) return true;
+			}
+		}
+		return false;
+	}
+
+	/** Inputs are already in custody after pickup; only the output shortage matters. */
+	private boolean doorDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		int doors = SettlementMaterialCrafting.countPlain(stockpile, Items.OAK_DOOR);
+		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.OAK_DOOR, 0) > doors);
+	}
+
+	/** Recheck public construction beds, not ingredients already carried by the worker. */
+	private boolean bedDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		long beds = ConstructionMaterials.available(stockpile, data.simulationOf(camp).orElse(null), Items.WHITE_BED);
+		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.WHITE_BED, 0) > beds);
+	}
+
+	/** Only make the next bed's wool; never re-require string already carried to the table. */
+	private boolean woolDemandStillNeeded(ServerLevel level, SettlementSavedData data, Settlement camp,
+		List<Map<Item, Integer>> demands) {
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		return SettlementWoolSupply.nextBedNeedsWool(demands, stockpile, data.simulationOf(camp).orElse(null));
+	}
+
+	private static boolean isTorchRecipe(SettlementMaterialCrafting.Recipe recipe) {
+		return recipe == SettlementMaterialCrafting.Recipe.TORCH_COAL || recipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL;
+	}
+
+	/** Check remaining public output demand even after the last fuel and stick leave the store. */
+	static boolean torchDemandStillNeeded(List<Map<Item, Integer>> demands, Container stockpile) {
+		if (stockpile == null) return false;
+		int torches = SettlementMaterialCrafting.countPlain(stockpile, Items.TORCH);
+		return demands.stream().anyMatch(demand -> demand.getOrDefault(Items.TORCH, 0) > torches);
+	}
+
+	private void tickWorkbenchCrafting() {
+		// start and direct tick both use the same final live gates before resolving the store.
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) { stop(); return; }
+		if (shouldEat() || meetingTicket != null || emergencyForage()) { stop(); return; }
+		if (!atCargoStore()) { progress = 0; tickStoreTravel(false); return; }
+		villager.getNavigation().stop();
+		villager.getLookControl().setLookAt(target.getCenter());
+		if (isCollectWorkbenchAction()) {
+			Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+			if (!SettlementWorkbenchCrafting.pickup(workbenchTicket, settlementData(), settlement,
+				villager.getUUID(), villager.getInventory(), stockpile, () -> isTargetValid() && atCargoStore())) { stop(); return; }
+			action = workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE ? Action.POLISH_PICKAXE
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.SMOOTH_STONE ? Action.GRIND_SMOOTH_STONE
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.STONE_PICKAXE ? Action.WORKBENCH_PICKAXE
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.STICKS ? Action.CRAFT_STICKS_AT_WORKBENCH
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.WOOL ? Action.WORKBENCH_WOOL
+				: isTorchRecipe(workbenchTicket.recipe()) ? Action.WORKBENCH_TORCHES
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.BED ? Action.WORKBENCH_BEDS
+				: workbenchTicket.recipe() == SettlementMaterialCrafting.Recipe.DOOR
+				? Action.WORKBENCH_DOORS : Action.WORKBENCH_PLANKS;
+			target = workbenchTicket.station();
+			progress = 0;
+			travelTicks = 0;
+			return;
+		}
+		int duration = settlementData().personalityOf(settlement, villager.getUUID())
+			.workDuration(CRAFT_TICKS, VillagerPersonality.WorkType.CRAFT);
+		if (settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20) duration = duration * 5 / 4;
+		duration = SettlementSimulationService.craftingWorkDuration(settlementData(), settlement, villager.getUUID(), duration);
+		if (++progress < duration) return;
+		boolean finished = action == Action.POLISH_PICKAXE
+			? SettlementWorkbenchCrafting.finishPolishing(workbenchTicket, settlementData(), settlement, villager.getUUID(),
+				villager.getInventory(), () -> isTargetValid() && atCargoStore())
+			: SettlementWorkbenchCrafting.finish(workbenchTicket, settlementData(), settlement, villager.getUUID(),
+			villager.getInventory(), () -> isTargetValid() && atCargoStore());
+		if (finished && action == Action.WORKBENCH_PICKAXE) {
+			SettlementWorkbenchToolEquipment.equipFinishedPickaxe(workbenchTicket, settlementData(), settlement,
+				villager.getUUID(), villager.getInventory(), new SettlementShearsLoan.Hand() {
+					public ItemStack get() { return villager.getMainHandItem(); }
+					public void set(ItemStack stack) { villager.setItemInHand(InteractionHand.MAIN_HAND, stack); }
+				}, villager::getOffhandItem, () -> action == Action.WORKBENCH_PICKAXE
+					&& target.equals(workbenchTicket.station()) && atCargoStore());
+		}
+		stop(); // Unequipped marked products remain in the real bag for ordinary cargo return.
+	}
+
+	private SettlementStarterCrafting.Ticket prepareStarterCrafting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		if (!SettlementStarterCrafting.eligible(data, settlement)) return null;
+		BlockPos store = data.getStockpile(settlement).orElse(null);
+		if (store == null) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return null;
+		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
+		return SettlementStarterCrafting.prepare(data, settlement, villager.getUUID(), stockpile,
+			() -> SettlementSavedData.get(level) == data && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading()
+				&& level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition())
+				&& level.isPositionEntityTicking(villager.blockPosition()) && binding.valid());
+	}
+
+	private void craftFirstWorkbench() {
+		// tick() can be driven directly: do not rely only on canContinueToUse or a prior claim.
+		if (currentStarterCraft == null || target == null || settlement == null
+			|| !(villager.level() instanceof ServerLevel level) || !target.equals(currentStarterCraft.store())
+			|| villager.distanceToSqr(target.getCenter()) > INTERACTION_DISTANCE_SQUARED
+			|| !SettlementStarterCrafting.valid(currentStarterCraft, settlementData(), settlement, villager.getUUID())) return;
+		Container stockpile = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+		SettlementStarterCrafting.finish(currentStarterCraft, settlementData(), settlement, villager.getUUID(), stockpile);
+	}
+
+	private SettlementMaterialCrafting.Recipe chooseMaterialRecipe() {
+		List<Map<Item, Integer>> demands = constructionMaterialDemands();
+		if (demands.isEmpty() || !hasCraftingStation()) {
+			return null;
+		}
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (stockpile == null) {
+			return null;
+		}
+		SettlementSimulationState state = settlementData().simulationOf(settlement).orElse(null);
+		for (Map<Item, Integer> demand : demands) {
+			var recipe = SettlementMaterialCrafting.chooseRecipe(stockpile, state, demand);
+			if (recipe.isPresent()) {
+				return recipe.get();
+			}
+		}
+		return null;
+	}
+
+	private List<Map<Item, Integer>> constructionMaterialDemands() {
+		return ConstructionPlanner.materialDemands(settlementData(), settlement);
+	}
+
+	private boolean needsConstructionLogs() {
+		List<Map<Item, Integer>> demands = constructionMaterialDemands();
+		if (demands.isEmpty()) { return false; }
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		return SettlementStarterCrafting.needsLog(settlementData(), settlement, stockpile)
+			|| SettlementMaterialCrafting.needsConstructionLogs(stockpile, villager.getInventory(),
+			settlementData().simulationOf(settlement).orElse(null), demands, hasCraftingStation());
+	}
+
+	private void craftMaterials() {
+		// Recheck shortages and the pinned plan after travel/work, including a data-pack reload.
+		if (currentMaterialRecipe == null || currentMaterialRecipe == SettlementMaterialCrafting.Recipe.POLISH_PICKAXE
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.SMOOTH_STONE
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.STONE_PICKAXE
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.STICKS
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.PLANKS
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.DOOR
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.BED
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.WOOL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_COAL
+			|| currentMaterialRecipe == SettlementMaterialCrafting.Recipe.TORCH_CHARCOAL
+			|| chooseMaterialRecipe() != currentMaterialRecipe) {
+			return;
+		}
+		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (stockpile == null) return;
+		var attempt = SettlementSimulationService.beginCrafting(settlementData(), settlement, villager.getUUID(),
+			currentMaterialRecipe.id(), currentMaterialRecipe.output(), currentMaterialRecipe.count());
+		if (SettlementMaterialCrafting.craft(stockpile,
+			settlementData().simulationOf(settlement).orElse(null), currentMaterialRecipe,
+			villager.getUUID(), settlementData()::setDirty)) {
+			SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt);
+		}
 	}
 
 	private BlockPos chooseTarget(Action action) {
 		if (action == null || settlement == null) {
 			return null;
 		}
-		if (action == Action.GATHER) {
-			return chooseGatherTarget();
+		if (action == Action.SCOUT_MATERIAL_AREA) return villager.blockPosition();
+		if (action == Action.COLLECT_STONE_PICKAXE) return publicPickaxeTicket == null ? null : publicPickaxeTicket.store();
+		if (isWorkbenchAction()) {
+			return workbenchTicket == null ? null : isCollectWorkbenchAction()
+				? workbenchTicket.store() : workbenchTicket.station();
 		}
+		if (action == Action.GATHER) {
+			return selectedGatherTarget;
+		}
+		if (isShearsLoanAction()) return shearsLoanTicket == null ? null : shearsLoanTicket.store;
+		if (action == Action.SHEAR_SHEEP) return shearingSession == null ? null : shearingSession.position();
 		if (action == Action.BUILD) {
 			return currentBuildTarget == null ? null : currentBuildTarget.position();
 		}
-		if (action == Action.FORAGE) {
+		if (action == Action.FORAGE || action == Action.HARVEST_CROP) {
 			return forageTarget;
 		}
 		if (action == Action.EAT) {
 			return settlementData().getStockpile(settlement).orElse(null);
+		}
+		if (action == Action.CRAFT_FIRST_WORKBENCH) {
+			return currentStarterCraft == null ? null : currentStarterCraft.store();
+		}
+		if (action == Action.SMELT_IRON || action == Action.COLLECT_IRON) {
+			return settlementData().getSmeltingStation(settlement).orElse(null);
 		}
 		if (action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE) {
 			return settlementData().getGrindingStation(settlement).orElse(null);
@@ -314,12 +2223,30 @@ public class VillagerWorkGoal extends Goal {
 		if (settlement == null || !SettlementSimulationService.hasGatherTime(settlementData(), settlement, villager.getUUID())) {
 			return null;
 		}
+		materialCandidates = SettlementMaterialGathering.candidates(settlementData(), settlement, villager.getUUID(),
+			SettlementMaterialGathering.probe((ServerLevel) villager.level(), settlementData(), settlement, villager), villager.level().getGameTime());
+		if (needsConstructionLogs()) {
+			BlockPos oak = settlementData().resourcesOf(settlement).stream()
+				.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+				.filter(pos -> settlementData().materialLeases().available(pos, villager.getUUID(), villager.level().getGameTime()))
+				.filter(pos -> SettlementGathering.validTarget((ServerLevel) villager.level(), settlementData(), settlement, villager, pos))
+				.filter(pos -> villager.level().getBlockState(pos).is(Blocks.OAK_LOG))
+				.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
+				.orElse(null);
+			if (oak != null) return oak;
+			oak = nearestAutomaticMaterial(true);
+			if (oak != null) return oak;
+		}
 		if (role == WorkRole.WOODCUTTER) {
 			BlockPos logs = nearestResource(true);
 			if (logs != null) {
 				return logs;
 			}
 		} else if (role == WorkRole.MINER) {
+			BlockPos ore = chooseOreTarget();
+			if (ore != null) {
+				return ore;
+			}
 			BlockPos stone = nearestResource(false);
 			if (stone != null) {
 				return stone;
@@ -337,6 +2264,16 @@ public class VillagerWorkGoal extends Goal {
 				return stone;
 			}
 		}
+		if (needsPlanks()) {
+			BlockPos logs = nearestResource(true);
+			if (logs != null) {
+				return logs;
+			}
+		}
+		BlockPos ore = chooseOreTarget();
+		if (ore != null) {
+			return ore;
+		}
 		if (hasStonePickaxe()) {
 			BlockPos stone = nearestResource(false);
 			if (stone != null) {
@@ -347,27 +2284,63 @@ public class VillagerWorkGoal extends Goal {
 		return null;
 	}
 
-	private BlockPos nearestResource(boolean logs) {
+	private BlockPos chooseOreTarget() {
+		if (!hasMiningPickaxe() || hasIronPickaxe() && !needsShears()) {
+			return null;
+		}
+		if (needsRawIron()) {
+			BlockPos iron = nearestOre(true);
+			if (iron != null) {
+				return iron;
+			}
+		}
+		return needsCoal() ? nearestOre(false) : null;
+	}
+
+	private BlockPos nearestOre(boolean iron) {
 		if (settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return null;
 		}
 		return settlementData().resourcesOf(settlement).stream()
 			.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> iron ? SettlementMetallurgy.isIronOre(level.getBlockState(pos))
+				: SettlementMetallurgy.isCoalOre(level.getBlockState(pos)))
+			.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
+			.orElse(null);
+	}
+
+	private BlockPos nearestResource(boolean logs) {
+		if (settlement == null || !(villager.level() instanceof ServerLevel level)) {
+			return null;
+		}
+		BlockPos manual = settlementData().resourcesOf(settlement).stream()
+			.filter(pos -> villager.distanceToSqr(pos.getCenter()) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> settlementData().materialLeases().available(pos, villager.getUUID(), villager.level().getGameTime()))
+			.filter(pos -> SettlementGathering.validTarget(level, settlementData(), settlement, villager, pos))
 			.filter(pos -> {
 				BlockState state = level.getBlockState(pos);
 				return logs ? state.is(BlockTags.LOGS) : state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE);
 			})
 			.min(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())))
 			.orElse(null);
+		return manual != null ? manual : nearestAutomaticMaterial(logs);
+	}
+
+	private BlockPos nearestAutomaticMaterial(boolean logs) {
+		var kind = logs ? SettlementResourceObservations.Kind.OAK_LOG : SettlementResourceObservations.Kind.STONE;
+		return materialCandidates.stream().filter(choice -> choice.observation().kind() == kind)
+			.map(SettlementMaterialGathering.Choice::position).findFirst().orElse(null);
 	}
 
 	private boolean navigateToTarget() {
 		if (target == null) {
 			return false;
 		}
-		if (action == Action.BUILD && !constructionPathIsTicking()) {
+		if (action == Action.GATHER && !isTargetValid()) { stop(); return false; }
+		if ((action == Action.FORAGE || action == Action.HARVEST_CROP || materialTicket != null)
+			&& (!isTargetValid() || !constructionPathIsTicking())) { stop(); return false; }
+		if ((action == Action.BUILD || action == Action.CRAFT_FIRST_WORKBENCH) && !constructionPathIsTicking()) {
 			villager.getNavigation().stop();
-			approachIndex++;
 			travelTicks = 0;
 		}
 		if (action == Action.BUILD && villager.getBoundingBox().intersects(new AABB(target))) {
@@ -375,7 +2348,6 @@ public class VillagerWorkGoal extends Goal {
 			if (villager.getNavigation().isDone() || travelTicks >= 20) {
 				if (travelTicks >= 20) {
 					villager.getNavigation().stop();
-					approachIndex++;
 					travelTicks = 0;
 				}
 				if (!navigateToConstructionApproach()) {
@@ -391,18 +2363,16 @@ public class VillagerWorkGoal extends Goal {
 			}
 			villager.getLookControl().setLookAt(target.getCenter());
 			travelTicks = 0;
-			approachIndex = 0;
 			return true;
 		}
 		travelTicks++;
 		if (travelTicks >= 100) {
 			villager.getNavigation().stop();
-			approachIndex++;
 			travelTicks = 0;
 		}
 		if (villager.getNavigation().isDone()) {
 			boolean moving = action == Action.BUILD ? navigateToConstructionApproach()
-				: action == Action.FORAGE ? navigateToForageApproach() : navigateTo(target.above());
+				: (action == Action.FORAGE || action == Action.HARVEST_CROP || materialTicket != null) ? navigateToForageApproach() : navigateTo(target.above());
 			if (!moving) {
 				stop();
 			} else {
@@ -417,7 +2387,8 @@ public class VillagerWorkGoal extends Goal {
 		List<BlockPos> candidates = new ArrayList<>();
 		for (Direction direction : Direction.Plane.HORIZONTAL) {
 			BlockPos candidate = target.relative(direction);
-			if (level.isPositionEntityTicking(candidate)
+			if (foragePositionAccessible(level, candidate) && foragePositionAccessible(level, candidate.above())
+				&& foragePositionAccessible(level, candidate.below())
 				&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
 				&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
 				&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
@@ -433,34 +2404,48 @@ public class VillagerWorkGoal extends Goal {
 		return navigateTo(target);
 	}
 
+	private static boolean foragePositionAccessible(ServerLevel level, BlockPos position) {
+		return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position)
+			&& level.isLoaded(position) && level.isPositionEntityTicking(position);
+	}
+
 	private boolean navigateToConstructionApproach() {
 		ServerLevel level = (ServerLevel) villager.level();
-		List<BlockPos> candidates = new ArrayList<>();
-		for (int vertical : new int[] {0, 1, -1, -2}) {
-			for (Direction direction : Direction.Plane.HORIZONTAL) {
-				BlockPos candidate = target.relative(direction).above(vertical);
-				if (level.isPositionEntityTicking(candidate)
-					&& level.getBlockState(candidate).getCollisionShape(level, candidate).isEmpty()
-					&& level.getBlockState(candidate.above()).getCollisionShape(level, candidate.above()).isEmpty()
-					&& level.getBlockState(candidate.below()).isSolidRender(level, candidate.below())) {
-					candidates.add(candidate);
-				}
+		return constructionApproach.attempt(target, villager.position(), level.getGameTime(), new ConstructionApproach.Probe() {
+			public boolean inBounds(BlockPos position) {
+				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
 			}
-		}
-		candidates.sort(Comparator.comparingDouble(pos -> pos.distSqr(villager.blockPosition())));
-		int start = candidates.isEmpty() ? 0 : Math.floorMod(approachIndex, candidates.size());
-		for (int i = 0; i < candidates.size(); i++) {
-			if (navigateTo(candidates.get((start + i) % candidates.size()))) {
-				return true;
+			public boolean loaded(BlockPos position) { return level.isLoaded(position); }
+			public boolean ticking(BlockPos position) { return level.isPositionEntityTicking(position); }
+			public BlockState state(BlockPos position) { return level.getBlockState(position); }
+		}, this::navigationSearchRegionLoaded, candidate -> {
+			var path = villager.getNavigation().createPath(candidate, 0);
+			if (path == null || !path.canReach()) return false;
+			for (int i = 0; i < path.getNodeCount(); i++) {
+				if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))) return false;
 			}
-		}
-		return navigateTo(target.above());
+			return villager.getNavigation().moveTo(path,
+				settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+		});
 	}
 
 	private boolean navigateTo(BlockPos pos) {
+		if ((action == Action.CRAFT_FIRST_WORKBENCH || action == Action.FORAGE || action == Action.HARVEST_CROP || materialTicket != null)
+			&& !navigationSearchRegionLoaded()) return false;
+		if (action == Action.FORAGE || action == Action.HARVEST_CROP || materialTicket != null) {
+			ServerLevel level = (ServerLevel) villager.level();
+			if (!foragePositionAccessible(level, pos)) return false;
+			var path = villager.getNavigation().createPath(pos, 0);
+			if (path == null || !path.canReach()) return false;
+			for (int index = 0; index < path.getNodeCount(); index++) {
+				if (!foragePositionAccessible(level, path.getNodePos(index))) return false;
+			}
+			return villager.getNavigation().moveTo(path,
+				settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+		}
 		double speed = settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed();
 		boolean moving = villager.getNavigation().moveTo(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, speed);
-		if (!moving || action != Action.BUILD) {
+		if (!moving || (action != Action.BUILD && action != Action.CRAFT_FIRST_WORKBENCH)) {
 			return moving;
 		}
 		if (constructionPathIsTicking()) {
@@ -477,7 +2462,7 @@ public class VillagerWorkGoal extends Goal {
 		}
 		ServerLevel level = (ServerLevel) villager.level();
 		for (int index = 0; index < path.getNodeCount(); index++) {
-			if (!level.isPositionEntityTicking(path.getNodePos(index))) {
+			if (!level.isLoaded(path.getNodePos(index)) || !level.isPositionEntityTicking(path.getNodePos(index))) {
 				return false;
 			}
 		}
@@ -485,24 +2470,89 @@ public class VillagerWorkGoal extends Goal {
 	}
 
 	private boolean isTargetValid() {
+		if (action == Action.EAT_PERSONAL) return personalMealValid();
+		if (isFoodDeliveryAction()) return foodDeliveryValid();
+		if (isFoodSharingAction()) return foodSharingValid();
 		if (target == null || action == null || settlement == null || !(villager.level() instanceof ServerLevel level)) {
 			return false;
 		}
-		if (action == Action.EAT) {
-			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
-				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
-				&& hasFoodAvailable();
+		if (action == Action.SCOUT_MATERIAL_AREA) return scoutingValid();
+		if (isProposalConversationAction()) return proposalConversationValid();
+		if (action == Action.DISCUSS_COUNCIL) return autonomousMeetingValid();
+		if (action == Action.ATTEND_LESSON) return teachingValid();
+		if (isShearsLoanAction()) return shearsLoanTicket != null && target.equals(shearsLoanTicket.store)
+			&& shearsLoanTicket.returning == (action == Action.RETURN_SHEARS) && SettlementShearing.validLoan(shearsLoanTicket);
+		if (hasAnyShearsLoan() && action != Action.SHEAR_SHEEP && action != Action.EAT) return false;
+		if (action == Action.COLLECT_STONE_PICKAXE) return publicPickaxeTicket != null
+			&& target.equals(publicPickaxeTicket.store())
+			&& SettlementToolDistribution.valid(publicPickaxeTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
+		if (isWorkbenchAction()) return workbenchTicket != null
+			&& target.equals(isCollectWorkbenchAction() ? workbenchTicket.store() : workbenchTicket.station())
+			&& workbenchTicket.collected() == !isCollectWorkbenchAction()
+			&& ((action != Action.COLLECT_TORCH_MATERIALS && action != Action.WORKBENCH_TORCHES)
+				|| isTorchRecipe(currentMaterialRecipe))
+			&& workbenchTicket.recipe() == ((action == Action.COLLECT_POLISHING_MATERIALS || action == Action.POLISH_PICKAXE)
+				? SettlementMaterialCrafting.Recipe.POLISH_PICKAXE : (action == Action.COLLECT_GRINDING_MATERIALS || action == Action.GRIND_SMOOTH_STONE)
+				? SettlementMaterialCrafting.Recipe.SMOOTH_STONE : (action == Action.COLLECT_TORCH_MATERIALS || action == Action.WORKBENCH_TORCHES)
+				? currentMaterialRecipe : (action == Action.COLLECT_STICK_INPUTS || action == Action.CRAFT_STICKS_AT_WORKBENCH)
+				? SettlementMaterialCrafting.Recipe.STICKS : (action == Action.COLLECT_PICKAXE_MATERIALS || action == Action.WORKBENCH_PICKAXE)
+				? SettlementMaterialCrafting.Recipe.STONE_PICKAXE : (action == Action.COLLECT_BED_MATERIALS || action == Action.WORKBENCH_BEDS)
+				? SettlementMaterialCrafting.Recipe.BED : (action == Action.COLLECT_WOOL_MATERIALS || action == Action.WORKBENCH_WOOL)
+				? SettlementMaterialCrafting.Recipe.WOOL : (action == Action.COLLECT_DOOR_MATERIALS || action == Action.WORKBENCH_DOORS)
+				? SettlementMaterialCrafting.Recipe.DOOR : SettlementMaterialCrafting.Recipe.PLANKS)
+			&& SettlementWorkbenchCrafting.valid(workbenchTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
+		if (action == Action.ATTEND_MEETING) return meetingTicket != null;
+		if (action == Action.SHEAR_SHEEP) return shearingSession != null && SettlementShearing.valid(shearingSession);
+		if (isSupplyAction()) return target.equals(supplyStore) && supplyAuthorization != null && supplyAuthorization.getAsBoolean()
+			&& (action == Action.RETURN_BUILD_SUPPLY ? hasReturnableSupply() : currentSupplyTargetValid());
+		if (action == Action.RETURN_TO_STOCKPILE) return cargoTicket != null && target.equals(cargoTicket.store())
+			&& SettlementCargoDelivery.valid(cargoTicket, settlementData(), settlement, villager.getUUID(), villager.getInventory());
+		if (action == Action.FORAGE) {
+			boolean permittedBerries = forageRegistry != null && forageRegistry.valid(forageLease, settlementData(), settlement,
+				villager.getUUID(), target, level.getGameTime())
+				&& SettlementForaging.validTarget(level, settlementData(), settlement, villager, target);
+			if (permittedBerries) return true;
+			if (!level.isLoaded(target) || !level.isPositionEntityTicking(target)
+				|| !SettlementFarming.canFarm(level, settlementData(), settlement)) return false;
+			BlockState state = level.getBlockState(target);
+			return SettlementFarming.isMature(state)
+				|| plantingItem() != null && SettlementFarming.isPlantingSite(state, level.getBlockState(target.above()));
+		}
+		if (action == Action.CARE) {
+			return activeCare().isPresent();
 		}
 		if (action == Action.GATHER) {
-			return isGatherable(target);
+			return !hasReturnCargo() && materialRegistry != null
+				&& materialRegistry.valid(materialLease, settlementData(), settlement, villager.getUUID(), target, level.getGameTime())
+				&& (materialTicket != null
+					? SettlementMaterialGathering.valid(materialTicket, SettlementMaterialGathering.probe(level, settlementData(), settlement, villager))
+					: SettlementGathering.validTarget(level, settlementData(), settlement, villager, target));
 		}
-		if (action == Action.FORAGE) {
-			return SettlementForaging.isRipe(level.getBlockState(target));
+		if (action == Action.FEED_CHILD) return childCareValid();
+		if (action == Action.SOW_POTATO) return sowingValid();
+		if (action == Action.HARVEST_CROP)
+			return SettlementCropHarvest.validTarget(level, settlementData(), settlement, target, cropPermission);
+		if (!level.isLoaded(target) || !level.isPositionEntityTicking(target)) return false;
+		if (action == Action.EAT) {
+			if (foodTicket != null) return true; // Queue revalidates attendance even after stock runs out.
+			return settlementData().getStockpile(settlement).filter(target::equals).isPresent()
+				&& settlementData().needsOf(settlement, villager.getUUID()).satiety() < SettlementNeeds.FULL_AT
+				&& (hasFoodAvailable() || hasPendingFoodRefusal());
 		}
 		if (action == Action.BUILD) {
-			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement)
+			return currentBuildTarget != null && ConstructionSystem.nextBuildTarget(level, settlementData(), settlement, villager)
 				.filter(next -> next.job().equals(currentBuildTarget.job()) && next.position().equals(target))
 				.isPresent();
+		}
+		if (action == Action.CRAFT_FIRST_WORKBENCH) {
+			return currentStarterCraft != null && target.equals(currentStarterCraft.store())
+				&& SettlementStarterCrafting.valid(currentStarterCraft, settlementData(), settlement, villager.getUUID());
+		}
+		if (action == Action.SMELT_IRON) {
+			return canSmeltIron();
+		}
+		if (action == Action.COLLECT_IRON) {
+			return canCollectIron();
 		}
 		Block station = action == Action.POLISH_PICKAXE || action == Action.GRIND_SMOOTH_STONE
 			? Blocks.STONECUTTER
@@ -510,42 +2560,380 @@ public class VillagerWorkGoal extends Goal {
 		return villager.level().getBlockState(target).is(station);
 	}
 
+	/** Current physical cargo only, sharing food eligibility with final unloading. */
+	private boolean hasReturnCargo() {
+		if (SettlementCargo.hasCargo(villager.getInventory())) return true;
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		return (camp != null && (SettlementWorkbenchCargo.hasReturnable(villager.getInventory(), camp.id())
+			|| SettlementShearingCargo.hasReturnable(villager.getInventory(), camp.id())))
+			|| SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory())
+			|| SettlementFoodCargo.hasSurplus(data, camp, villager.getUUID(), villager.getInventory());
+	}
+
+	private boolean emergencyForage() {
+		// Carried usable food is the solution to an empty public ration, not a reason to gather more.
+		if (hasDeliverableFoodCargo()) return false;
+		return settlement != null && settlementData().needsOf(settlement, villager.getUUID()).satiety() < 20
+			&& !hasFoodAvailable() && shouldForage();
+	}
+
+	private boolean hasDeliverableFoodCargo() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Settlement camp = settlement != null ? settlement : data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		return SettlementCargoDelivery.hasDeliverableFood(data, camp, villager.getUUID(), villager.getInventory());
+	}
+
+	private boolean isSupplyAction() {
+		return action == Action.COLLECT_BUILD_SUPPLY || action == Action.RETURN_BUILD_SUPPLY;
+	}
+
+	private boolean requiresBuildSupply() {
+		return currentBuildTarget != null && currentBuildTarget.instruction().consume()
+			&& ConstructionSupply.supported(currentBuildTarget.instruction().item());
+	}
+
+	private boolean hasCurrentSupply() {
+		return currentBuildTarget != null && ConstructionSupply.hasFor(villager.getInventory(),
+			villager.level().dimension().location(), settlement.id(), villager.getUUID(),
+			currentBuildTarget.job(), currentBuildTarget.instruction());
+	}
+
+	private boolean hasReturnableSupply() {
+		return settlement != null && ConstructionSupply.hasReturnable(villager.getInventory(),
+			villager.level().dimension().location(), settlement.id(), villager.getUUID(),
+			returnSupplyJob());
+	}
+
+	private ConstructionJob returnSupplyJob() {
+		ConstructionJob job = settlementData().getConstructionJob(settlement).orElse(null);
+		return ConstructionSystem.returnSupplyJob(settlementData(), job,
+			job == null ? null : BlueprintManager.get(job.blueprintId()));
+	}
+
+	private boolean currentSupplyTargetValid() {
+		return requiresBuildSupply() && !ConstructionSupply.hasAny(villager.getInventory())
+			&& settlementData().getConstructionJob(settlement).filter(currentBuildTarget.job()::equals).isPresent()
+			&& ConstructionSystem.nextBuildTarget((ServerLevel) villager.level(), settlementData(), settlement, villager)
+				.filter(currentBuildTarget::equals).isPresent();
+	}
+
+	/** Travel authority binds identities, never an inventory wrapper or a copied item. */
+	private boolean prepareBuildSupply(boolean returning) {
+		ServerLevel level = (ServerLevel) villager.level();
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		if (!SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+			level.dimension(), data, camp)) return deferBuildSupply();
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		SettlementCraftingStore.Binding binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return deferBuildSupply();
+		Object member = data.memberIdentity(villager.getUUID());
+		Object storeToken = data.stockpileBindingToken(camp);
+		supplyAuthorization = () -> SettlementSavedData.get(level) == data && settlement == camp
+			&& villager.level() == level && data.findSettlementForVillager(villager.getUUID()).orElse(null) == camp
+			&& member != null && data.memberIdentity(villager.getUUID()) == member && data.isMember(camp, villager.getUUID())
+			&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()), level.dimension(), data, camp)
+			&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby() && !villager.isSleeping()
+			&& !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+			&& level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition())
+			&& level.isPositionEntityTicking(villager.blockPosition())
+			&& data.stockpileBindingToken(camp) == storeToken
+			&& data.getStockpile(camp).filter(store::equals).isPresent() && binding.valid();
+		if (!supplyAuthorization.getAsBoolean() || (returning ? !hasReturnableSupply() : !currentSupplyTargetValid()))
+			return deferBuildSupply();
+		supplyStore = store;
+		action = returning ? Action.RETURN_BUILD_SUPPLY : Action.COLLECT_BUILD_SUPPLY;
+		target = store;
+		progress = 0;
+		return true;
+	}
+
+	private boolean deferBuildSupply() {
+		supplyStore = null;
+		supplyCooldown.defer(villager.level().getGameTime());
+		supplyAuthorization = null;
+		return false;
+	}
+
+	private void tickBuildSupply() {
+		if (!isTargetValid()) { deferBuildSupply(); stop(); return; }
+		if (shouldEat() || meetingTicket != null || emergencyForage()) { stop(); return; }
+		if (!atCargoStore()) { tickStoreTravel(true); return; }
+		villager.getNavigation().stop();
+		ServerLevel level = (ServerLevel) villager.level();
+		// Resolve the live store only after physical arrival; helper rechecks the full authority at mutation.
+		Container store = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+		java.util.function.BooleanSupplier authorized = () -> isTargetValid() && atCargoStore();
+		if (action == Action.RETURN_BUILD_SUPPLY) {
+			ConstructionJob rawJob = settlementData().getConstructionJob(settlement).orElse(null);
+			ConstructionJob returnJob = returnSupplyJob();
+			ConstructionSupply.returnUnused(villager.getInventory(), store, level.dimension().location(), settlement.id(),
+				villager.getUUID(), returnJob, () -> authorized.getAsBoolean()
+					&& java.util.Objects.equals(rawJob, settlementData().getConstructionJob(settlement).orElse(null))
+					&& java.util.Objects.equals(returnJob, returnSupplyJob()));
+			if (hasReturnableSupply()) deferBuildSupply();
+		} else {
+			ConstructionSupply.pickup(store, villager.getInventory(), level.dimension().location(), settlement.id(),
+				villager.getUUID(), currentBuildTarget.job(), currentBuildTarget.instruction(), authorized);
+			if (!hasCurrentSupply()) deferBuildSupply();
+		}
+		stop();
+	}
+
+	private boolean prepareCargoReturn() {
+		ServerLevel level = (ServerLevel) villager.level();
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		if (!SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+			level.dimension(), data, camp)) { deferCargo("cargo_store_unavailable"); return false; }
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		var binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) { deferCargo("cargo_store_unavailable"); return false; }
+		Object member = data.memberIdentity(villager.getUUID());
+		cargoTicket = SettlementCargoDelivery.prepare(data, camp, villager.getUUID(), villager.getInventory(),
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& data.findSettlementForVillager(villager.getUUID()).filter(current -> current == camp).isPresent()
+				&& data.memberIdentity(villager.getUUID()) == member && data.isMember(camp, villager.getUUID())
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+				&& level.getEntity(villager.getUUID()) == villager && level.isLoaded(villager.blockPosition())
+				&& level.isPositionEntityTicking(villager.blockPosition()) && binding.valid());
+		if (cargoTicket == null) { deferCargo("cargo_store_unavailable"); return false; }
+		action = Action.RETURN_TO_STOCKPILE;
+		target = cargoTicket.store();
+		cargoBlocker = null;
+		progress = 0;
+		return true;
+	}
+
+	private ConstructionApproach.Probe cargoProbe(ServerLevel level) {
+		return new ConstructionApproach.Probe() {
+			public boolean inBounds(BlockPos position) {
+				return !level.isOutsideBuildHeight(position) && level.getWorldBorder().isWithinBounds(position);
+			}
+			public boolean loaded(BlockPos position) { return level.isLoaded(position); }
+			public boolean ticking(BlockPos position) { return level.isPositionEntityTicking(position); }
+			public BlockState state(BlockPos position) { return level.getBlockState(position); }
+		};
+	}
+
+	private boolean atCargoStore() {
+		return villager.level() instanceof ServerLevel level && target != null
+			&& SettlementCargoApproach.arrived(target, villager.position(), cargoProbe(level));
+	}
+
+	private void deferCargo(String blocker) {
+		cargoBlocker = blocker;
+		cargoCooldown.defer(villager.level().getGameTime());
+		cargoTicket = null;
+	}
+
+	private void tickCargoReturn() {
+		// Independent final checks: direct ticks cannot bypass membership, binding or position gates.
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) {
+			deferCargo("cargo_store_unavailable"); stop(); return;
+		}
+		if (!hasReturnCargo()) { cargoBlocker = null; stop(); return; }
+		if (shouldEat() || meetingTicket != null || emergencyForage()) { stop(); return; }
+		if (atCargoStore()) {
+			villager.getNavigation().stop();
+			if (!SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+				level.dimension(), settlementData(), settlement)) {
+				deferCargo("cargo_store_unavailable"); stop(); return;
+			}
+			// Do not even resolve a live container until actual safe arrival was established.
+			Container currentStore = SettlementStockpile.getStockpile(level, settlementData(), settlement);
+			var result = SettlementCargoDelivery.finish(cargoTicket, settlementData(), settlement,
+				villager.getUUID(), villager.getInventory(), currentStore, this::atCargoStore);
+			if (result.status() == SettlementCargoDelivery.Status.NO_CAPACITY
+				|| (result.status() == SettlementCargoDelivery.Status.DELIVERED && hasReturnCargo()))
+				deferCargo("cargo_store_full");
+			else if (result.status() == SettlementCargoDelivery.Status.FOOD_UNAVAILABLE) deferCargo("cargo_food_unavailable");
+			else if (result.status() != SettlementCargoDelivery.Status.DELIVERED) deferCargo("cargo_store_unavailable");
+			else cargoBlocker = null;
+			stop();
+			return;
+		}
+		tickStoreTravel(false);
+	}
+
+	private void tickStoreTravel(boolean supply) {
+		ServerLevel level = (ServerLevel) villager.level();
+		if (++travelTicks >= SettlementCargoApproach.MAX_TRAVEL_TICKS || !constructionPathIsTicking()
+			|| ((isWorkbenchAction() || isShearsLoanAction() || action == Action.COLLECT_STONE_PICKAXE) && !workbenchPathInBounds(level))) {
+			if (action == Action.COLLECT_STONE_PICKAXE) publicPickaxeCooldown.defer(level.getGameTime()); else if (isShearsLoanAction()) shearsLoanCooldown.defer(level.getGameTime()); else if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); return;
+		}
+		if (!villager.getNavigation().isDone()) return;
+		var outcome = cargoApproach.attempt(target, villager.position(), level.getGameTime(), cargoProbe(level),
+			this::navigationSearchRegionLoaded, candidate -> {
+				var path = villager.getNavigation().createPath(candidate, 0);
+				if (path == null || !path.canReach()) return false;
+				for (int i = 0; i < path.getNodeCount(); i++) {
+					if (!level.isLoaded(path.getNodePos(i)) || !level.isPositionEntityTicking(path.getNodePos(i))
+						|| ((isWorkbenchAction() || isShearsLoanAction() || action == Action.COLLECT_STONE_PICKAXE) && !foragePositionAccessible(level, path.getNodePos(i)))) return false;
+				}
+				return villager.getNavigation().moveTo(path, settlementData().personalityOf(settlement, villager.getUUID()).movementSpeed());
+			});
+		if (outcome == SettlementCargoApproach.Outcome.BLOCKED) { if (action == Action.COLLECT_STONE_PICKAXE) publicPickaxeCooldown.defer(level.getGameTime()); else if (isShearsLoanAction()) shearsLoanCooldown.defer(level.getGameTime()); else if (supply) supplyCooldown.defer(level.getGameTime()); else deferCargo("cargo_path_blocked"); stop(); }
+	}
+
+	private boolean workbenchPathInBounds(ServerLevel level) {
+		var path = villager.getNavigation().getPath();
+		if (path == null) return true;
+		for (int i = 0; i < path.getNodeCount(); i++) {
+			if (!foragePositionAccessible(level, path.getNodePos(i))) return false;
+		}
+		return true;
+	}
+
+	/** Separate membership path: a private ration neither needs nor searches for a store. */
+	private boolean preparePersonalMeal() {
+		if (!(villager.level() instanceof ServerLevel level)) return false;
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Settlement camp = data.findSettlementForVillager(villager.getUUID()).orElse(null);
+		if (camp == null || data.needsOf(camp, villager.getUUID()).satiety() > SettlementNeeds.HUNGRY_AT) return false;
+		var ticket = SettlementPersonalMeal.prepare(level, data, camp, villager);
+		if (ticket == null) return false;
+		cancelFoodSharing();
+		cancelPersonalMeal();
+		if (foodTicket != null) foodTicket.cancel();
+		foodTicket = null;
+		settlement = camp;
+		personalMealTicket = ticket;
+		personalMealOrigin = ticket;
+		personalMealClock = new SettlementPersonalMeal.Clock();
+		villager.getNavigation().stop();
+		travelTicks = 0;
+		action = Action.EAT_PERSONAL;
+		target = villager.blockPosition().immutable();
+		progress = 0;
+		return true;
+	}
+
+	private boolean personalMealValid() {
+		return personalMealClock != null && !personalMealClock.cancelled && personalMealTicket != null
+			&& SettlementPersonalMeal.contextValid(personalMealOrigin)
+			&& personalMealTicket.camp == settlement && personalMealTicket.bag == villager.getInventory()
+			&& target != null && target.equals(villager.blockPosition()) && SettlementPersonalMeal.valid(personalMealTicket);
+	}
+
+	private void tickPersonalMeal() {
+		if (!personalMealValid()) { stop(); return; }
+		villager.getNavigation().stop();
+		int frame = personalMealClock.frame(villager.level().getGameTime());
+		progress = personalMealClock.biteTicks;
+		if (frame < 0) { stop(); return; }
+		if (frame == 0) return;
+		if (!SettlementPersonalMeal.finish(personalMealTicket, () -> action == Action.EAT_PERSONAL
+			&& target != null && target.equals(villager.blockPosition()))) { stop(); return; }
+		if (!SettlementPersonalMeal.contextValid(personalMealOrigin)) { stop(); return; }
+		// The same bounded action may take another fresh bite, without a warehouse or new hunger threshold.
+		personalMealTicket = SettlementPersonalMeal.prepare((ServerLevel) villager.level(), settlementData(), settlement, villager);
+		if (personalMealTicket == null) stop();
+	}
+
+	private void cancelPersonalMeal() {
+		if (personalMealTicket != null) personalMealTicket.cancel();
+		if (personalMealOrigin != null) personalMealOrigin.cancel();
+		personalMealOrigin = null;
+		personalMealTicket = null;
+		personalMealClock = null;
+	}
+
 	private boolean shouldEat() {
-		return settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
-			&& hasFoodAvailable();
+		if (settlementData().getStockpile(settlement).isEmpty()) return false;
+		return SettlementFoodAccess.shouldEat(settlementData(), settlement, villager.getUUID(),
+			villager.level().getDayTime() / net.minecraft.world.level.Level.TICKS_PER_DAY,
+			settlementData().needsOf(settlement, villager.getUUID()).satiety(), hasFoodAvailable());
+	}
+
+	private boolean hasPendingFoodRefusal() {
+		return SettlementSimulationService.hasPendingFoodRefusal(settlementData(), settlement, villager.getUUID());
 	}
 
 	private boolean shouldForage() {
 		if (!SettlementForaging.canForage(settlementData(), settlement)) {
 			return false;
 		}
-		boolean missingFood = !hasFoodAvailable();
-		boolean reserveLow = role == WorkRole.FORAGER && foodReserveLow();
-		return SettlementForaging.needsForage(
-			missingFood || reserveLow, villager.level().getGameTime(), forageCooldownUntil
-		);
+		// A personal ration cap is not a physical shortage in the communal store.
+		boolean hasFood = SettlementSimulationService.isSurvivalEnabled(settlementData(), settlement)
+			? SettlementSimulationService.hasFood(settlementData(), settlement) : hasFoodAvailable();
+		ServerLevel level = (ServerLevel) villager.level();
+		long gameTime = level.getGameTime();
+		boolean required = SettlementForaging.needsForage(hasFood, role, this::foodReserveLow, gameTime, forageCooldownUntil);
+		boolean canFarm = SettlementFarming.canFarm(level, settlementData(), settlement);
+		boolean canHarvest = canFarm && SettlementFarming.findMatureCrop(level, villager.blockPosition()).isPresent();
+		boolean canPlant = canFarm && plantingItem() != null;
+		return required || SettlementForaging.needsForage(canHarvest || canPlant, gameTime, forageCooldownUntil);
 	}
 
 	private boolean foodReserveLow() {
-		Container stockpile = SettlementStockpile.getStockpile(
+		return SettlementForaging.reserveLow(settlementData(), settlement, SettlementStockpile.getStockpile(
 			(ServerLevel) villager.level(), settlementData(), settlement
-		);
-		return SettlementStockpile.communalFoodPoints(stockpile)
-			< settlementData().registeredCount(settlement) * FOOD_RESERVE_POINTS_PER_MEMBER;
+		));
 	}
 
-	private BlockPos findRipeBerryBush() {
-		if (!(villager.level() instanceof ServerLevel level)) {
-			return null;
+	private record ForageChoice(BlockPos position, boolean crop) { }
+
+	private ForageChoice findRipeBerryBush() {
+		if (!(villager.level() instanceof ServerLevel level)) return null;
+		BlockPos origin = villager.blockPosition();
+		BlockPos berry = SettlementForaging.findRipeBush(level, settlementData(), settlement, villager, origin).orElse(null);
+		BlockPos crop = SettlementCropHarvest.findRipe(level, settlementData(), settlement, origin).orElse(null);
+		// Reserve only the final berry choice, never a berry discarded in favor of a nearer potato plot.
+		if (crop != null && (berry == null || origin.distSqr(crop) < origin.distSqr(berry))) {
+			cropPermission = SettlementCropHarvest.capturePermission(settlementData(), settlement, crop);
+			if (cropPermission != null) return new ForageChoice(crop, true);
 		}
-		return SettlementForaging.findRipeBush(level, villager.blockPosition()).orElse(null);
+		if (berry == null || !SettlementForaging.validTarget(level, settlementData(), settlement, villager, berry)) return null;
+		forageRegistry = settlementData().foragingLeases();
+		forageLease = forageRegistry.claim(settlementData(), settlement, villager.getUUID(), berry, level.getGameTime());
+		if (forageLease == null) { releaseForageLease(); return null; }
+		return new ForageChoice(berry, false);
+	}
+
+	private BlockPos findFoodSource() {
+		if (!(villager.level() instanceof ServerLevel level)) return null;
+		if (SettlementFarming.canFarm(level, settlementData(), settlement)) {
+			Optional<BlockPos> crop = SettlementFarming.findMatureCrop(level, villager.blockPosition());
+			if (crop.isPresent()) return crop.get();
+		}
+		ForageChoice choice = findRipeBerryBush();
+		if (choice != null) return choice.position();
+		if (SettlementFarming.canFarm(level, settlementData(), settlement) && plantingItem() != null) {
+			return SettlementFarming.findPlantingSite(level, settlementData(), settlement, villager.blockPosition()).orElse(null);
+		}
+		return null;
 	}
 
 	private void forage() {
-		if (target == null || !(villager.level() instanceof ServerLevel level)) {
-			return;
+		if (target == null || !(villager.level() instanceof ServerLevel level)) return;
+		BlockState state = level.getBlockState(target);
+		if (action == Action.HARVEST_CROP || cropPermission != null
+			&& SettlementCropHarvest.validTarget(level, settlementData(), settlement, target, cropPermission)) {
+			SettlementCropHarvest.harvest(level, settlementData(), settlement, villager, target, cropPermission);
+		} else if (SettlementFarming.isMature(state)) {
+			SettlementFarming.harvest(level, settlementData(), settlement, villager, target);
+		} else if (SettlementForaging.isRipe(state)) {
+			try { SettlementForaging.harvest(level, settlementData(), settlement, villager, target, forageRegistry, forageLease); }
+			finally { releaseForageLease(); }
+		} else {
+			Item planting = plantingItem();
+			if (planting != null && withdrawItems(planting, 1) && removeItems(villager.getInventory(), planting, 1) == 1
+				&& !SettlementFarming.plant(level, settlementData(), settlement, villager, target, planting)) {
+				SettlementStockpile.insert(villager.getInventory(), new ItemStack(planting));
+			}
 		}
-		SettlementForaging.harvest(level, settlementData(), settlement, villager, target);
+	}
+
+	private Item plantingItem() {
+		for (Item item : List.of(Items.POTATO, Items.WHEAT_SEEDS, Items.CARROT, Items.BEETROOT_SEEDS)) {
+			if (availableItems(item) > 0) return item;
+		}
+		return null;
 	}
 
 	private boolean hasFoodAvailable() {
@@ -558,157 +2946,519 @@ public class VillagerWorkGoal extends Goal {
 
 	private boolean isGatherable(BlockPos pos) {
 		BlockState state = villager.level().getBlockState(pos);
+		if (SettlementMetallurgy.isOre(state)) {
+			return hasMiningToolInHand();
+		}
 		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS);
 	}
 
 	private void gather() {
-		if (!isGatherable(target)) {
-			settlementData().removeResource(settlement, target);
+		try {
+			if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()
+				|| villager.distanceToSqr(target.getCenter()) > INTERACTION_DISTANCE_SQUARED) return;
+			if (materialTicket != null) SettlementMaterialGathering.harvest(level, materialTicket, villager, materialRegistry, materialLease);
+			else SettlementGathering.harvest(level, settlementData(), settlement, villager, target);
+		} finally { releaseMaterialLease(); }
+	}
+
+	/** Read-only selection: pin one public tool, but transfer nothing until physical arrival. */
+	private boolean preparePublicPickaxeCollection() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null
+			|| !publicPickaxeCooldown.ready(level.getGameTime()) || !firstPickaxeDemandStillNeeded()
+			|| hasReturnCargo() || hasTeachingCustody() || shouldEat() || emergencyForage()) return false;
+		// Failed searches are bounded independently of production, which may proceed immediately.
+		publicPickaxeCooldown.defer(level.getGameTime());
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		if (store == null || !foragePositionAccessible(level, store)) return false;
+		var binding = SettlementCraftingStore.capture(level, store);
+		if (binding == null) return false;
+		Container stockpile = SettlementStockpile.getStockpile(level, data, camp);
+		if (stockpile == null) return false;
+		Object member = data.memberIdentity(villager.getUUID());
+		var state = data.simulationOf(camp).orElse(null);
+		long modeVersion = state == null ? 0 : state.foodRequestModeVersion();
+		publicPickaxeTicket = SettlementToolDistribution.prepare(data, camp, villager.getUUID(),
+			villager.getInventory(), stockpile, new SettlementShearsLoan.Hand() {
+				public ItemStack get() { return villager.getMainHandItem(); }
+				public void set(ItemStack stack) { villager.setItemInHand(InteractionHand.MAIN_HAND, stack); }
+			}, villager::getOffhandItem,
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& data.findSettlementForVillager(villager.getUUID()).filter(current -> current == camp).isPresent()
+				&& data.memberIdentity(villager.getUUID()) == member && data.isMember(camp, villager.getUUID())
+				&& data.simulationOf(camp).orElse(null) == state
+				&& (state == null || state.foodRequestModeVersion() == modeVersion)
+				&& publicPickaxeBodyReady(level)
+				&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+					level.dimension(), data, camp)
+				&& foragePositionAccessible(level, villager.blockPosition()) && foragePositionAccessible(level, store)
+				&& binding.valid() && data.getStockpile(camp).filter(store::equals).isPresent()
+				&& !shouldEat() && meetingTicket == null && !emergencyForage()
+				&& !hasReturnCargo() && !hasTeachingCustody(), this::firstPickaxeDemandStillNeeded);
+		return publicPickaxeTicket != null;
+	}
+
+	/** Physical eligibility also works before the optional social simulation is enabled. */
+	private boolean publicPickaxeBodyReady(ServerLevel level) {
+		var box = villager.getBoundingBox();
+		var border = level.getWorldBorder();
+		return level.getEntity(villager.getUUID()) == villager && villager.isAlive() && !villager.isRemoved()
+			&& !villager.isBaby() && !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi()
+			&& !villager.isPassenger() && villager.getTarget() == null && villager.hurtTime == 0
+			&& Float.isFinite(villager.getHealth()) && Float.isFinite(villager.getMaxHealth())
+			&& villager.getMaxHealth() > 0 && villager.getHealth() >= villager.getMaxHealth()
+			&& !villager.isOnFire() && !villager.hasEffect(net.minecraft.world.effect.MobEffects.POISON)
+			&& !villager.hasEffect(net.minecraft.world.effect.MobEffects.WITHER)
+			&& !villager.getBrain().isActive(net.minecraft.world.entity.schedule.Activity.PANIC)
+			&& !villager.getBrain().isActive(net.minecraft.world.entity.schedule.Activity.REST)
+			&& !villager.getBrain().hasMemoryValue(net.minecraft.world.entity.ai.memory.MemoryModuleType.HURT_BY)
+			&& !villager.getBrain().hasMemoryValue(net.minecraft.world.entity.ai.memory.MemoryModuleType.NEAREST_HOSTILE)
+			&& box.minY >= level.getMinBuildHeight() && box.maxY <= level.getMaxBuildHeight()
+			&& box.minX >= border.getMinX() && box.maxX <= border.getMaxX()
+			&& box.minZ >= border.getMinZ() && box.maxZ <= border.getMaxZ();
+	}
+
+	private void tickPublicPickaxeCollection() {
+		if (!(villager.level() instanceof ServerLevel level) || !isTargetValid()) {
+			publicPickaxeCooldown.defer(villager.level().getGameTime()); stop(); return;
+		}
+		if (!atCargoStore()) { tickStoreTravel(false); return; }
+		villager.getNavigation().stop();
+		var ticket = publicPickaxeTicket;
+		if (!SettlementToolDistribution.finish(ticket, settlementData(), settlement, villager.getUUID(),
+			villager.getInventory(), () -> publicPickaxeTicket == ticket && action == Action.COLLECT_STONE_PICKAXE
+				&& ticket.store().equals(target) && atCargoStore()))
+			publicPickaxeCooldown.defer(level.getGameTime());
+		stop();
+	}
+
+	private void cancelPublicPickaxeCollection() {
+		SettlementToolDistribution.cancel(publicPickaxeTicket);
+		publicPickaxeTicket = null;
+		if (action == Action.COLLECT_STONE_PICKAXE) { action = null; target = null; }
+	}
+
+	/** First-tool demand is independent of construction roles and of supplies already in transit. */
+	private boolean prepareFirstPickaxeCrafting() {
+		if (!firstPickaxeDemandStillNeeded() || hasReturnCargo() || hasTeachingCustody()
+			|| !hasCraftingStation()) return false;
+		Container store = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (store == null) return false;
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		if (SettlementMaterialCrafting.availablePlain(store, state, Items.COBBLESTONE) < 3
+			|| SettlementMaterialCrafting.availablePlain(store, state, Items.STICK) < 2) return false;
+		currentMaterialRecipe = SettlementMaterialCrafting.Recipe.STONE_PICKAXE;
+		workbenchTicket = prepareWorkbenchCrafting();
+		return workbenchTicket != null;
+	}
+
+	/** The ticket validates its exact carried batch; never require a second batch at the warehouse. */
+	private boolean firstPickaxeDemandStillNeeded() {
+		if (!SettlementWorkbenchToolEquipment.needsFirstPickaxe(villager.getInventory(),
+			villager.getMainHandItem(), villager.getOffhandItem())
+			|| hasAnyShearsLoan() || ConstructionSupply.hasAny(villager.getInventory())
+			|| teachingPurpose(villager.getOffhandItem())
+			|| childCareTicket != null || sowingTicket != null || teachingSession != null
+			|| autonomousMeetingSession != null || proposalConversationSession != null || meetingTicket != null
+			|| SettlementCargo.hasCargo(villager.getInventory())) return false;
+		return !villager.getInventory().hasAnyMatching(stack -> SettlementShearingCargo.isMarked(stack)
+			|| SettlementFoodAge.isMarked(stack));
+	}
+
+	/** Tool demand has no construction-project requirement and only draws public plain oak logs. */
+	private boolean prepareToolStickCrafting() {
+		if (!hasCraftingStation() || !toolStickDemandStillNeeded() || hasReturnCargo() || hasTeachingCustody()) return false;
+		Container store = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		if (store == null || SettlementMaterialCrafting.availablePlain(store,
+			settlementData().simulationOf(settlement).orElse(null), Items.OAK_LOG) < 1) return false;
+		currentMaterialRecipe = SettlementMaterialCrafting.Recipe.STICKS;
+		toolStickDemand = true;
+		workbenchTicket = prepareWorkbenchCrafting();
+		return workbenchTicket != null;
+	}
+
+	/** Read-only counterpart to legacy needsSticks: never auto-equip during ticket validation. */
+	private boolean toolStickDemandStillNeeded() {
+		return toolStickDemandStillNeeded(villager.getInventory(), villager.getMainHandItem(),
+			villager.getOffhandItem(), hasGrindingStation(), availableItems(Items.STICK), this::isPolishedPickaxe);
+	}
+
+	static boolean toolStickDemandStillNeeded(Container bag, ItemStack main, ItemStack off,
+		boolean grinding, long sticks, Predicate<ItemStack> polished) {
+		ItemStack effective = main;
+		if (effective.isEmpty()) {
+			for (int slot = 0; slot < bag.getContainerSize(); slot++) {
+				ItemStack stack = bag.getItem(slot);
+				if (stack.is(Items.STONE_PICKAXE) && !SettlementWorkbenchCargo.isMarked(stack)
+					&& !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)) {
+					effective = stack; break;
+				}
+			}
+		}
+		VillagerToolDemand.HandState hand;
+		if (effective.isEmpty()) {
+			if (!SettlementWorkbenchToolEquipment.needsFirstPickaxe(bag, main, off)) return false;
+			hand = VillagerToolDemand.HandState.EMPTY;
+		} else if (!SettlementWorkbenchCargo.isMarked(effective) && !SettlementShearingCargo.isMarked(effective)
+			&& SettlementToolUpgrade.supportsPolishing(effective)) {
+			hand = polished.test(effective) ? VillagerToolDemand.HandState.POLISHED_STONE_PICKAXE : VillagerToolDemand.HandState.STONE_PICKAXE;
+		} else hand = VillagerToolDemand.HandState.OCCUPIED;
+		return VillagerToolDemand.needsSticks(hand, grinding, sticks);
+	}
+
+	private boolean canBakeBread() {
+		return settlementData().stageOf(settlement) != SettlementStage.PRIMITIVE
+			&& hasCraftingStation()
+			&& availableItems(Items.WHEAT) >= 3
+			&& villager.getInventory().canAddItem(new ItemStack(Items.BREAD));
+	}
+
+	private void bakeBread() {
+		if (!canBakeBread() || !withdrawItems(Items.WHEAT, 3)) {
 			return;
 		}
-		ServerLevel level = (ServerLevel) villager.level();
-		BlockState state = level.getBlockState(target);
-		List<ItemStack> drops = Block.getDrops(state, level, target, level.getBlockEntity(target));
-		for (ItemStack drop : drops) {
-			if (!villager.getInventory().canAddItem(drop)) {
+		if (removeItems(villager.getInventory(), Items.WHEAT, 3) != 3) {
+			return;
+		}
+		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.BREAD));
+		if (inserted < 1) {
+			villager.spawnAtLocation(new ItemStack(Items.BREAD));
+		}
+		recordLegacyCrafting("bread", Items.BREAD, inserted);
+		SettlementIntelligence.recordCrafted((ServerLevel) villager.level(), settlementData(), settlement, villager, Items.BREAD, inserted);
+		settlementData().completeEraMilestone(settlement, CivilizationEras.BREAD_BAKED);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private HousingRecipes.Recipe chooseHousingRecipe() {
+		if (!hasCraftingStation() || !ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()) {
+			return null;
+		}
+		long planks = availableItems(Items.OAK_PLANKS);
+		if (availableItems(Items.OAK_DOOR) >= 1 && availableItems(Items.WHITE_BED) >= 1
+			&& availableItems(Items.TORCH) >= 2 && planks >= 29) {
+			return null;
+		}
+		if (planks < 29) {
+			return hasLogs() ? HousingRecipes.PLANKS : null;
+		}
+		if (planks < 35 && hasLogs()) {
+			return HousingRecipes.PLANKS;
+		}
+		if (availableItems(Items.OAK_DOOR) < 1 && availableItems(Items.OAK_PLANKS) >= 3) {
+			return HousingRecipes.DOOR;
+		}
+		if (availableItems(Items.TORCH) < 2 && availableItems(Items.COAL) >= 1 && availableItems(Items.STICK) >= 1) {
+			return HousingRecipes.TORCH;
+		}
+		if (availableItems(Items.WHITE_BED) < 1 && availableItems(Items.WHITE_WOOL) >= 3
+			&& availableItems(Items.OAK_PLANKS) >= 3) {
+			return HousingRecipes.BED;
+		}
+		return null;
+	}
+
+	private boolean needsPlanks() {
+		if (!ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()) {
+			return false;
+		}
+		if (availableItems(Items.OAK_DOOR) >= 1 && availableItems(Items.WHITE_BED) >= 1
+			&& availableItems(Items.TORCH) >= 2 && availableItems(Items.OAK_PLANKS) >= 29) {
+			return false;
+		}
+		return availableItems(Items.OAK_PLANKS) < 35 && !hasLogs();
+	}
+
+	private void craftHousing() {
+		HousingRecipes.Recipe recipe = currentHousingRecipe == null ? chooseHousingRecipe() : currentHousingRecipe;
+		if (recipe == null || !canCraftHousingIngredients(recipe)) {
+			return;
+		}
+		currentHousingRecipe = recipe;
+		for (HousingRecipes.Ingredient ingredient : recipe.ingredients()) {
+			if (ingredient.item() == Items.OAK_LOG) {
+				if (!withdrawItems(Items.OAK_LOG, 1) || !removeOneLog(villager.getInventory())) {
+					return;
+				}
+			} else if (!withdrawItems(ingredient.item(), ingredient.count())
+				|| removeItems(villager.getInventory(), ingredient.item(), ingredient.count()) != ingredient.count()) {
 				return;
 			}
 		}
-
-		level.destroyBlock(target, false, villager);
-		for (ItemStack drop : drops) {
-			int produced = drop.getCount();
-			ItemStack remainder = villager.getInventory().addItem(drop);
-			if (!remainder.isEmpty()) {
-				villager.spawnAtLocation(remainder);
-			}
-			int inserted = produced - remainder.getCount();
-			if (inserted > 0) {
-				SettlementSimulationService.recordProduction(villager, settlementData(), settlement, drop.getItem(), inserted);
-			}
+		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(recipe.output(), recipe.outputCount()));
+		if (inserted < recipe.outputCount()) {
+			villager.spawnAtLocation(new ItemStack(recipe.output(), recipe.outputCount() - inserted));
 		}
-		settlementData().removeResource(settlement, target);
+		recordLegacyCrafting(recipe.id(), recipe.output(), inserted);
 	}
 
-	private void craftPickaxe() {
-		if (!canCraftPickaxe() || !withdrawItems(Items.COBBLESTONE, 3) || !withdrawItems(Items.STICK, 2)) {
+	private boolean canCraftHousingIngredients(HousingRecipes.Recipe recipe) {
+		if (!hasCraftingStation()) {
+			return false;
+		}
+		for (HousingRecipes.Ingredient ingredient : recipe.ingredients()) {
+			if (ingredient.item() == Items.OAK_LOG ? !hasLogs() : availableItems(ingredient.item()) < ingredient.count()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private void collectIron() {
+		var furnace = furnace();
+		int inserted = SettlementMetallurgy.collectIron(furnace, villager.getInventory());
+		if (inserted <= 0) {
 			return;
 		}
-		if (removeItems(villager.getInventory(), Items.COBBLESTONE, 3) != 3
+		recordLegacyCrafting("iron_ingot", Items.IRON_INGOT, inserted);
+		settlementData().completeEraMilestone(settlement, CivilizationEras.METAL_SMELTING);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private void smeltIron() {
+		if (!canSmeltIron() || !withdrawItems(Items.RAW_IRON, 1)) {
+			return;
+		}
+		if (SettlementMetallurgy.needsFuel(furnace()) && !withdrawItems(Items.COAL, 1)) {
+			return;
+		}
+		SettlementMetallurgy.load(furnace(), villager.getInventory());
+	}
+
+	private void craftIronPickaxe() {
+		if (!canCraftIronPickaxe() || !withdrawItems(Items.IRON_INGOT, 3) || !withdrawItems(Items.STICK, 2)) {
+			return;
+		}
+		if (removeItems(villager.getInventory(), Items.IRON_INGOT, 3) != 3
 			|| removeItems(villager.getInventory(), Items.STICK, 2) != 2) {
 			return;
 		}
-		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_PICKAXE));
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "stone_pickaxe");
+		ItemStack previousTool = villager.getMainHandItem().copy();
+		if (!previousTool.isEmpty()) {
+			ItemStack remainder = villager.getInventory().addItem(previousTool);
+			if (!remainder.isEmpty()) {
+				villager.spawnAtLocation(remainder);
+			}
+		}
+		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_PICKAXE));
+		recordLegacyCrafting("iron_pickaxe", Items.IRON_PICKAXE, 1);
+		settlementData().completeEraMilestone(settlement, CivilizationEras.METAL_TOOL_PRODUCTION);
+		CivilizationEras.refresh((ServerLevel) villager.level(), settlementData(), settlement);
 	}
 
-	private void craftSticks() {
-		if (!canCraftSticks() || !withdrawOneLog() || !removeOneLog(villager.getInventory())) {
+	private void craftShears() {
+		if (!canCraftShears() || !withdrawItems(Items.IRON_INGOT, 2)) {
 			return;
 		}
-		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.STICK, 8));
-		if (inserted < 8) {
-			villager.spawnAtLocation(new ItemStack(Items.STICK, 8 - inserted));
+		if (removeItems(villager.getInventory(), Items.IRON_INGOT, 2) != 2) {
+			return;
 		}
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "sticks");
-		SettlementSimulationService.recordCraftedProduct(
-			villager, settlementData(), settlement, "sticks", Items.STICK, inserted
-		);
+		ItemStack previousTool = villager.getMainHandItem().copy();
+		if (!previousTool.isEmpty()) {
+			ItemStack remainder = villager.getInventory().addItem(previousTool);
+			if (!remainder.isEmpty()) {
+				villager.spawnAtLocation(remainder);
+			}
+		}
+		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.SHEARS));
+		recordLegacyCrafting("shears", Items.SHEARS, 1);
 	}
 
-	private boolean canCraftPickaxe() {
+	private boolean canCraftShears() {
+		return hasCraftingStation() && needsShears() && availableItems(Items.IRON_INGOT) >= 2 && sheep() != null;
+	}
+
+	private boolean canShearSheep() {
+		return needsWool() && hasShears() && sheep() != null;
+	}
+
+	private void shearSheep() {
+		Sheep sheep = sheep();
+		if (!canShearSheep() || sheep == null) {
+			return;
+		}
+		sheep.shear(SoundSource.PLAYERS);
+		villager.getMainHandItem().hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
+		ServerLevel level = (ServerLevel) villager.level();
+		for (var itemEntity : level.getEntities(
+			net.minecraft.world.entity.EntityType.ITEM, new AABB(sheep.blockPosition()).inflate(2),
+			entity -> entity.getItem().is(Items.WHITE_WOOL)
+		)) {
+			ItemStack stack = itemEntity.getItem();
+			int produced = stack.getCount();
+			ItemStack remainder = villager.getInventory().addItem(stack);
+			if (remainder.isEmpty()) {
+				itemEntity.discard();
+			} else {
+				itemEntity.setItem(remainder);
+			}
+			int inserted = produced - remainder.getCount();
+			if (inserted > 0) {
+				SettlementSimulationService.recordProduction(villager, settlementData(), settlement, Items.WHITE_WOOL, inserted);
+			}
+		}
+	}
+
+	private Sheep sheep() {
+		if (!(villager.level() instanceof ServerLevel level)) {
+			return null;
+		}
+		if (sheepId != null && level.getEntity(sheepId) instanceof Sheep sheep && isShearableWhiteSheep(sheep)) {
+			return sheep;
+		}
+		return level.getEntities(EntityType.SHEEP, new AABB(villager.blockPosition()).inflate(12), this::isShearableWhiteSheep)
+			.stream()
+			.min(Comparator.comparingDouble(sheep -> sheep.distanceToSqr(villager)))
+			.map(sheep -> {
+				sheepId = sheep.getUUID();
+				return sheep;
+			})
+			.orElse(null);
+	}
+
+	private boolean isShearableWhiteSheep(Sheep sheep) {
+		return sheep.readyForShearing() && sheep.getColor() == DyeColor.WHITE;
+	}
+
+	private boolean canCollectIron() {
+		var furnace = furnace();
+		return hasSmeltingStation()
+			&& SettlementMetallurgy.hasIronOutput(furnace)
+			&& villager.getInventory().canAddItem(furnace.getItem(SettlementMetallurgy.OUTPUT_SLOT));
+	}
+
+	private boolean canSmeltIron() {
+		return hasSmeltingStation()
+			&& (!hasIronPickaxe() || needsShears())
+			&& availableItems(Items.IRON_INGOT) < requiredIronIngots()
+			&& availableItems(Items.RAW_IRON) >= 1
+			&& (!SettlementMetallurgy.needsFuel(furnace()) || availableItems(Items.COAL) >= 1)
+			&& SettlementMetallurgy.canLoad(furnace());
+	}
+
+	private boolean canCraftIronPickaxe() {
 		return hasCraftingStation()
-			&& !hasStonePickaxe()
-			&& villager.getItemInHand(InteractionHand.MAIN_HAND).isEmpty()
-			&& availableItems(Items.COBBLESTONE) >= 3
-			&& availableItems(Items.STICK) >= 2;
-	}
-
-	private boolean canCraftSticks() {
-		return hasCraftingStation()
-			&& needsSticks()
-			&& hasLogs()
-			&& villager.getInventory().canAddItem(new ItemStack(Items.STICK, 8));
-	}
-
-	private boolean canPolishPickaxe() {
-		return hasGrindingStation()
+			&& !hasIronPickaxe()
 			&& hasStonePickaxe()
-			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
-			&& availableItems(Items.SMOOTH_STONE) >= 3
+			&& availableItems(Items.IRON_INGOT) >= 3
 			&& availableItems(Items.STICK) >= 2;
+	}
+
+	/** Selection is observational: personal/custom supplies and automatic equipment cannot satisfy it. */
+	private boolean canPolishPickaxe() {
+		if (!polishingDemandStillNeeded() || hasReturnCargo() || hasTeachingCustody() || hasAnyShearsLoan()) return false;
+		Container store = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		var state = settlementData().simulationOf(settlement).orElse(null);
+		return store != null && SettlementMaterialCrafting.availablePlain(store, state, Items.SMOOTH_STONE) >= 3
+			&& SettlementMaterialCrafting.availablePlain(store, state, Items.STICK) >= 2;
+	}
+
+	/** The last public batch may already be in custody. Only the original tool still needs upgrading. */
+	private boolean polishingDemandStillNeeded() {
+		ItemStack hand = villager.getMainHandItem();
+		return hasGrindingStation() && SettlementToolUpgrade.supportsPolishing(hand) && !isPolishedPickaxe(hand);
+	}
+
+	private SettlementWorkbenchCrafting.Ticket preparePolishingCrafting() {
+		if (!(villager.level() instanceof ServerLevel level) || settlement == null) return null;
+		SettlementSavedData data = settlementData();
+		Settlement camp = settlement;
+		BlockPos store = data.getStockpile(camp).orElse(null);
+		BlockPos station = data.getGrindingStation(camp).orElse(null);
+		if (store == null || station == null || !ConstructionWorkshop.withinWorkRange(camp.center(), store)
+			|| !ConstructionWorkshop.withinWorkRange(camp.center(), station) || !foragePositionAccessible(level, station)) return null;
+		var binding = SettlementCraftingStore.capture(level, store);
+		BlockState stationState = level.getBlockState(station);
+		if (binding == null || !stationState.is(Blocks.STONECUTTER)) return null;
+		var enchantments = level.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+		return SettlementWorkbenchCrafting.preparePolishing(data, camp, villager.getUUID(), villager.getInventory(),
+			new SettlementShearsLoan.Hand() {
+				public ItemStack get() { return villager.getMainHandItem(); }
+				public void set(ItemStack stack) { throw new UnsupportedOperationException("Polishing never replaces the hand"); }
+			}, enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), enchantments.getHolderOrThrow(Enchantments.UNBREAKING),
+			() -> SettlementSavedData.get(level) == data && settlement == camp && villager.level() == level
+				&& villager.isAlive() && !villager.isRemoved() && !villager.isBaby()
+				&& !villager.isSleeping() && !villager.isTrading() && !villager.isNoAi() && !villager.isPassenger()
+				&& level.getEntity(villager.getUUID()) == villager && foragePositionAccessible(level, villager.blockPosition())
+				&& !shouldEat() && meetingTicket == null && !emergencyForage()
+				&& binding.valid() && foragePositionAccessible(level, station)
+				&& level.getBlockState(station).equals(stationState)
+				&& SettlementMembershipClaims.belongsTo(SettlementMembershipClaims.resolve(level, villager.getUUID()),
+					level.dimension(), data, camp), this::polishingDemandStillNeeded);
 	}
 
 	private boolean canGrindSmoothStone() {
-		return hasGrindingStation()
-			&& hasStonePickaxe()
-			&& !isPolishedPickaxe(villager.getItemInHand(InteractionHand.MAIN_HAND))
-			&& availableItems(Items.SMOOTH_STONE) < 3
-			&& availableItems(Items.COBBLESTONE) >= 1
-			&& villager.getInventory().canAddItem(new ItemStack(Items.SMOOTH_STONE));
+		if (!hasGrindingStation() || hasReturnCargo() || hasTeachingCustody() || !hasStonePickaxe()
+			|| !smoothStoneDemandStillNeeded()) return false;
+		Container store = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
+		return store != null && SettlementMaterialCrafting.availablePlain(store,
+			settlementData().simulationOf(settlement).orElse(null), Items.COBBLESTONE) >= 1;
 	}
 
-	private void craftPolishedPickaxe() {
-		if (!canPolishPickaxe() || !withdrawItems(Items.SMOOTH_STONE, 3) || !withdrawItems(Items.STICK, 2)) {
-			return;
-		}
-		removeItems(villager.getInventory(), Items.SMOOTH_STONE, 3);
-		removeItems(villager.getInventory(), Items.STICK, 2);
-		ItemStack polished = new ItemStack(Items.STONE_PICKAXE);
-		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
-		polished.enchant(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY), 1);
-		polished.enchant(enchantments.getHolderOrThrow(Enchantments.UNBREAKING), 1);
-		villager.setItemInHand(InteractionHand.MAIN_HAND, polished);
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "polished_stone_pickaxe");
+	/** Preserve the polishing shortage threshold, without re-demanding the already collected cobble. */
+	private boolean smoothStoneDemandStillNeeded() {
+		ItemStack hand = villager.getMainHandItem();
+		return hasGrindingStation() && hand.is(Items.STONE_PICKAXE)
+			&& !SettlementWorkbenchCargo.isMarked(hand) && !SettlementShearingCargo.isMarked(hand)
+			&& !SettlementShearsLoan.isMarked(hand) && SettlementToolUpgrade.supportsPolishing(hand)
+			&& !isPolishedPickaxe(hand) && availableItems(Items.SMOOTH_STONE) < 3;
 	}
 
-	private void grindSmoothStone() {
-		if (!canGrindSmoothStone() || !withdrawItems(Items.COBBLESTONE, 1)
-			|| removeItems(villager.getInventory(), Items.COBBLESTONE, 1) != 1) {
-			return;
-		}
-		int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(Items.SMOOTH_STONE));
-		if (inserted < 1) {
-			villager.spawnAtLocation(new ItemStack(Items.SMOOTH_STONE));
-		}
-		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, "smooth_stone");
-		SettlementSimulationService.recordCraftedProduct(
-			villager, settlementData(), settlement, "smooth_stone", Items.SMOOTH_STONE, inserted
-		);
-	}
 
 	private String craftingRecipe() {
 		return switch (action) {
-			case CRAFT_PICKAXE -> "stone_pickaxe";
-			case CRAFT_STICKS -> "sticks";
+			case BAKE_BREAD -> "bread";
+			case CRAFT_HOUSING -> currentHousingRecipe == null ? "housing" : currentHousingRecipe.id();
+			case CRAFT_SHEARS -> "shears";
+			case CRAFT_IRON_PICKAXE -> "iron_pickaxe";
+			case SMELT_IRON, COLLECT_IRON -> "iron_ingot";
 			case POLISH_PICKAXE -> "polished_stone_pickaxe";
 			case GRIND_SMOOTH_STONE -> "smooth_stone";
+			case FORAGE -> "plant_potato";
 			default -> "other";
 		};
 	}
 
+	private void recordLegacyCrafting(String recipe, Item output, int inserted) {
+		var attempt = SettlementSimulationService.beginCrafting(
+			settlementData(), settlement, villager.getUUID(), recipe, output, inserted
+		);
+		SettlementSimulationService.recordCrafting(villager, settlementData(), settlement, attempt)
+			.ifPresent(completion -> SettlementSimulationService.recordCraftedProduct(
+				villager, settlementData(), settlement, completion, output, inserted
+			));
+	}
+
+	private boolean hasLogs() {
+		return availableItems(Items.OAK_LOG) > 0;
+	}
+
+	private boolean removeOneLog(Container inventory) {
+		return removeItems(inventory, Items.OAK_LOG, 1) == 1;
+	}
+
 	private long availableItems(Item item) {
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		return villager.getInventory().countItem(item) + (stockpile == null ? 0 : stockpile.countItem(item))
+		return countCraftingItems(villager.getInventory(), item) + (stockpile == null ? 0 : countCraftingItems(stockpile, item))
 			+ SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
 	}
 
 	private boolean withdrawItems(Item item, int count) {
-		int missing = count - villager.getInventory().countItem(item);
+		int missing = count - countCraftingItems(villager.getInventory(), item);
 		if (missing <= 0) {
 			return true;
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		int realAvailable = stockpile == null ? 0 : stockpile.countItem(item);
+		int realAvailable = stockpile == null ? 0 : countCraftingItems(stockpile, item);
 		long abstractAvailable = SettlementSimulationService.craftingResourceCount(settlementData(), settlement, item);
 		if (realAvailable + abstractAvailable < missing) {
 			return false;
 		}
 		if (realAvailable > 0) {
-			int removed = removeItems(stockpile, item, Math.min(missing, realAvailable));
-			int inserted = SettlementStockpile.insert(villager.getInventory(), new ItemStack(item, removed));
-			if (inserted < removed) {
-				SettlementStockpile.insert(stockpile, new ItemStack(item, removed - inserted));
+			int requested = Math.min(missing, realAvailable);
+			int inserted = transferCraftingItems(stockpile, villager.getInventory(), item, requested);
+			if (inserted < requested) {
 				return false;
 			}
 			missing -= inserted;
@@ -718,31 +3468,8 @@ public class VillagerWorkGoal extends Goal {
 		) == missing;
 	}
 
-	private boolean withdrawOneLog() {
-		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
-			return true;
-		}
-		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile != null) {
-			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
-				if (!stockpile.getItem(slot).is(ItemTags.LOGS)) {
-					continue;
-				}
-				ItemStack removed = stockpile.removeItem(slot, 1);
-				if (SettlementStockpile.insert(villager.getInventory(), removed) == removed.getCount()) {
-					return true;
-				}
-				SettlementStockpile.insert(stockpile, removed);
-				return false;
-			}
-		}
-		return SettlementSimulationService.withdrawForCrafting(
-			villager, settlementData(), settlement, Items.OAK_LOG, 1, craftingRecipe()
-		) == 1;
-	}
-
 	private boolean isPolishedPickaxe(ItemStack stack) {
-		if (!stack.is(Items.STONE_PICKAXE)) {
+		if (!stack.is(Items.STONE_PICKAXE) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)) {
 			return false;
 		}
 		var enchantments = villager.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT);
@@ -758,48 +3485,139 @@ public class VillagerWorkGoal extends Goal {
 		return settlement != null && hasStation(settlementData().getGrindingStation(settlement), Blocks.STONECUTTER);
 	}
 
+	private boolean hasSmeltingStation() {
+		return settlement != null && settlementData().getSmeltingStation(settlement)
+			.filter(pos -> settlement.center().distSqr(pos) <= SEARCH_RADIUS_SQUARED)
+			.filter(pos -> SettlementMetallurgy.isSmeltingStation(villager.level().getBlockState(pos)))
+			.isPresent();
+	}
+
 	private boolean hasStation(Optional<BlockPos> station, Block block) {
 		if (settlement == null) {
 			return false;
 		}
 		return station
-			.filter(pos -> settlement.center().distSqr(pos) <= SEARCH_RADIUS_SQUARED)
-			.filter(pos -> villager.level().getBlockState(pos).is(block))
+			.filter(pos -> ConstructionWorkshop.withinWorkRange(settlement.center(), pos))
+			.filter(pos -> villager.level().isLoaded(pos)
+				&& ((ServerLevel) villager.level()).isPositionEntityTicking(pos)
+				&& villager.level().getBlockState(pos).is(block))
 			.isPresent();
 	}
 
+	private net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace() {
+		return settlement == null ? null : SettlementMetallurgy.furnaceAt((ServerLevel) villager.level(), settlementData(), settlement);
+	}
+
+	private long metalSupply(Item item) {
+		return availableItems(item) + SettlementMetallurgy.count(furnace(), item);
+	}
+
+	private int requiredIronIngots() {
+		return hasIronPickaxe() && needsShears() ? 2 : 3;
+	}
+
+	private boolean needsShears() {
+		return needsWool() && !hasShears();
+	}
+
+	private boolean needsWool() {
+		return ConstructionPlanner.housingPlan(settlementData(), settlement).needsHousing()
+			&& availableItems(Items.WHITE_WOOL) < 3;
+	}
+
+	private boolean needsRawIron() {
+		return metalSupply(Items.RAW_IRON) + metalSupply(Items.IRON_INGOT) < requiredIronIngots();
+	}
+
+	private boolean needsCoal() {
+		return metalSupply(Items.RAW_IRON) > 0 && metalSupply(Items.IRON_INGOT) < requiredIronIngots()
+			&& metalSupply(Items.COAL) < 1;
+	}
+
 	private boolean needsSticks() {
-		return !hasStonePickaxe() && availableItems(Items.STICK) < 2;
+		// Preserve auto-equipping from inventory before classifying the current main hand.
+		boolean hasPickaxe = hasStonePickaxe();
+		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
+		VillagerToolDemand.HandState handState = hasPickaxe && SettlementToolUpgrade.supportsPolishing(hand)
+			? (isPolishedPickaxe(hand) ? VillagerToolDemand.HandState.POLISHED_STONE_PICKAXE
+				: VillagerToolDemand.HandState.STONE_PICKAXE)
+			: (hand.isEmpty() ? VillagerToolDemand.HandState.EMPTY : VillagerToolDemand.HandState.OCCUPIED);
+		return VillagerToolDemand.needsSticks(handState, hasGrindingStation(), availableItems(Items.STICK))
+			|| !hasIronPickaxe() && availableItems(Items.IRON_INGOT) >= 3 && availableItems(Items.STICK) < 2;
 	}
 
 	private boolean needsCobblestone() {
-		return !hasStonePickaxe() && availableItems(Items.COBBLESTONE) < 3;
+		return !hasMiningPickaxe() && availableItems(Items.COBBLESTONE) < 3;
 	}
 
-	private boolean hasLogs() {
-		if (villager.getInventory().hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
-			return true;
+	/** Mirror the real withdrawal order without exporting or moving anything during action selection. */
+	private boolean canConvertOne(Predicate<ItemStack> ingredient, Item abstractInput, ItemStack output) {
+		if (villager.getInventory().hasAnyMatching(ingredient)) {
+			return SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, ItemStack.EMPTY, output);
 		}
 		Container stockpile = SettlementStockpile.getStockpile((ServerLevel) villager.level(), settlementData(), settlement);
-		if (stockpile != null && stockpile.hasAnyMatching(stack -> stack.is(ItemTags.LOGS))) {
+		if (stockpile != null) {
+			for (int slot = 0; slot < stockpile.getContainerSize(); slot++) {
+				ItemStack stack = stockpile.getItem(slot);
+				if (!stack.isEmpty() && ingredient.test(stack)) {
+					return SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, stack, output);
+				}
+			}
+		}
+		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, abstractInput) > 0
+			&& SettlementPersonalCrafting.canCraft(villager.getInventory(), ingredient, new ItemStack(abstractInput), output);
+	}
+
+	private boolean hasShears() {
+		ItemStack hand = villager.getMainHandItem();
+		if (hand.is(Items.SHEARS)) {
 			return true;
 		}
-		return SettlementSimulationService.craftingResourceCount(settlementData(), settlement, Items.OAK_LOG) > 0;
+		return (hand.isEmpty() || hasMiningToolInHand()) && equipPickaxe(Items.SHEARS);
+	}
+
+	private boolean hasMiningPickaxe() {
+		if (hasMiningToolInHand()) {
+			return true;
+		}
+		return villager.getMainHandItem().isEmpty() && (equipPickaxe(Items.IRON_PICKAXE) || equipPickaxe(Items.STONE_PICKAXE));
+	}
+
+	private boolean hasMiningToolInHand() {
+		return villager.getMainHandItem().is(Items.STONE_PICKAXE) || villager.getMainHandItem().is(Items.IRON_PICKAXE);
+	}
+
+	private boolean hasIronPickaxe() {
+		ItemStack hand = villager.getMainHandItem();
+		if (hand.is(Items.IRON_PICKAXE)) {
+			return true;
+		}
+		return (hand.isEmpty() || hand.is(Items.STONE_PICKAXE)) && equipPickaxe(Items.IRON_PICKAXE);
 	}
 
 	private boolean hasStonePickaxe() {
 		ItemStack hand = villager.getItemInHand(InteractionHand.MAIN_HAND);
-		if (hand.is(Items.STONE_PICKAXE)) {
-			return true;
-		}
-		if (!hand.isEmpty()) {
-			return false;
-		}
+		if (SettlementWorkbenchCargo.isMarked(hand) || SettlementShearingCargo.isMarked(hand) || SettlementShearsLoan.isMarked(hand)) return false;
+		if (hand.is(Items.STONE_PICKAXE)) return true;
+		if (!hand.isEmpty()) return false;
 		for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
 			ItemStack stack = villager.getInventory().getItem(slot);
-			if (stack.is(Items.STONE_PICKAXE)) {
+			if (stack.is(Items.STONE_PICKAXE) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)) {
 				villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
 				villager.getInventory().setItem(slot, ItemStack.EMPTY);
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean equipPickaxe(Item item) {
+		for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
+			ItemStack stack = villager.getInventory().getItem(slot);
+			if (stack.is(item) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)) {
+				ItemStack previous = villager.getMainHandItem();
+				villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
+				villager.getInventory().setItem(slot, previous.isEmpty() ? ItemStack.EMPTY : previous);
 				return true;
 			}
 		}
@@ -812,18 +3630,72 @@ public class VillagerWorkGoal extends Goal {
 		}
 		SettlementSavedData data = SettlementSavedData.get(level);
 		return data.findSettlementForVillager(villager.getUUID())
-			.filter(settlement -> data.getStockpile(settlement).isPresent());
+			.filter(camp -> data.getStockpile(camp).isPresent() || ConstructionSupply.hasAny(villager.getInventory())
+				|| (data.getConstructionJob(camp).isPresent()
+					&& ConstructionSystem.nextBuildTarget(level, data, camp, villager)
+						.filter(next -> !next.instruction().consume()).isPresent()));
+	}
+
+	private void pauseWorkReservation(String cause) {
+		if (workReservation != null && settlement != null && villager.level() instanceof ServerLevel level) {
+			SettlementCoordination.pause(level, settlementData(), settlement, villager.getUUID(), cause);
+		}
+		workReservation = null;
+	}
+
+	private boolean starvingWithoutFood() {
+		return settlementData().needsOf(settlement, villager.getUUID()).satiety() <= SettlementNeeds.HUNGRY_AT
+			&& !hasFoodAvailable();
+	}
+
+	private Optional<CareAssignment> activeCare() {
+		if (settlement == null || villager.isBaby() || !(villager.level() instanceof ServerLevel level)) {
+			return Optional.empty();
+		}
+		return SettlementCareService.activeForCaregiver(level, settlementData(), settlement, villager.getUUID());
+	}
+
+	private Villager careDependent(CareAssignment assignment) {
+		return (Villager) ((ServerLevel) villager.level()).getEntity(assignment.dependentId());
 	}
 
 	private SettlementSavedData settlementData() {
 		return SettlementSavedData.get((ServerLevel) villager.level());
 	}
 
+	/** Keep legacy custom-item semantics, but never borrow a workbench custody marker. */
+	static int countCraftingItems(Container inventory, Item item) {
+		int count = 0;
+		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+			ItemStack stack = inventory.getItem(slot);
+			if (stack.is(item) && !SettlementWorkbenchCargo.isMarked(stack) && !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)) count += stack.getCount();
+		}
+		return count;
+	}
+
+	static int transferCraftingItems(Container source, Container target, Item item, int count) {
+		if (source == target || count <= 0) return 0;
+		int transferred = 0;
+		for (int slot = 0; slot < source.getContainerSize() && transferred < count; slot++) {
+			ItemStack stack = source.getItem(slot);
+			if (stack.isEmpty() || !stack.is(item) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)) continue;
+			ItemStack offered = stack.copy();
+			offered.setCount(Math.min(stack.getCount(), count - transferred));
+			int inserted = SettlementStockpile.insert(target, offered);
+			if (inserted == 0) continue;
+			stack.shrink(inserted);
+			source.setItem(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+			transferred += inserted;
+		}
+		if (transferred > 0) source.setChanged();
+		return transferred;
+	}
+
 	static int removeItems(Container inventory, Item item, int count) {
 		int remaining = count;
 		for (int slot = 0; slot < inventory.getContainerSize() && remaining > 0; slot++) {
 			ItemStack stack = inventory.getItem(slot);
-			if (!stack.is(item)) {
+			if (!stack.is(item) || SettlementWorkbenchCargo.isMarked(stack) || SettlementShearingCargo.isMarked(stack) || SettlementShearsLoan.isMarked(stack)) {
 				continue;
 			}
 			ItemStack removed = inventory.removeItem(slot, remaining);
@@ -832,25 +3704,59 @@ public class VillagerWorkGoal extends Goal {
 		return count - remaining;
 	}
 
-	private static boolean removeOneLog(Container inventory) {
-		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-			ItemStack stack = inventory.getItem(slot);
-			if (stack.is(ItemTags.LOGS) && !inventory.removeItem(slot, 1).isEmpty()) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	private enum Action {
+		RETURN_TO_STOCKPILE("return_to_stockpile"),
+		COLLECT_BUILD_SUPPLY("collect_build_supply"),
+		RETURN_BUILD_SUPPLY("return_build_supply"),
 		GATHER("gather"),
+		SCOUT_MATERIAL_AREA("scout_material_area"),
 		FORAGE("forage"),
-		CRAFT_PICKAXE("craft"),
-		CRAFT_STICKS("craft"),
+		HARVEST_CROP("harvest_crop"),
+		SOW_POTATO("sow_potato"),
+		FEED_CHILD("feed_child"),
+		DELIVER_FOOD("deliver_food"),
+		REQUEST_FOOD("request_food"),
+		SHARE_FOOD("share_food"),
+		RECEIVE_FOOD("receive_food"),
+		BORROW_SHEARS("borrow_shears"),
+		RETURN_SHEARS("return_shears"),
+		SHEAR_SHEEP("shear_sheep"),
+		COLLECT_STONE_PICKAXE("collect_stone_pickaxe"),
+		COLLECT_PICKAXE_MATERIALS("collect_pickaxe_materials"),
+		WORKBENCH_PICKAXE("workbench_pickaxe"),
+		COLLECT_STICK_INPUTS("collect_stick_inputs"),
+		CRAFT_STICKS_AT_WORKBENCH("craft_sticks_at_workbench"),
+		CRAFT_MATERIALS("craft_materials"),
+		COLLECT_PLANK_MATERIALS("collect_plank_materials"),
+		WORKBENCH_PLANKS("workbench_planks"),
+		COLLECT_DOOR_MATERIALS("collect_door_materials"),
+		WORKBENCH_DOORS("workbench_doors"),
+		COLLECT_BED_MATERIALS("collect_bed_materials"),
+		WORKBENCH_BEDS("workbench_beds"),
+		COLLECT_WOOL_MATERIALS("collect_wool_materials"),
+		WORKBENCH_WOOL("workbench_wool"),
+		COLLECT_TORCH_MATERIALS("collect_torch_materials"),
+		WORKBENCH_TORCHES("workbench_torches"),
+		CRAFT_FIRST_WORKBENCH("craft_first_workbench"),
+		BAKE_BREAD("bake"),
+		CRAFT_HOUSING("craft_housing"),
+		CRAFT_SHEARS("craft_shears"),
+		COLLECT_IRON("collect"),
+		SMELT_IRON("smelt"),
+		CRAFT_IRON_PICKAXE("forge"),
 		BUILD("build"),
+		COLLECT_POLISHING_MATERIALS("collect_polishing_materials"),
 		POLISH_PICKAXE("polish"),
+		COLLECT_GRINDING_MATERIALS("collect_grinding_materials"),
 		GRIND_SMOOTH_STONE("grind"),
-		EAT("eat");
+		ATTEND_LESSON("attend_lesson"),
+		DISCUSS_COUNCIL("discuss_council"),
+		TELL_PROPOSAL("tell_proposal"),
+		HEAR_PROPOSAL("hear_proposal"),
+		ATTEND_MEETING("attend_meeting"),
+		EAT_PERSONAL("eat_personal"),
+		EAT("eat"),
+		CARE("care");
 
 		private final String id;
 
