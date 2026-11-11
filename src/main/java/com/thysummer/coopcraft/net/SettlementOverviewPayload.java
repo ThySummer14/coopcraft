@@ -14,6 +14,7 @@ import com.thysummer.coopcraft.civilization.WorkRole;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.ResourceLocation;
 
 public record SettlementOverviewPayload(
 	String name,
@@ -28,11 +29,19 @@ public record SettlementOverviewPayload(
 	SocialOrganization society,
 	SettlementStage stage,
 	List<ResidentInfo> residents,
-	List<SimulationEventInfo> simulationEvents
+	List<SimulationEventInfo> simulationEvents,
+	List<String> publicAffairs,
+	String nextStep,
+	ResourceLocation era,
+	String nextEraMilestone,
+	String origin
 ) implements CustomPacketPayload {
 	public static final int MAX_RESIDENTS = 12;
 	public static final int MAX_SIMULATION_EVENTS = 3;
 	public static final int MAX_EVENT_DETAILS = 6;
+	public static final int MAX_CO_RESIDENTS = 4;
+	public static final int MAX_CARE_LINKS = 3;
+	public static final int MAX_PUBLIC_AFFAIRS = 3;
 	public static final Type<SettlementOverviewPayload> TYPE = new Type<>(CoopCraft.id("settlement_overview"));
 	public static final StreamCodec<RegistryFriendlyByteBuf, SettlementOverviewPayload> STREAM_CODEC = StreamCodec.of(
 		(buf, payload) -> payload.write(buf),
@@ -42,11 +51,24 @@ public record SettlementOverviewPayload(
 	public SettlementOverviewPayload {
 		Objects.requireNonNull(society, "society");
 		Objects.requireNonNull(stage, "stage");
+		Objects.requireNonNull(era, "era");
+		Objects.requireNonNull(nextEraMilestone, "nextEraMilestone");
+		Objects.requireNonNull(origin, "origin");
 		residents = List.copyOf(residents);
 		simulationEvents = List.copyOf(simulationEvents);
-		if (simulationEvents.size() > MAX_SIMULATION_EVENTS) {
-			throw new IllegalArgumentException("Too many simulation events");
+		publicAffairs = List.copyOf(publicAffairs);
+		if (simulationEvents.size() > MAX_SIMULATION_EVENTS || publicAffairs.size() > MAX_PUBLIC_AFFAIRS
+			|| publicAffairs.stream().anyMatch(SettlementOverviewPayload::unknownPublicAffair)) {
+			throw new IllegalArgumentException("Invalid settlement overview entries");
 		}
+	}
+
+	private static boolean unknownPublicAffair(String affair) {
+		return switch (affair) {
+			case "common_food_shortage", "food_emergency", "construction_paused_food",
+				"construction_blocked", "construction_waiting_volunteers" -> false;
+			default -> true;
+		};
 	}
 
 	private void write(RegistryFriendlyByteBuf buf) {
@@ -83,6 +105,7 @@ public record SettlementOverviewPayload(
 				buf.writeUtf(trait);
 			}
 			buf.writeBoolean(resident.leader());
+			writeResidentObservation(buf, resident.observation());
 		}
 		buf.writeVarInt(simulationEvents.size());
 		for (SimulationEventInfo event : simulationEvents) {
@@ -96,6 +119,68 @@ public record SettlementOverviewPayload(
 				buf.writeUtf(detail.value());
 			}
 		}
+		buf.writeVarInt(publicAffairs.size());
+		for (String affair : publicAffairs) {
+			buf.writeUtf(affair);
+		}
+		buf.writeUtf(nextStep);
+		buf.writeUtf(era.toString());
+		buf.writeUtf(nextEraMilestone);
+		buf.writeUtf(origin);
+	}
+
+	private static void writeResidentObservation(RegistryFriendlyByteBuf buf, ResidentObservation observation) {
+		buf.writeBoolean(observation.residenceKnown());
+		buf.writeVarInt(observation.coResidents().size());
+		for (String name : observation.coResidents()) {
+			buf.writeUtf(name);
+		}
+		buf.writeVarInt(observation.coResidentCount());
+		buf.writeVarInt(observation.care().size());
+		for (CareObservation care : observation.care()) {
+			buf.writeUtf(care.otherName());
+			buf.writeVarInt(care.hours());
+			buf.writeBoolean(care.providing());
+		}
+		buf.writeVarInt(observation.careLinkCount());
+		buf.writeBoolean(observation.needsCare());
+		buf.writeVarLong(observation.provisioningUnits());
+		buf.writeBoolean(observation.foodAvailable());
+		buf.writeUtf(observation.action());
+		buf.writeUtf(observation.blocker());
+		buf.writeLong(observation.actionTarget());
+	}
+
+	private static ResidentObservation readResidentObservation(RegistryFriendlyByteBuf buf) {
+		boolean residenceKnown = buf.readBoolean();
+		int coResidentSize = buf.readVarInt();
+		if (coResidentSize < 0 || coResidentSize > MAX_CO_RESIDENTS) {
+			throw new IllegalArgumentException("Invalid co-resident count");
+		}
+		List<String> coResidents = new ArrayList<>(coResidentSize);
+		for (int i = 0; i < coResidentSize; i++) {
+			coResidents.add(buf.readUtf());
+		}
+		int coResidentCount = buf.readVarInt();
+		int careSize = buf.readVarInt();
+		if (careSize < 0 || careSize > MAX_CARE_LINKS) {
+			throw new IllegalArgumentException("Invalid care link count");
+		}
+		List<CareObservation> care = new ArrayList<>(careSize);
+		for (int i = 0; i < careSize; i++) {
+			care.add(new CareObservation(buf.readUtf(), buf.readVarInt(), buf.readBoolean()));
+		}
+		int careLinkCount = buf.readVarInt();
+		boolean needsCare = buf.readBoolean();
+		long provisioningUnits = buf.readVarLong();
+		boolean foodAvailable = buf.readBoolean();
+		String action = buf.readUtf();
+		String blocker = buf.readUtf();
+		long actionTarget = buf.readLong();
+		return new ResidentObservation(
+			residenceKnown, coResidents, coResidentCount, care, careLinkCount, needsCare,
+			provisioningUnits, foodAvailable, action, blocker, actionTarget
+		);
 	}
 
 	private static SettlementOverviewPayload read(RegistryFriendlyByteBuf buf) {
@@ -139,8 +224,10 @@ public record SettlementOverviewPayload(
 				traits.add(buf.readUtf());
 			}
 			boolean leader = buf.readBoolean();
+			ResidentObservation observation = readResidentObservation(buf);
 			residents.add(new ResidentInfo(
-				customName, profession, role, child, x, y, z, diligence, selfishness, sociability, satiety, archetype, traits, leader
+				customName, profession, role, child, x, y, z, diligence, selfishness, sociability, satiety, archetype, traits,
+				leader, observation
 			));
 		}
 		int simulationEventCount = buf.readVarInt();
@@ -163,9 +250,22 @@ public record SettlementOverviewPayload(
 			}
 			simulationEvents.add(new SimulationEventInfo(day, eventType, resourceType, quantity, details));
 		}
+		int affairCount = buf.readVarInt();
+		if (affairCount < 0 || affairCount > MAX_PUBLIC_AFFAIRS) {
+			throw new IllegalArgumentException("Invalid public affair count");
+		}
+		List<String> publicAffairs = new ArrayList<>(affairCount);
+		for (int index = 0; index < affairCount; index++) {
+			publicAffairs.add(buf.readUtf());
+		}
+		String nextStep = buf.readUtf();
+		ResourceLocation era = ResourceLocation.parse(buf.readUtf());
+		String nextEraMilestone = buf.readUtf();
+		String origin = buf.readUtf();
 		return new SettlementOverviewPayload(
 			name, center, foundedDay, totalResidents, registeredResidents, housingCapacity, hearth,
-			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents
+			communalFoodPoints, communalResourceCount, society, stage, residents, simulationEvents, publicAffairs, nextStep,
+			era, nextEraMilestone, origin
 		);
 	}
 
@@ -194,6 +294,51 @@ public record SettlementOverviewPayload(
 		}
 	}
 
+	public record ResidentObservation(
+		boolean residenceKnown,
+		List<String> coResidents,
+		int coResidentCount,
+		List<CareObservation> care,
+		int careLinkCount,
+		boolean needsCare,
+		long provisioningUnits,
+		boolean foodAvailable,
+		String action,
+		String blocker,
+		long actionTarget
+	) {
+		public ResidentObservation {
+			coResidents = List.copyOf(coResidents);
+			care = List.copyOf(care);
+			if (coResidents.size() > MAX_CO_RESIDENTS || coResidentCount < coResidents.size()
+				|| care.size() > MAX_CARE_LINKS || careLinkCount < care.size() || provisioningUnits < 0
+				|| action.isBlank()) {
+				throw new IllegalArgumentException("Invalid resident observation");
+			}
+			if (!residenceKnown && (!coResidents.isEmpty() || coResidentCount != 0)) {
+				throw new IllegalArgumentException("Unknown residence cannot have members");
+			}
+			if (coResidents.stream().anyMatch(String::isBlank)) {
+				throw new IllegalArgumentException("Co-resident names cannot be blank");
+			}
+			Objects.requireNonNull(blocker, "blocker");
+		}
+
+		public static ResidentObservation empty() {
+			return new ResidentObservation(
+				false, List.of(), 0, List.of(), 0, false, 0, false, "idle", "unknown", -1
+			);
+		}
+	}
+
+	public record CareObservation(String otherName, int hours, boolean providing) {
+		public CareObservation {
+			if (otherName.isBlank() || hours <= 0) {
+				throw new IllegalArgumentException("Invalid care observation");
+			}
+		}
+	}
+
 	public record ResidentInfo(
 		String customName,
 		String profession,
@@ -208,8 +353,31 @@ public record SettlementOverviewPayload(
 		int satiety,
 		String archetype,
 		List<String> traits,
-		boolean leader
+		boolean leader,
+		ResidentObservation observation
 	) {
+		public ResidentInfo(
+			String customName,
+			String profession,
+			String role,
+			boolean child,
+			int x,
+			int y,
+			int z,
+			int diligence,
+			int selfishness,
+			int sociability,
+			int satiety,
+			String archetype,
+			List<String> traits,
+			boolean leader
+		) {
+			this(
+				customName, profession, role, child, x, y, z, diligence, selfishness, sociability, satiety,
+				archetype, traits, leader, ResidentObservation.empty()
+			);
+		}
+
 		public ResidentInfo {
 			if (diligence < 0 || diligence > 100 || selfishness < 0 || selfishness > 100 || sociability < 0 || sociability > 100
 				|| satiety < 0 || satiety > 100) {
@@ -224,6 +392,7 @@ public record SettlementOverviewPayload(
 			for (String trait : traits) {
 				VillagerTrait.byId(trait);
 			}
+			Objects.requireNonNull(observation, "observation");
 		}
 	}
 }

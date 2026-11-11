@@ -19,6 +19,13 @@ final class VillagerGiftService {
 	static VillagerInteraction.OfferResult offer(SettlementSavedData data, Settlement settlement, UUID resident,
 		boolean baby, String actor, String playerName, Container inventory, int offeredSlot,
 		IntSupplier currentSlot, ItemStack offered, Container stockpile) {
+		return offer(data, settlement, resident, baby, actor, playerName, inventory, offeredSlot,
+			currentSlot, offered, stockpile, Long.MIN_VALUE);
+	}
+
+	static VillagerInteraction.OfferResult offer(SettlementSavedData data, Settlement settlement, UUID resident,
+		boolean baby, String actor, String playerName, Container inventory, int offeredSlot,
+		IntSupplier currentSlot, ItemStack offered, Container stockpile, long gameDay) {
 		if (!data.isMember(settlement, resident)) return failed("not_member");
 		if (offeredSlot < 0 || offeredSlot >= inventory.getContainerSize()
 			|| currentSlot.getAsInt() != offeredSlot || !sameOffer(inventory.getItem(offeredSlot), offered))
@@ -35,11 +42,14 @@ final class VillagerGiftService {
 		}
 		String personId = state.residentId(resident).orElseThrow();
 		var person = state.world().person(personId);
+		long careRequestId = gameDay >= 0 ? state.careFoodRequest(resident, gameDay).orElse(0L) : 0L;
 		int satiety = reserves.survival() ? 100 - person.hunger() : data.needsOf(settlement, resident).satiety();
 		var decision = VillagerInteractionDecision.decide(satiety, reserves, person.trustIn(actor),
 			data.personalityOf(settlement, resident).sociability(), VillagerInteraction.isSupportedFood(offered, reserves.survival()));
 		String reason = decision.reason();
 		int moved = 0;
+		List<Long> causes = new java.util.ArrayList<>();
+		if (careRequestId > 0) causes.add(careRequestId);
 		if (decision.accepted()) {
 			// Check the captured hand again immediately before debit. The view can only restore that same slot.
 			if (currentSlot.getAsInt() != offeredSlot || !sameOffer(inventory.getItem(offeredSlot), offered)) {
@@ -47,10 +57,19 @@ final class VillagerGiftService {
 			} else {
 				Container hand = new SingleSlot(inventory, offeredSlot);
 				if (reserves.survival()) {
+					Map<String, String> transferContext = new java.util.LinkedHashMap<>();
+					transferContext.put("activity", careRequestId > 0 ? "care_food_gift" : "player_gift");
+					transferContext.put("playerName", playerName);
+					transferContext.put("villagerId", resident.toString());
+					if (careRequestId > 0) transferContext.put("careRequestId", Long.toString(careRequestId));
 					moved = MinecraftStockpileAdapter.importToSimulation(hand, state.world(), state.campOwner(),
 						MinecraftStockpileAdapter.resourceType(offered).orElseThrow(), 1,
-						List.of(personId, actor), Map.of("activity", "player_gift", "playerName", playerName,
-							"villagerId", resident.toString()));
+						List.of(personId, actor), transferContext, List.copyOf(causes));
+					if (moved == 1 && careRequestId > 0) {
+						state.world().ledger().lastEvent().ifPresent(event -> {
+							if (event.eventId() != careRequestId) causes.add(event.eventId());
+						});
+					}
 				} else {
 					ItemStack removed = hand.removeItem(0, 1);
 					if (!removed.isEmpty()) {
@@ -62,11 +81,18 @@ final class VillagerGiftService {
 				if (moved == 0) reason = reserves.survival() ? "transfer_failed" : "stockpile_full";
 			}
 		}
-		if (moved == 1) person.recordAidFrom(actor);
+		if (moved == 1) {
+			person.recordAidFrom(actor);
+			SettlementCoordination.requestReplan(data, settlement);
+		}
+		Map<String, String> evidence = new java.util.LinkedHashMap<>();
+		evidence.put("targetId", reserves.target().id());
+		evidence.put("unit", reserves.survival() ? "nutrition" : "points");
+		evidence.put("currentBefore", Long.toString(reserves.current().orElseThrow()));
+		evidence.put("goalBefore", Long.toString(reserves.goal()));
+		if (careRequestId > 0) evidence.put("careRequestId", Long.toString(careRequestId));
 		state.world().recordGiftInteraction(personId, actor, moved == 1, offered.getItem().getDescriptionId(),
-			playerName, reason, person.trustIn(actor), Map.of(
-				"targetId", reserves.target().id(), "unit", reserves.survival() ? "nutrition" : "points",
-				"currentBefore", Long.toString(reserves.current().orElseThrow()), "goalBefore", Long.toString(reserves.goal())));
+			playerName, reason, person.trustIn(actor), evidence, causes);
 		data.setDirty();
 		return new VillagerInteraction.OfferResult(moved == 1, reason, moved);
 	}

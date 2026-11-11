@@ -65,6 +65,14 @@ class SettlementForagingTest {
 	}
 
 	@Test
+	void foragesOnlyWhenRequiredAndAfterCooldown() {
+		assertFalse(SettlementForaging.needsForage(false, 0, 0));
+		assertTrue(SettlementForaging.needsForage(true, 0, 0));
+		assertFalse(SettlementForaging.needsForage(true, 199, 200));
+		assertTrue(SettlementForaging.needsForage(true, 200, 200));
+	}
+
+	@Test
 	void onlyMatureBerryBushesAreHarvestable() {
 		BlockState bush = Blocks.SWEET_BERRY_BUSH.defaultBlockState();
 		assertFalse(SettlementForaging.isRipe(bush.setValue(SweetBerryBushBlock.AGE, 0)));

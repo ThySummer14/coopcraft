@@ -187,7 +187,8 @@ public final class SettlementSimulationService {
 				firstParent.getUUID(), secondParent.getUUID(), child.getUUID(), currentDay(level))) {
 			return false;
 		}
-		VillagerNames.assignIfAbsent(data, settlement, child);
+		data.completeEraMilestone(settlement, CivilizationEras.POPULATION_GROWTH);
+		VillagerNames.assignOrMigrate(data, settlement, child);
 		return true;
 	}
 
@@ -682,11 +683,21 @@ public final class SettlementSimulationService {
 
 	/** Pure/core callers retain simulated attendance; Minecraft meals must supply fresh loaded candidates. */
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId) {
-		return eat(data, settlement, villagerId, data.simulationOf(settlement)
+		return eat(data, settlement, villagerId, 0, data.simulationOf(settlement)
 			.map(state -> state.world().people()).orElse(List.of()));
 	}
 
 	public static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, Collection<Person> candidates) {
+		return eat(data, settlement, villagerId, 0, candidates);
+	}
+
+	static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, long existingRequestEventId) {
+		return eat(data, settlement, villagerId, existingRequestEventId, data.simulationOf(settlement)
+			.map(state -> state.world().people()).orElse(List.of()));
+	}
+
+	static int eat(SettlementSavedData data, Settlement settlement, UUID villagerId, long existingRequestEventId,
+		Collection<Person> candidates) {
 		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
 		if (state == null || !state.survivalEnabled()) {
 			return 0;
@@ -701,7 +712,8 @@ public final class SettlementSimulationService {
 			recordFoodRefusal(data, state, person);
 			return 0;
 		}
-		SurvivalSystem.MealWithEvidence evidence = survival(state).eatFromCommonWithEvidence(person, remainingUnits);
+		SurvivalSystem.MealWithEvidence evidence = survival(state).eatFromCommonWithEvidence(
+			person, remainingUnits, existingRequestEventId);
 		SurvivalSystem.MealResult meal = evidence.meal();
 		if (meal.units() > 0) {
 			// Consumption has already changed the world, even if bookkeeping below fails.

@@ -167,6 +167,21 @@ public final class Person {
 		careHours += hours;
 	}
 
+	public void recordCareHours(int hours) {
+		assignCareHours(hours);
+	}
+
+	public void restoreCareHours(int hours) {
+		if (hours < 0 || hours > 6) {
+			throw new IllegalArgumentException("Invalid restored care hours");
+		}
+		careHours = hours;
+	}
+
+	public void resetCareHours() {
+		careHours = 0;
+	}
+
 	public int health() {
 		return health;
 	}

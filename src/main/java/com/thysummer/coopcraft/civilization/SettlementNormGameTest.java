@@ -32,7 +32,7 @@ public final class SettlementNormGameTest implements FabricGameTest {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos chest = helper.absolutePos(CHEST);
-		Settlement settlement = data.getOrCreate(helper.absolutePos(BELL), "AI food requests", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "AI food requests");
 		data.setStockpile(settlement, chest);
 		Villager resident = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
 		resident.setNoAi(true);
@@ -80,9 +80,9 @@ public final class SettlementNormGameTest implements FabricGameTest {
 	public void refusalLeadsToPersistedRuleThatChangesRealAllocation(GameTestHelper helper) {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
-		SettlementSavedData data = new SettlementSavedData();
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Norm Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Norm Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager first = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
 		Villager second = helper.spawn(EntityType.VILLAGER, new BlockPos(3, 0, 3));
@@ -170,9 +170,9 @@ public final class SettlementNormGameTest implements FabricGameTest {
 	public void dependentCareRuleChangesRealAllocation(GameTestHelper helper) {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
-		SettlementSavedData data = new SettlementSavedData();
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Care Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Care Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager first = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 0, 3));
 		Villager second = helper.spawn(EntityType.VILLAGER, new BlockPos(3, 0, 3));

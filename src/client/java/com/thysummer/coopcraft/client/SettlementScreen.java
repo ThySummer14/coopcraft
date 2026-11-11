@@ -2,6 +2,7 @@ package com.thysummer.coopcraft.client;
 
 import java.util.List;
 
+import com.thysummer.coopcraft.civilization.CivilizationEra;
 import com.thysummer.coopcraft.net.SettlementOverviewPayload;
 
 import net.minecraft.client.gui.GuiGraphics;
@@ -21,6 +22,7 @@ public class SettlementScreen extends Screen {
 	private Button overviewTab;
 	private Button eventsTab;
 	private Button residentsTab;
+	private Button householdTab;
 	private Button previousButton;
 	private Button nextButton;
 
@@ -35,7 +37,7 @@ public class SettlementScreen extends Screen {
 		int right = panelRight();
 		int top = panelTop();
 		int bottom = panelBottom();
-		int tabWidth = (right - left - 28) / 3;
+		int tabWidth = (right - left - 32) / 4;
 		overviewTab = addRenderableWidget(Button.builder(
 			Component.translatable("coopcraft.settlement.tab.overview"), button -> selectPage(Page.OVERVIEW)
 		).bounds(left + 12, top + 28, tabWidth, 20).build());
@@ -45,6 +47,9 @@ public class SettlementScreen extends Screen {
 		residentsTab = addRenderableWidget(Button.builder(
 			Component.translatable("coopcraft.settlement.tab.residents"), button -> selectPage(Page.RESIDENTS)
 		).bounds(left + 20 + tabWidth * 2, top + 28, tabWidth, 20).build());
+		householdTab = addRenderableWidget(Button.builder(
+			Component.translatable("coopcraft.settlement.tab.household"), button -> selectPage(Page.HOUSEHOLD)
+		).bounds(left + 24 + tabWidth * 3, top + 28, tabWidth, 20).build());
 		previousButton = addRenderableWidget(Button.builder(
 			Component.translatable("coopcraft.settlement.previous"), button -> moveEntry(-1)
 		).bounds(left + 12, bottom - 30, 80, 20).build());
@@ -66,6 +71,7 @@ public class SettlementScreen extends Screen {
 			case OVERVIEW -> drawOverview(graphics);
 			case EVENTS -> drawEvent(graphics);
 			case RESIDENTS -> drawResident(graphics);
+			case HOUSEHOLD -> drawHousehold(graphics);
 		}
 		if (page != Page.OVERVIEW) {
 			graphics.drawCenteredString(
@@ -102,37 +108,37 @@ public class SettlementScreen extends Screen {
 		int y = contentTop();
 		int maxY = panelBottom() - 8;
 		int textWidth = panelWidth() - 24;
-		BlockPos center = BlockPos.of(data.center());
-		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.founded", data.foundedDay()), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable(
-			"coopcraft.settlement.center", center.getX(), center.getY(), center.getZ()
+			"coopcraft.settlement.next_step", Component.translatable("coopcraft.next_step." + data.nextStep())
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 10;
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.population", data.totalResidents(), data.registeredResidents()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.housing", data.housingCapacity()), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.era", Component.translatable(CivilizationEra.translationKey(data.era()))
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		y = drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.origin", Component.translatable("coopcraft.origin." + data.origin())
+		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		if (!data.nextEraMilestone().isEmpty()) {
+			y = drawWrapped(graphics, Component.translatable(
+				"coopcraft.settlement.next_era_milestone", Component.translatable(data.nextEraMilestone())
+			), x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+		}
+		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.stage", Component.translatable(data.stage().translationKey())
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
-		Component hearth = data.hearth() < 0
-			? Component.translatable("coopcraft.settlement.hearth_none")
-			: Component.literal(BlockPos.of(data.hearth()).toShortString());
-		y = drawWrapped(graphics, Component.translatable("coopcraft.settlement.hearth", hearth), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
 		y = drawWrapped(graphics, Component.translatable(
 			"coopcraft.settlement.stockpile", data.communalFoodPoints(), data.communalResourceCount()
 		), x, y, textWidth, maxY, PRIMARY_TEXT) + 10;
-		y = drawWrapped(graphics, Component.translatable(
-			"coopcraft.settlement.social_form", Component.translatable(data.society().form().translationKey())
-		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
-		y = drawWrapped(graphics, Component.translatable(
-			"coopcraft.settlement.ownership", Component.translatable(data.society().ownership().translationKey())
-		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
-		y = drawWrapped(graphics, Component.translatable(
-			"coopcraft.settlement.labor", Component.translatable(data.society().labor().translationKey())
-		), x, y, textWidth, maxY, PRIMARY_TEXT) + 4;
+		for (String affair : data.publicAffairs()) {
+			y = drawWrapped(graphics, Component.translatable("coopcraft.coordination.affair." + affair),
+				x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+		}
 		drawWrapped(graphics, Component.translatable(
-			"coopcraft.settlement.distribution", Component.translatable(data.society().distribution().translationKey())
-		), x, y, textWidth, maxY, PRIMARY_TEXT);
+			"coopcraft.settlement.social_form", Component.translatable(data.society().form().translationKey())
+		), x, y, textWidth, maxY, SECONDARY_TEXT);
 	}
 
 	private void drawEvent(GuiGraphics graphics) {
@@ -224,6 +230,92 @@ public class SettlementScreen extends Screen {
 		}
 	}
 
+	private void drawHousehold(GuiGraphics graphics) {
+		List<SettlementOverviewPayload.ResidentInfo> residents = data.residents();
+		int x = panelLeft() + 12;
+		int y = contentTop();
+		int maxY = panelBottom() - 38;
+		int textWidth = panelWidth() - 24;
+		if (residents.isEmpty()) {
+			drawWrapped(graphics, Component.translatable("coopcraft.settlement.empty"), x, y, textWidth, maxY, PRIMARY_TEXT);
+			return;
+		}
+		SettlementOverviewPayload.ResidentInfo resident = residents.get(entryIndex);
+		Component name = resident.customName().isEmpty()
+			? Component.translatable("entity.minecraft.villager")
+			: Component.literal(resident.customName());
+		y = drawWrapped(graphics, name, x, y, textWidth, maxY, PRIMARY_TEXT) + 6;
+		drawResidentObservation(graphics, resident.observation(), x, y, textWidth, maxY);
+	}
+
+	private int drawResidentObservation(
+		GuiGraphics graphics,
+		SettlementOverviewPayload.ResidentObservation observation,
+		int x,
+		int y,
+		int textWidth,
+		int maxY
+	) {
+		Component action = Component.translatable("coopcraft.interaction.action." + observation.action());
+		Component actionLine;
+		if (!observation.blocker().isEmpty()) {
+			actionLine = Component.translatable(
+				"coopcraft.interaction.inspect_action_blocked",
+				action,
+				Component.translatable("coopcraft.interaction.blocker." + observation.blocker())
+			);
+		} else if (observation.actionTarget() != -1) {
+			actionLine = Component.translatable(
+				"coopcraft.interaction.inspect_action_target", action, BlockPos.of(observation.actionTarget()).toShortString()
+			);
+		} else {
+			actionLine = Component.translatable("coopcraft.interaction.inspect_action", action);
+		}
+		y = drawWrapped(graphics, actionLine, x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+
+		Component residence;
+		if (!observation.residenceKnown()) {
+			residence = Component.translatable("coopcraft.settlement.residence_unknown");
+		} else if (observation.coResidentCount() == 0) {
+			residence = Component.translatable("coopcraft.settlement.residence_none");
+		} else {
+			String names = String.join(", ", observation.coResidents());
+			int hidden = observation.coResidentCount() - observation.coResidents().size();
+			residence = hidden > 0
+				? Component.translatable("coopcraft.settlement.residence_list_more", names, hidden)
+				: Component.translatable("coopcraft.settlement.residence_list", names);
+		}
+		y = drawWrapped(graphics, residence, x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+
+		List<String> careDescriptions = observation.care().stream().map(care -> Component.translatable(
+			care.providing() ? "coopcraft.settlement.care_provided" : "coopcraft.settlement.care_received",
+			care.otherName(), care.hours()
+		).getString()).toList();
+		Component careLine;
+		if (careDescriptions.isEmpty()) {
+			careLine = Component.translatable(
+				observation.needsCare() ? "coopcraft.settlement.care_empty_needed" : "coopcraft.settlement.care_empty"
+			);
+		} else {
+			String descriptions = String.join("; ", careDescriptions);
+			int hidden = observation.careLinkCount() - careDescriptions.size();
+			careLine = hidden > 0
+				? Component.translatable("coopcraft.settlement.care_list_more", descriptions, hidden)
+				: Component.translatable("coopcraft.settlement.care_list", descriptions);
+		}
+		y = drawWrapped(graphics, careLine, x, y, textWidth, maxY, SECONDARY_TEXT) + 4;
+
+		Component provisioning = observation.provisioningUnits() > 0
+			? Component.translatable("coopcraft.settlement.provisioning_allocation", observation.provisioningUnits())
+			: Component.translatable("coopcraft.settlement.provisioning_none");
+		Component food = Component.translatable(
+			observation.foodAvailable() ? "coopcraft.settlement.food_available" : "coopcraft.settlement.food_unavailable"
+		);
+		return drawWrapped(graphics, Component.translatable(
+			"coopcraft.settlement.provisioning", provisioning, food
+		), x, y, textWidth, maxY, SECONDARY_TEXT) + 6;
+	}
+
 	private int drawWrapped(
 		GuiGraphics graphics,
 		Component text,
@@ -261,7 +353,7 @@ public class SettlementScreen extends Screen {
 		return switch (page) {
 			case OVERVIEW -> 0;
 			case EVENTS -> data.simulationEvents().size();
-			case RESIDENTS -> data.residents().size();
+			case RESIDENTS, HOUSEHOLD -> data.residents().size();
 		};
 	}
 
@@ -272,6 +364,7 @@ public class SettlementScreen extends Screen {
 		overviewTab.active = page != Page.OVERVIEW;
 		eventsTab.active = page != Page.EVENTS;
 		residentsTab.active = page != Page.RESIDENTS;
+		householdTab.active = page != Page.HOUSEHOLD;
 		int count = entryCount();
 		entryIndex = count == 0 ? 0 : Math.min(entryIndex, count - 1);
 		previousButton.visible = page != Page.OVERVIEW && entryIndex > 0;
@@ -310,6 +403,7 @@ public class SettlementScreen extends Screen {
 	private enum Page {
 		OVERVIEW,
 		EVENTS,
-		RESIDENTS
+		RESIDENTS,
+		HOUSEHOLD
 	}
 }

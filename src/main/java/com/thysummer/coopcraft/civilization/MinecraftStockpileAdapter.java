@@ -25,7 +25,8 @@ public final class MinecraftStockpileAdapter {
 		Items.OAK_LOG, ResourceType.WOOD,
 		Items.COBBLESTONE, ResourceType.STONE,
 		Items.STICK, ResourceType.STICK,
-		Items.SMOOTH_STONE, ResourceType.SMOOTH_STONE
+		Items.SMOOTH_STONE, ResourceType.SMOOTH_STONE,
+		Items.BREAD, ResourceType.BREAD
 	);
 
 	private MinecraftStockpileAdapter() {
@@ -177,6 +178,7 @@ public final class MinecraftStockpileAdapter {
 			case STONE -> Items.COBBLESTONE;
 			case STICK -> Items.STICK;
 			case SMOOTH_STONE -> Items.SMOOTH_STONE;
+			case BREAD -> Items.BREAD;
 		};
 	}
 }

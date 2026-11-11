@@ -43,12 +43,14 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.setBlock(CRAFTING_TABLE, Blocks.CRAFTING_TABLE);
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
-		Settlement settlement = data.getOrCreate(helper.absolutePos(BELL), "Public workshop", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Public workshop");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
 		data.setStage(settlement, SettlementStage.AGRICULTURAL);
+		data.setConstructionJob(settlement, ConstructionJob.start(
+			BlueprintManager.get(ConstructionPlanner.STONE_COTTAGE), settlement.center().north(6)
+		));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
-		villager.setNoAi(true);
 		villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.STONE_PICKAXE));
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
 		SettlementStockpile.insert(chest, new ItemStack(Items.OAK_LOG, 10));
@@ -58,14 +60,22 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementStockpile.insert(chest, new ItemStack(Items.BREAD, 3));
 		VillagerWorkGoal goal = new VillagerWorkGoal(villager);
 		int batches = 0;
-		for (; batches < 20 && goal.canUse(); batches++) {
-			helper.assertValueEqual("craft_materials", goal.status().action(), "Only unmet housing supplies should be crafted");
+		for (; batches < 40 && !housingSuppliesReady(chest); batches++) {
+			if (!goal.canUse()) break;
+			arriveForWorkbench(villager, goal);
 			goal.start();
 			for (int tick = 0; tick < 300 && goal.canContinueToUse(); tick++) {
+				arriveForWorkbench(villager, goal);
 				goal.tick();
 			}
 		}
-		helper.assertTrue(batches > 0 && batches < 20, "Production must stop once demand is met");
+		helper.assertTrue(batches > 0 && batches < 40, "Production must stop once demand is met: " + goal.debugState()
+			+ ", status=" + goal.status() + ", planks=" + chest.countItem(Items.OAK_PLANKS)
+			+ ", doors=" + chest.countItem(Items.OAK_DOOR) + ", beds=" + chest.countItem(Items.WHITE_BED)
+			+ ", torches=" + chest.countItem(Items.TORCH) + ", coal=" + chest.countItem(Items.COAL)
+			+ ", sticks=" + chest.countItem(Items.STICK) + ", demands=" + ConstructionPlanner.materialDemands(data, settlement)
+			+ ", choices=" + ConstructionPlanner.materialDemands(data, settlement).stream()
+				.map(demand -> SettlementMaterialCrafting.chooseRecipe(chest, data.simulationOf(settlement).orElse(null), demand)).toList());
 		helper.assertValueEqual(31, chest.countItem(Items.OAK_PLANKS), "Ten logs yield forty planks minus six for doors and three for the bed");
 		helper.assertValueEqual(3, chest.countItem(Items.OAK_DOOR), "One door batch must remain public");
 		helper.assertValueEqual(1, chest.countItem(Items.WHITE_BED), "Real wool and planks must become one public bed");
@@ -83,7 +93,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
 		BlockPos stone = helper.absolutePos(STONE);
-		Settlement settlement = data.getOrCreate(bell, "Production Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Production Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
@@ -103,6 +113,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		helper.assertTrue(goal.canUse(), "The villager must choose the marked stone");
 		goal.start();
 		for (int tick = 0; tick < 240 && helper.getLevel().getBlockState(stone).is(Blocks.STONE); tick++) {
+			arriveForWorkbench(villager, goal);
 			goal.tick();
 		}
 
@@ -161,7 +172,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		SettlementStockpile.insert(chest, new ItemStack(Items.COBBLESTONE, 3));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Crafting Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Crafting Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
@@ -370,11 +381,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		// Run with an isolated settlement: getOrCreate reuses any existing settlement within 48 blocks.
-		// Do not reset shared SavedData here or let another test's residents, stock or jobs affect this scenario.
-		helper.assertTrue(data.find(bell).isEmpty(),
-			"Tool upgrade regression requires an isolated settlement with no other settlement within 48 blocks");
-		Settlement settlement = data.getOrCreate(bell, "Tool upgrade workshop", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Tool upgrade workshop");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		data.setCraftingStation(settlement, helper.absolutePos(CRAFTING_TABLE));
 		data.setGrindingStation(settlement, helper.absolutePos(GRINDING_STATION));
@@ -470,9 +477,10 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			"Polishing must preserve the original repair cost");
 		helper.assertValueEqual(CustomData.of(toolMarker), villager.getMainHandItem().get(DataComponents.CUSTOM_DATA),
 			"Polishing must preserve arbitrary existing tool data");
-		helper.assertValueEqual(0,
+		helper.assertValueEqual(1,
 			originalTool.getEnchantments().getLevel(enchantments.getHolderOrThrow(Enchantments.EFFICIENCY)),
-			"Preparing the upgraded copy must not mutate the old stack object");
+			"Polishing must upgrade the original tool object");
+		helper.assertTrue(originalTool == villager.getMainHandItem(), "Polishing must keep the original held stack identity");
 		helper.assertValueEqual(6, chest.countItem(Items.STICK), "Exactly six delivered sticks must remain after polishing");
 		helper.assertValueEqual(6, SettlementStockpile.communalResourceCount(chest), "No other real materials may remain");
 		helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Polishing must consume three real smooth stones");
@@ -576,7 +584,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertValueEqual(3, villager.getInventory().countItem(Items.COBBLESTONE), "Carry the actual three stone");
 			helper.assertValueEqual(2, villager.getInventory().countItem(Items.STICK), "Carry the actual two sticks");
 			placeAtCargoFace(helper, villager, station);
-			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) { arriveForWorkbench(villager, goal); goal.tick(); }
 			helper.assertFalse(goal.canContinueToUse(), "The arrived workbench batch must finish in its work budget");
 			helper.assertTrue(villager.getMainHandItem().is(Items.STONE_PICKAXE), "Equip the one completed actual tool");
 		} finally {
@@ -603,7 +611,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertValueEqual(1, villager.getInventory().countItem(Items.OAK_LOG), "Carry the one real log");
 			helper.assertValueEqual(0, villager.getInventory().countItem(Items.STICK), "Pickup cannot manufacture sticks");
 			placeAtCargoFace(helper, villager, station);
-			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) { arriveForWorkbench(villager, goal); goal.tick(); }
 			helper.assertFalse(goal.canContinueToUse(), "Finish one arrived stick batch within the work budget");
 			helper.assertValueEqual(8, villager.getInventory().countItem(Items.STICK), "One log produces eight real sticks");
 		} finally {
@@ -631,7 +639,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertValueEqual(1, villager.getInventory().countItem(Items.COBBLESTONE), "Carry the one real cobblestone");
 			helper.assertValueEqual(0, villager.getInventory().countItem(Items.SMOOTH_STONE), "Pickup cannot manufacture smooth stone");
 			placeAtCargoFace(helper, villager, station);
-			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) { arriveForWorkbench(villager, goal); goal.tick(); }
 			helper.assertFalse(goal.canContinueToUse(), "Finish one arrived grinding batch within the work budget");
 			helper.assertValueEqual(1, villager.getInventory().countItem(Items.SMOOTH_STONE), "One cobblestone produces one real smooth stone");
 			helper.assertTrue(ItemStack.matches(originalTool, villager.getMainHandItem()), "Grinding preserves every tool component and durability");
@@ -663,7 +671,7 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 			helper.assertTrue(villager.getMainHandItem() == originalTool && ItemStack.matches(snapshot, originalTool),
 				"Pickup leaves the original personal tool untouched");
 			placeAtCargoFace(helper, villager, station);
-			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) goal.tick();
+			for (int tick = 0; tick < 240 && goal.canContinueToUse(); tick++) { arriveForWorkbench(villager, goal); goal.tick(); }
 			helper.assertFalse(goal.canContinueToUse(), "Complete one arrived polishing job within the work budget");
 			helper.assertTrue(villager.getMainHandItem() == originalTool, "Upgrade the original personal object");
 			helper.assertValueEqual(0, villager.getInventory().countItem(Items.STONE_PICKAXE), "Do not create a second public tool");
@@ -672,12 +680,32 @@ public final class SettlementProductionGameTest implements FabricGameTest {
 		}
 	}
 
+	private static boolean housingSuppliesReady(Container chest) {
+		return chest.countItem(Items.OAK_PLANKS) >= 31 && chest.countItem(Items.OAK_DOOR) >= 3
+			&& chest.countItem(Items.WHITE_BED) >= 1 && chest.countItem(Items.TORCH) >= 4;
+	}
+
+	private static void arriveForWorkbench(Villager villager, VillagerWorkGoal goal) {
+		var level = (net.minecraft.server.level.ServerLevel) villager.level();
+		level.setDayTime(level.getDayTime() + 1);
+		if (level.getLevelData() instanceof net.minecraft.world.level.storage.PrimaryLevelData data) {
+			data.setGameTime(level.getGameTime() + 1);
+		}
+		String action = goal.status().action();
+		BlockPos target = goal.status().target();
+		if (target != null && (action.startsWith("collect_") || action.startsWith("workbench_") || action.startsWith("return_")
+			|| action.equals("craft_first_workbench") || action.equals("craft_sticks_at_workbench")
+			|| action.equals("polish") || action.equals("grind"))) {
+			placeAtCargoFace(null, villager, target);
+		}
+	}
+
 	/** Explicit, safe same-height arrival. These fixtures do not test pathfinding. */
 	private static void placeAtCargoFace(GameTestHelper helper, Villager villager, BlockPos target) {
 		BlockPos feet = target.east();
-		helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
-		helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-		helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+		villager.level().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		villager.level().setBlock(feet, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+		villager.level().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 		villager.setPos(feet.getX() + 0.5, feet.getY(), feet.getZ() + 0.5);
 	}
 

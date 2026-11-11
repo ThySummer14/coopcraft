@@ -113,7 +113,7 @@ class SettlementGatheringAreasTest {
 	@Test void version23RoundTripsWithoutChangingManualMarksObservationsOrInventory() {
 		SettlementSavedData data = fixture(); CompoundTag before = save(data);
 		var area = data.permitGatheringArea(camp(data), AUTHOR, BlockPos.ZERO, 8, BOTH).area();
-		CompoundTag expected = save(data); assertEquals(24, expected.getInt("DataVersion"));
+		CompoundTag expected = save(data); assertEquals(27, expected.getInt("DataVersion"));
 		assertEquals(1, expected.getCompound(FIELD).getInt("Version"));
 		for (int pass = 0; pass < 2; pass++) {
 			data = SettlementSavedData.load(save(data), null);

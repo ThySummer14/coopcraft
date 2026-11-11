@@ -1,0 +1,9 @@
+{
+  "order": 20,
+  "milestones": [
+    "coopcraft:agricultural_completion",
+    "coopcraft:metal_smelting",
+    "coopcraft:metal_tool_production",
+    "coopcraft:mechanical_power"
+  ]
+}

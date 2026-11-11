@@ -27,8 +27,9 @@ public final class SettlementHousingGameTest implements FabricGameTest {
 	@GameTest(template = FabricGameTest.EMPTY_STRUCTURE, timeoutTicks = 100)
 	public void destroyedBedRestoresHousingPlanAndExplicitRegistrationClosesGap(GameTestHelper helper) {
 		var level = helper.getLevel();
-		SettlementSavedData data = SettlementSavedData.load(new CompoundTag(), level.registryAccess());
-		Settlement settlement = data.getOrCreate(helper.absolutePos(new BlockPos(2, 1, 2)), "Housing Feedback", 0);
+		SettlementSavedData data = SettlementSavedData.get(level);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Housing Feedback");
+		int settlementCount = data.all().size();
 		Villager resident = helper.spawn(EntityType.VILLAGER, new BlockPos(2, 1, 3));
 		resident.setNoAi(true);
 		data.registerLoadedResidents(level, settlement, List.of(resident));
@@ -73,7 +74,7 @@ public final class SettlementHousingGameTest implements FabricGameTest {
 		helper.assertValueEqual(1, data.housingCapacity(settlement), "Registering either half again must be idempotent");
 		helper.assertValueEqual(0, ConstructionPlanner.housingPlan(data, settlement).missingBeds(), "Manual complete-bed registration closes the gap");
 		helper.assertFalse(hasHousingProject(data, settlement), "Manual registration must suppress new housing plans");
-		helper.assertValueEqual(1, data.all().size(), "Manual registration must not create settlements");
+		helper.assertValueEqual(settlementCount, data.all().size(), "Manual registration must not create settlements");
 		resident.discard();
 		helper.succeed();
 	}

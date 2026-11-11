@@ -51,34 +51,178 @@ public final class SettlementNeeds {
 		if (current >= FULL_AT) {
 			return 0;
 		}
+		long requestEventId = currentCareRequest(level, data, settlement, villager);
 		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
-			return SettlementSimulationService.eat(data, settlement, villager.getUUID(),
+			return SettlementSimulationService.eat(data, settlement, villager.getUUID(), requestEventId,
 				SettlementSupervision.candidates(level, data, settlement));
 		}
-		int foodPoints = consumeOneFood(villager.getInventory());
-		if (foodPoints == 0) {
-			foodPoints = consumeOneFood(SettlementStockpile.getStockpile(level, data, settlement));
+		return consumeRealFood(level, data, settlement, villager, null, requestEventId).nutrition() / 5;
+	}
+
+	static CareMealResult eatAfterCare(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager,
+		Villager caregiver,
+		long existingRequestEventId
+	) {
+		int current = data.needsOf(settlement, villager.getUUID()).satiety();
+		if (current >= FULL_AT) {
+			return previousCareMeal(data, settlement, villager, existingRequestEventId);
 		}
-		if (foodPoints > 0) {
-			data.setSatiety(settlement, villager.getUUID(), restoredSatiety(current, foodPoints));
+		if (SettlementSimulationService.isSurvivalEnabled(data, settlement)) {
+			SettlementSimulationState state = data.simulationOf(settlement).orElseThrow();
+			long previousEventId = state.world().ledger().events().isEmpty()
+				? 0 : state.world().ledger().events().getLast().eventId();
+			int nutrition = SettlementSimulationService.eat(data, settlement, villager.getUUID(), existingRequestEventId);
+			if (nutrition == 0) {
+				return previousCareMeal(data, settlement, villager, existingRequestEventId);
+			}
+			var events = state.world().ledger().events().stream()
+				.filter(event -> event.eventId() > previousEventId)
+				.toList();
+			String foodItem = events.stream()
+				.filter(event -> event.type() == com.thysummer.coopcraft.civilization.simulation.EventType.CONSUME)
+				.flatMap(event -> event.inputs().stream())
+				.findFirst()
+				.map(flow -> flow.resourceType().name())
+				.orElse("");
+			return new CareMealResult(
+				nutrition, foodItem, "common_store", events.stream().map(event -> event.eventId()).toList()
+			);
 		}
-		return foodPoints;
+		CareMealResult meal = consumeRealFood(level, data, settlement, villager, caregiver, existingRequestEventId);
+		return meal.nutrition() > 0 ? meal : previousCareMeal(data, settlement, villager, existingRequestEventId);
+	}
+
+	private static long currentCareRequest(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager
+	) {
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null) {
+			return 0;
+		}
+		long day = level.getDayTime() / net.minecraft.world.level.Level.TICKS_PER_DAY;
+		return state.careFoodRequest(villager.getUUID(), day).orElse(0L);
+	}
+
+	private static CareMealResult consumeRealFood(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager,
+		Villager caregiver,
+		long requestEventId
+	) {
+		int current = data.needsOf(settlement, villager.getUUID()).satiety();
+		ConsumedFood consumed = consumeFood(villager.getInventory(), "resident_inventory");
+		if (consumed.foodPoints() == 0 && caregiver != null) {
+			consumed = consumeFood(caregiver.getInventory(), "caregiver_inventory");
+		}
+		if (consumed.foodPoints() == 0) {
+			consumed = consumeFood(SettlementStockpile.getStockpile(level, data, settlement), "public_stockpile");
+		}
+		if (consumed.foodPoints() == 0) {
+			return CareMealResult.empty();
+		}
+		data.setSatiety(settlement, villager.getUUID(), restoredSatiety(current, consumed.foodPoints()));
+		long eventId = recordRealCareMeal(data, settlement, villager, consumed, requestEventId);
+		return new CareMealResult(
+			consumed.foodPoints() * 5, consumed.itemName(), consumed.source(),
+			eventId > 0 ? java.util.List.of(eventId) : java.util.List.of()
+		);
+	}
+
+	private static long recordRealCareMeal(
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager,
+		ConsumedFood consumed,
+		long requestEventId
+	) {
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || requestEventId <= 0) {
+			return 0;
+		}
+		String personId = state.residentId(villager.getUUID()).orElseThrow();
+		java.util.Map<String, String> context = new java.util.LinkedHashMap<>();
+		context.put("authority", "minecraft");
+		context.put("mealNutrition", Integer.toString(consumed.foodPoints() * 5));
+		context.put("foodItem", consumed.itemName());
+		context.put("foodSource", consumed.source());
+		context.put("villagerId", villager.getUUID().toString());
+		long eventId = state.world().recordExternalConsumption(personId, context, java.util.List.of(requestEventId));
+		data.setDirty();
+		return eventId;
+	}
+
+	private static CareMealResult previousCareMeal(
+		SettlementSavedData data,
+		Settlement settlement,
+		Villager villager,
+		long requestEventId
+	) {
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		if (state == null || requestEventId <= 0) {
+			return CareMealResult.empty();
+		}
+		String personId = state.residentId(villager.getUUID()).orElseThrow();
+		var events = state.world().ledger().events();
+		for (int index = events.size() - 1; index >= 0; index--) {
+			var event = events.get(index);
+			if (event.eventId() < requestEventId) {
+				break;
+			}
+			if (event.type() != com.thysummer.coopcraft.civilization.simulation.EventType.CONSUME
+				|| !event.actors().equals(java.util.List.of(personId))
+				|| state.world().ledger().traceAncestry(event.eventId()).stream()
+					.noneMatch(cause -> cause.eventId() == requestEventId)) {
+				continue;
+			}
+			int nutrition = event.context().containsKey("mealNutrition")
+				? Integer.parseInt(event.context().get("mealNutrition"))
+				: (int) Math.min(Integer.MAX_VALUE, event.inputs().stream()
+					.mapToLong(flow -> Math.multiplyExact(flow.quantity(), flow.nutritionPerUnit())).sum());
+			String foodItem = event.context().containsKey("foodItem") ? event.context().get("foodItem")
+				: event.inputs().stream().findFirst().map(flow -> flow.resourceType().name()).orElse("");
+			String foodSource = event.context().getOrDefault("foodSource", "common_store");
+			return new CareMealResult(nutrition, foodItem, foodSource, java.util.List.of(event.eventId()));
+		}
+		return CareMealResult.empty();
 	}
 
 	static int consumeOneFood(Container inventory) {
+		return consumeFood(inventory, "").foodPoints();
+	}
+
+	private static ConsumedFood consumeFood(Container inventory, String source) {
 		if (inventory == null) {
-			return 0;
+			return new ConsumedFood(0, "", "");
 		}
 		for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
 			ItemStack stack = inventory.getItem(slot);
 			int points = SettlementFood.points(stack);
 			if (points > 0) {
+				String itemName = stack.getItem().getDescriptionId();
 				inventory.removeItem(slot, 1);
 				inventory.setChanged();
-				return points;
+				return new ConsumedFood(points, itemName, source);
 			}
 		}
-		return 0;
+		return new ConsumedFood(0, "", "");
+	}
+
+	record CareMealResult(int nutrition, String foodItem, String foodSource, java.util.List<Long> eventIds) {
+		static CareMealResult empty() {
+			return new CareMealResult(0, "", "", java.util.List.of());
+		}
+	}
+
+	private record ConsumedFood(int foodPoints, String itemName, String source) {
 	}
 
 	static int restoredSatiety(int current, int foodPoints) {

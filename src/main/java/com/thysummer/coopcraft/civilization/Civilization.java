@@ -2,8 +2,11 @@ package com.thysummer.coopcraft.civilization;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.thysummer.coopcraft.civilization.simulation.EventType;
 import com.thysummer.coopcraft.civilization.simulation.Norm;
@@ -26,6 +29,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
@@ -51,6 +55,7 @@ public final class Civilization {
 	public static void register() {
 		SettlementCommands.register();
 		PlayerProtectionCommands.register();
+		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new CivilizationEras.ReloadListener());
 		ResourceManagerHelper.get(PackType.SERVER_DATA).registerReloadListener(new BlueprintManager());
 		UseBlockCallback.EVENT.register(Civilization::onUseBlock);
 		UseEntityCallback.EVENT.register(VillagerInteraction::onUseEntity);
@@ -98,10 +103,14 @@ public final class Civilization {
 		if (state.is(Blocks.STONECUTTER)) {
 			return onUseGrindingStation(player, level, hit);
 		}
+		if (SettlementMetallurgy.isSmeltingStation(state)) {
+			return onUseSmeltingStation(player, level, hit);
+		}
 		if (state.getBlock() instanceof CampfireBlock) {
 			return onUseHearth(player, level, hit);
 		}
-		if (state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)) {
+		if (state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)
+			|| SettlementMetallurgy.isOre(state)) {
 			return onUseResource(player, level, hit);
 		}
 		return InteractionResult.PASS;
@@ -200,6 +209,7 @@ public final class Civilization {
 		List<Villager> residents = data.registerAndGetLoadedResidents(serverLevel, settlement,
 			findResidents(serverLevel, settlement.center(), RESIDENT_RADIUS));
 		SettlementStage stage = SettlementStages.initialize(serverLevel, data, settlement, residents);
+		CivilizationEras.refresh(serverLevel, data, settlement);
 		if (created) {
 			serverPlayer.sendSystemMessage(Component.translatable(
 				"coopcraft.settlement.created_stage", settlement.name(), Component.translatable(stage.translationKey())
@@ -210,13 +220,19 @@ public final class Civilization {
 			return InteractionResult.SUCCESS;
 		}
 
-		java.util.UUID leaderId = data.leaderOf(settlement).orElse(null);
+		UUID leaderId = data.leaderOf(settlement).orElse(null);
+		Container stockpile = SettlementStockpile.getStockpile(serverLevel, data, settlement);
+		Map<UUID, String> residentNames = new HashMap<>();
+		for (Villager resident : residents) {
+			residentNames.put(resident.getUUID(), displayName(data, settlement, resident));
+		}
 		List<SettlementOverviewPayload.ResidentInfo> summaries = residents.stream()
-			.map(villager -> toResidentInfo(serverLevel, data, settlement, leaderId, villager))
+			.map(villager -> toResidentInfo(serverLevel, data, settlement, leaderId, residentNames, stockpile, villager))
 			.sorted((first, second) -> Boolean.compare(second.leader(), first.leader()))
 			.limit(SettlementOverviewPayload.MAX_RESIDENTS)
 			.toList();
-		var stockpile = SettlementStockpile.getStockpile(serverLevel, data, settlement);
+		List<String> publicAffairs = SettlementCoordination.publicAffairs(serverLevel, data, settlement);
+		int communalResourceCount = SettlementStockpile.communalResourceCount(stockpile);
 		ServerPlayNetworking.send(serverPlayer, new SettlementOverviewPayload(
 			settlement.name(),
 			settlement.center().asLong(),
@@ -226,13 +242,53 @@ public final class Civilization {
 			data.housingCapacity(settlement),
 			data.getHearth(settlement).map(BlockPos::asLong).orElse(-1L),
 			SettlementStockpile.communalFoodPoints(stockpile),
-			SettlementStockpile.communalResourceCount(stockpile),
+			communalResourceCount,
 			data.socialOrganizationOf(settlement),
 			stage,
 			summaries,
-			simulationEvents(serverLevel, data, settlement)
+			simulationEvents(serverLevel, data, settlement),
+			publicAffairs,
+			nextStep(
+				stockpile != null, publicAffairs, stage, data.getHearth(settlement).isPresent(),
+				data.housingCapacity(settlement), data.registeredCount(settlement),
+				data.getCraftingStation(settlement).isPresent(), communalResourceCount
+			),
+			data.eraOf(settlement).id(),
+			CivilizationEras.nextMilestoneTranslationKey(data, settlement),
+			data.originOf(settlement).id()
 		));
 		return InteractionResult.SUCCESS;
+	}
+
+	static String nextStep(
+		boolean stockpilePresent,
+		List<String> publicAffairs,
+		SettlementStage stage,
+		boolean hearthPresent,
+		int housingCapacity,
+		int registeredResidents,
+		boolean craftingStationPresent,
+		int resourceCount
+	) {
+		if (!stockpilePresent) {
+			return "stockpile";
+		}
+		if (publicAffairs.contains("common_food_shortage") || publicAffairs.contains("food_emergency")) {
+			return "food";
+		}
+		if (stage == SettlementStage.PRIMITIVE && !hearthPresent) {
+			return "hearth";
+		}
+		if (housingCapacity < registeredResidents) {
+			return "housing";
+		}
+		if (!craftingStationPresent) {
+			return "crafting_station";
+		}
+		if (resourceCount < 3) {
+			return "resources";
+		}
+		return "observe";
 	}
 
 	private static InteractionResult onUseStockpile(Player player, Level level, BlockHitResult hit) {
@@ -258,11 +314,15 @@ public final class Civilization {
 	}
 
 	private static InteractionResult onUseCraftingStation(Player player, Level level, BlockHitResult hit) {
-		return onUseStation(player, level, hit, false);
+		return onUseStation(player, level, hit, "crafting");
 	}
 
 	private static InteractionResult onUseGrindingStation(Player player, Level level, BlockHitResult hit) {
-		return onUseStation(player, level, hit, true);
+		return onUseStation(player, level, hit, "grinding");
+	}
+
+	private static InteractionResult onUseSmeltingStation(Player player, Level level, BlockHitResult hit) {
+		return onUseStation(player, level, hit, "smelting");
 	}
 
 	private static InteractionResult onUseHearth(Player player, Level level, BlockHitResult hit) {
@@ -287,7 +347,7 @@ public final class Civilization {
 		return InteractionResult.SUCCESS;
 	}
 
-	private static InteractionResult onUseStation(Player player, Level level, BlockHitResult hit, boolean grinding) {
+	private static InteractionResult onUseStation(Player player, Level level, BlockHitResult hit, String type) {
 		if (!player.isShiftKeyDown()) {
 			return InteractionResult.PASS;
 		}
@@ -304,13 +364,14 @@ public final class Civilization {
 			return InteractionResult.PASS;
 		}
 
-		if (grinding) {
-			data.setGrindingStation(settlement.get(), hit.getBlockPos());
-		} else {
-			data.setCraftingStation(settlement.get(), hit.getBlockPos());
+		switch (type) {
+			case "crafting" -> data.setCraftingStation(settlement.get(), hit.getBlockPos());
+			case "grinding" -> data.setGrindingStation(settlement.get(), hit.getBlockPos());
+			case "smelting" -> data.setSmeltingStation(settlement.get(), hit.getBlockPos());
+			default -> throw new IllegalArgumentException("Unknown station type: " + type);
 		}
 		serverPlayer.displayClientMessage(Component.translatable(
-			grinding ? "coopcraft.grinding_station.set" : "coopcraft.crafting_station.set", settlement.get().name()
+			"coopcraft." + type + "_station.set", settlement.get().name()
 		), true);
 		return InteractionResult.SUCCESS;
 	}
@@ -360,9 +421,13 @@ public final class Civilization {
 				SettlementHousing.tick(level, data, settlement, level.getGameTime());
 				SettlementSimulationService.tick(level, data, settlement);
 				data.foodRequests().flush(data, settlement, level.getGameTime(), level.getDayTime() / 24000L);
+				SettlementCareService.tick(level, data, settlement);
+				SettlementCoordination.tick(level, data, settlement);
 				SettlementNeeds.tick(level, data, settlement, level.getGameTime());
 				SettlementStockpile.tick(level, data, settlement, level.getGameTime());
 				SettlementStages.tick(level, data, settlement, level.getGameTime());
+				CivilizationEras.tick(level, data, settlement, level.getGameTime());
+				SettlementIntelligence.tick(level, data, settlement);
 			}
 		}
 	}
@@ -419,12 +484,12 @@ public final class Civilization {
 		Optional<NormProposal> proposal = state == null || !event.context().containsKey("proposalId")
 			? Optional.empty() : state.world().proposal(event.context().get("proposalId"));
 		if (event.type() == EventType.BIRTH && event.actors().size() == 3) {
-			addDetail(details, "parents", residentNames(level, event.actors().subList(0, 2)));
-			addDetail(details, "child", residentName(level, event.actors().get(2)));
+			addDetail(details, "parents", residentNames(level, data, settlement, event.actors().subList(0, 2)));
+			addDetail(details, "child", residentName(level, data, settlement, event.actors().get(2)));
 		} else if (proposal.isPresent()) {
-			addDetail(details, "proposer", residentName(level, proposal.get().proposerId()));
+			addDetail(details, "proposer", residentName(level, data, settlement, proposal.get().proposerId()));
 		} else if (!event.actors().isEmpty()) {
-			addDetail(details, "actor", residentName(level, event.actors().getFirst()));
+			addDetail(details, "actor", residentName(level, data, settlement, event.actors().getFirst()));
 		}
 		List<SettlementOverviewPayload.SimulationEventDetail> refusalDetails = FoodRefusalDetails.project(event);
 		if (!refusalDetails.isEmpty()) {
@@ -450,7 +515,16 @@ public final class Civilization {
 			addDetail(details, "project", event.context().get("blueprint"));
 			addDetail(details, "construction_step", event.context().get("index"));
 		}
-		addDetail(details, "item", event.context().get("item"));
+		addDetail(details, "task", event.context().get("task"));
+		if (event.context().containsKey("foodItem")) {
+			String foodItem = event.context().get("foodItem");
+			addDetail(details, "item", foodItem.startsWith("item.") ? foodItem : "coopcraft.simulation.resource." + foodItem);
+		} else {
+			addDetail(details, "item", event.context().get("item"));
+		}
+		addDetail(details, "meal_nutrition", event.context().get("mealNutrition"));
+		addDetail(details, "food_source", event.context().containsKey("foodSource")
+			? "coopcraft.simulation.food_source." + event.context().get("foodSource") : null);
 		addDetail(details, "player", event.context().get("player"));
 		var giftReserves = GiftReserveDetails.project(event);
 		if (details.size() + giftReserves.size() <= SettlementOverviewPayload.MAX_EVENT_DETAILS) {
@@ -478,19 +552,22 @@ public final class Civilization {
 		addDetail(details, "participants", event.context().get("participants"));
 		if (event.type() == EventType.NORM_DELIBERATED || event.type() == EventType.NORM_REJECTED) {
 			proposal.ifPresent(value -> {
-				addDetail(details, "supporters", residentNames(level, positions(value, NormProposal.Position.SUPPORT)));
-				addDetail(details, "opponents", residentNames(level, positions(value, NormProposal.Position.OPPOSE)));
+				addDetail(details, "supporters", residentNames(level, data, settlement, positions(value, NormProposal.Position.SUPPORT)));
+				addDetail(details, "opponents", residentNames(level, data, settlement, positions(value, NormProposal.Position.OPPOSE)));
 			});
 		} else if (event.type() == EventType.NORM_ADOPTED || event.type() == EventType.NORM_REVISED
 			|| event.type() == EventType.NORM_ENFORCED) {
 			Optional<Norm> norm = state == null ? Optional.empty() : state.world().norm(campId, event.context().get("normId"));
 			norm.ifPresent(value -> {
-				addDetail(details, "supporters", residentNames(level, value.supporters()));
-				addDetail(details, "opponents", residentNames(level, value.opponents()));
+				addDetail(details, "supporters", residentNames(level, data, settlement, value.supporters()));
+				addDetail(details, "opponents", residentNames(level, data, settlement, value.opponents()));
 			});
 		}
 		if (event.context().containsKey("stage")) {
 			addDetail(details, "stage", "coopcraft.stage." + event.context().get("stage"));
+		}
+		if (event.context().containsKey("era")) {
+			addDetail(details, "era", CivilizationEra.translationKey(net.minecraft.resources.ResourceLocation.parse(event.context().get("era"))));
 		}
 		addDetail(details, "reason", event.context().containsKey("reason")
 			? "coopcraft.simulation.reason." + event.context().get("reason") : null);
@@ -527,6 +604,35 @@ public final class Civilization {
 			.map(java.util.Map.Entry::getKey)
 			.sorted()
 			.toList();
+	}
+
+	private static String residentNames(
+		ServerLevel level,
+		SettlementSavedData data,
+		Settlement settlement,
+		Iterable<String> personIds
+	) {
+		List<String> names = new ArrayList<>();
+		for (String personId : personIds) {
+			names.add(residentName(level, data, settlement, personId));
+		}
+		return abbreviate(String.join(", ", names));
+	}
+
+	private static String residentName(ServerLevel level, SettlementSavedData data, Settlement settlement, String personId) {
+		if (personId.startsWith("minecraft-person:")) {
+			try {
+				java.util.UUID villagerId = java.util.UUID.fromString(personId.substring("minecraft-person:".length()));
+				if (level != null && level.getEntity(villagerId) instanceof Villager villager
+					&& villager.getCustomName() != null) {
+					return villager.getCustomName().getString();
+				}
+				return VillagerNames.nameFor(data, settlement, villagerId);
+			} catch (IllegalArgumentException ignored) {
+				return personId;
+			}
+		}
+		return personId;
 	}
 
 	private static String residentNames(ServerLevel level, Iterable<String> personIds) {
@@ -571,15 +677,21 @@ public final class Civilization {
 		ServerLevel level,
 		SettlementSavedData data,
 		Settlement settlement,
-		java.util.UUID leaderId,
+		UUID leaderId,
+		Map<UUID, String> residentNames,
+		Container stockpile,
 		Villager villager
 	) {
-		String customName = villager.getCustomName() == null
-			? VillagerNames.nameFor(data, settlement, villager.getUUID())
-			: villager.getCustomName().getString();
 		VillagerPersonality personality = data.personalityOf(settlement, villager.getUUID());
+		boolean foodAvailable = SettlementSimulationService.isSurvivalEnabled(data, settlement)
+			? SettlementSimulationService.hasFoodFor(data, settlement, villager.getUUID())
+			: SettlementNeeds.hasFood(villager.getInventory(), stockpile);
+		SettlementOverviewPayload.ResidentObservation observation = toResidentObservation(
+			data, settlement, villager.getUUID(), foodAvailable, VillagerWorkGoal.statusOf(villager), residentNames,
+			level.getDayTime() / Level.TICKS_PER_DAY
+		);
 		return new SettlementOverviewPayload.ResidentInfo(
-			customName,
+			residentNames.get(villager.getUUID()),
 			villager.getVillagerData().getProfession().name(),
 			LaborAllocator.roleOf(level, data, settlement, villager.getUUID()).id(),
 			villager.isBaby(),
@@ -592,7 +704,79 @@ public final class Civilization {
 			data.needsOf(settlement, villager.getUUID()).satiety(),
 			personality.archetype().id(),
 			personality.traitIds(),
-			villager.getUUID().equals(leaderId)
+			villager.getUUID().equals(leaderId),
+			observation
 		);
+	}
+
+	private static String displayName(SettlementSavedData data, Settlement settlement, Villager villager) {
+		return villager.getCustomName() == null
+			? VillagerNames.nameFor(data, settlement, villager.getUUID())
+			: villager.getCustomName().getString();
+	}
+
+	static SettlementOverviewPayload.ResidentObservation toResidentObservation(
+		SettlementSavedData data,
+		Settlement settlement,
+		UUID villagerId,
+		boolean foodAvailable,
+		VillagerWorkGoal.WorkStatus status,
+		Map<UUID, String> loadedNames,
+		long currentCareDay
+	) {
+		String blocker = status.blocker() == null ? "" : status.blocker();
+		long target = status.target() == null ? -1 : status.target().asLong();
+		SettlementSimulationState state = data.simulationOf(settlement).orElse(null);
+		SettlementHouseholds.Observation household = state == null
+			? null : SettlementHouseholds.observe(state, villagerId, currentCareDay).orElse(null);
+		if (household == null) {
+			return new SettlementOverviewPayload.ResidentObservation(
+				false, List.of(), 0, List.of(), 0, false, 0, foodAvailable, status.action(), blocker, target
+			);
+		}
+
+		String personId = state.residentId(villagerId).orElseThrow();
+		Map<String, UUID> villagerIds = new HashMap<>();
+		state.residentMappings().forEach((id, mappedPersonId) -> villagerIds.put(mappedPersonId, id));
+		List<String> coResidents = new ArrayList<>();
+		for (String memberId : household.residence().memberIds()) {
+			UUID memberIdUuid = villagerIds.get(memberId);
+			if (!memberId.equals(personId) && memberIdUuid != null) {
+				coResidents.add(nameFor(data, settlement, memberIdUuid, loadedNames));
+			}
+		}
+		List<SettlementOverviewPayload.CareObservation> care = new ArrayList<>();
+		for (CareLink link : household.care()) {
+			boolean providing = personId.equals(link.caregiverId());
+			UUID otherId = villagerIds.get(providing ? link.dependentId() : link.caregiverId());
+			if (otherId != null) {
+				care.add(new SettlementOverviewPayload.CareObservation(
+					nameFor(data, settlement, otherId, loadedNames), link.hours(), providing
+				));
+			}
+		}
+		long provisioningUnits = household.provisioning().stream().mapToLong(ProvisioningLink::quantity).sum();
+		return new SettlementOverviewPayload.ResidentObservation(
+			true,
+			coResidents.stream().limit(SettlementOverviewPayload.MAX_CO_RESIDENTS).toList(),
+			coResidents.size(),
+			care.stream().limit(SettlementOverviewPayload.MAX_CARE_LINKS).toList(),
+			care.size(),
+			household.needsCare(),
+			provisioningUnits,
+			foodAvailable,
+			status.action(),
+			blocker,
+			target
+		);
+	}
+
+	private static String nameFor(
+		SettlementSavedData data,
+		Settlement settlement,
+		UUID villagerId,
+		Map<UUID, String> loadedNames
+	) {
+		return loadedNames.getOrDefault(villagerId, VillagerNames.nameFor(data, settlement, villagerId));
 	}
 }

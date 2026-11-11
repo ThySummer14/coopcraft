@@ -1,0 +1,57 @@
+id: minimal-camp-prototype
+description: "M2 minimal prototype: one working resident plants the only potato on a 4x4 field, then harvests and replants it after maturity."
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "gamerule mobGriefing true"
+    - "gamemode survival @p"
+    - "time add 24000"
+    - "forceload add 15296 15296 15312 15312"
+    - "fill 15294 -62 15294 15314 -56 15314 minecraft:air"
+    - "fill 15296 -61 15296 15312 -61 15312 minecraft:bedrock"
+    - "fill 15296 -60 15296 15312 -57 15312 minecraft:air"
+    - "fill 15296 -60 15296 15312 -57 15296 minecraft:barrier"
+    - "fill 15296 -60 15312 15312 -57 15312 minecraft:barrier"
+    - "fill 15296 -60 15296 15296 -57 15312 minecraft:barrier"
+    - "fill 15312 -60 15296 15312 -57 15312 minecraft:barrier"
+    - "fill 15296 -57 15296 15312 -57 15312 minecraft:barrier"
+    - "tp @p 15303 -60 15305 180 0"
+    - "setblock 15303 -60 15302 minecraft:bell"
+    - "setblock 15303 -60 15303 minecraft:chest"
+    - "data modify block 15303 -60 15303 Items set value [{Slot:0b,id:\"minecraft:potato\",count:1}]"
+    - "setblock 15306 -60 15300 minecraft:red_bed[part=foot,facing=south]"
+    - "setblock 15306 -60 15301 minecraft:red_bed[part=head,facing=south]"
+    - "setblock 15308 -60 15300 minecraft:blue_bed[part=foot,facing=south]"
+    - "setblock 15308 -60 15301 minecraft:blue_bed[part=head,facing=south]"
+    - "fill 15298 -60 15297 15301 -60 15300 minecraft:farmland"
+    - "fill 15298 -59 15297 15301 -59 15300 minecraft:air"
+    - "execute unless entity 00000000-0000-0000-0000-000000000059 run summon minecraft:villager 15303 -60 15300 {UUID:[I;0,0,0,89],PersistenceRequired:1b}"
+    - "execute unless entity 00000000-0000-0000-0000-000000000055 run summon minecraft:villager 15304 -60 15300 {UUID:[I;0,0,0,85],PersistenceRequired:1b}"
+steps:
+  - wait: 1000
+  - server_command: "tp 00000000-0000-0000-0000-000000000059 15303 -60 15300"
+  - server_command: "tp 00000000-0000-0000-0000-000000000055 15304 -60 15300"
+  - server_command: "data modify entity 00000000-0000-0000-0000-000000000059 Inventory set value []"
+  - server_command: "data modify entity 00000000-0000-0000-0000-000000000055 Inventory set value []"
+  - server_command: "kill @e[type=minecraft:item,x=15296,y=-60,z=15296,dx=16,dy=4,dz=16]"
+  - server_command: "kill 00000000-0000-0000-0000-000000000064"
+  - ui_close: {}
+  - wait: 3000
+  - player_use_until: {x: 15303, y: -60, z: 15302, face: up, screen_contains: "SettlementScreen", timeout_ms: 20000}
+  - assert_ui: {text_contains_any: ["农业定居", "Agricultural settlement"]}
+  - assert_ui: {text_contains_any: ["下一步", "Next step"]}
+  - ui_close: {}
+  - server_command: "kill 00000000-0000-0000-0000-000000000055"
+  - server_command: "data modify entity 00000000-0000-0000-0000-000000000059 Inventory set value []"
+  - server_command: "kill @e[type=minecraft:item,x=15296,y=-60,z=15296,dx=16,dy=4,dz=16]"
+  - server_command: "data modify block 15303 -60 15303 Items set value [{Slot:0b,id:\"minecraft:potato\",count:1}]"
+  - server_command: "setblock 15301 -59 15300 minecraft:air"
+  - player_use: {x: 15303, y: -60, z: 15303, face: up, shift: true}
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 15301, y: -59, z: 15300}, path: "block", op: eq, value: "minecraft:potatoes", timeout_ms: 120000}
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 15303, y: -60, z: 15303}, path: "blockEntity.Items", op: eq, value: []}
+  - server_command: "setblock 15301 -59 15300 minecraft:potatoes[age=7]"
+  - assert_json: {side: server, endpoint: "/world/block", request: {x: 15301, y: -59, z: 15300}, path: "state", op: contains, value: "age=0", timeout_ms: 120000}
+  - player_use_until: {x: 15303, y: -60, z: 15302, face: up, screen_contains: "SettlementScreen", timeout_ms: 10000}
+  - assert_ui: {text_contains_any: ["下一步", "Next step"]}
+  - screenshot: "minimal-camp-prototype"

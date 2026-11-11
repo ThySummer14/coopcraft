@@ -21,7 +21,7 @@ class SettlementSowingPlotsTest {
 		assertFalse(loaded.sowingPlots().blocked()); assertTrue(loaded.sowingPlots().all().isEmpty()); assertFalse(loaded.isDirty());
 		assertEquals(CREATED, data.addSowingPlot(camp, pos));
 		var permit = data.sowingPermitOf(camp, pos).orElseThrow(); CompoundTag expected = save(data);
-		assertEquals(24, expected.getInt("DataVersion"));
+		assertEquals(27, expected.getInt("DataVersion"));
 		for (int i = 0; i < 3; i++) {
 			data = SettlementSavedData.load(save(data), null);
 			assertEquals(expected, save(data)); assertFalse(data.isDirty());

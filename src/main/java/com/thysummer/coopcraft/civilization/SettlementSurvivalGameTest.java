@@ -31,7 +31,7 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Survival Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Survival Settlement");
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
 		String personId = data.simulationOf(settlement).orElseThrow().residentId(villager.getUUID()).orElseThrow();
@@ -53,7 +53,7 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 		helper.assertValueEqual(100, data.needsOf(settlement, villager.getUUID()).satiety(), "Eating must synchronize real satiety");
 		helper.assertValueEqual(0, chest.countItem(Items.POTATO), "Abstract eating must not consume real items");
 		ResourceBatch remaining = data.simulationOf(settlement).orElseThrow().world().batches().getFirst();
-		helper.assertValueEqual(2L, remaining.quantity(), "Only three abstract potatoes may be consumed");
+		helper.assertValueEqual(7L, remaining.quantity(), "Only three abstract potatoes may be consumed");
 		SimulationEvent meal = data.simulationOf(settlement).orElseThrow().world().ledger().events().getLast();
 		helper.assertValueEqual(EventType.CONSUME, meal.type(), "The meal must remain observable");
 		helper.assertTrue(
@@ -69,7 +69,7 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 		helper.assertTrue(restored.survivalEnabled(), "The survival switch must survive reload");
 		helper.assertValueEqual(1L, restored.lastSurvivalDay(), "The last simulated day must survive reload");
 		helper.assertValueEqual(0, restored.world().person(personId).hunger(), "Hunger must survive reload");
-		helper.assertValueEqual(2L, restored.world().batch(remaining.batchId()).quantity(), "Food balance must survive reload");
+		helper.assertValueEqual(7L, restored.world().batch(remaining.batchId()).quantity(), "Food balance must survive reload");
 
 		helper.getLevel().setDayTime(10L * Level.TICKS_PER_DAY);
 		SettlementSimulationService.tick(helper.getLevel(), reloaded, restoredSettlement);
@@ -84,8 +84,8 @@ public final class SettlementSurvivalGameTest implements FabricGameTest {
 		var level = helper.getLevel();
 		helper.setBlock(CHEST, Blocks.CHEST);
 		Container chest = (Container) level.getBlockEntity(helper.absolutePos(CHEST));
-		var data = new SettlementSavedData();
-		var settlement = data.getOrCreate(helper.absolutePos(BELL), "One ration authority", 0);
+		var data = SettlementSavedData.get(level);
+		var settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "One ration authority");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		villager.setNoAi(true);

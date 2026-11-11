@@ -47,7 +47,7 @@ class ResidentFoodAccessViewTest {
             assertNotNull(find(lines, "quota_retry_ready"));
             assertEquals(6, lines.size());
             assertEquals(before, save(f)); assertFalse(f.data.isDirty());
-            assertEquals(24, before.getInt("DataVersion"));
+            assertEquals(27, before.getInt("DataVersion"));
             var loaded = SettlementSavedData.load(before, null);
             var settlement = loaded.find(BlockPos.ZERO).orElseThrow();
             f = new Fixture(loaded, settlement, loaded.simulationOf(settlement).orElseThrow());

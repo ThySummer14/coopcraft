@@ -2,6 +2,10 @@
   "replace": false,
   "values": [
     "coopcraft:farm_station",
+    "coopcraft:waterwheel",
+    "coopcraft:drive_shaft",
+    "coopcraft:archive",
+    "coopcraft:computer_core",
     "coopcraft:waystation_stone"
   ]
 }

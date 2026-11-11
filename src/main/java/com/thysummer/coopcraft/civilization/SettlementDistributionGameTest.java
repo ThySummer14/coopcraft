@@ -29,7 +29,7 @@ public final class SettlementDistributionGameTest implements FabricGameTest {
 		Container chest = (Container) helper.getLevel().getBlockEntity(helper.absolutePos(CHEST));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
 		BlockPos bell = helper.absolutePos(BELL);
-		Settlement settlement = data.getOrCreate(bell, "Distribution Settlement", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Distribution Settlement");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));

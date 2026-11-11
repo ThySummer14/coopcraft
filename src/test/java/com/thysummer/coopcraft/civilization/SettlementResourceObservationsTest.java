@@ -173,7 +173,7 @@ class SettlementResourceObservationsTest {
 		assertFalse(loaded.recordResourceObservation(camp, BlockPos.ZERO, null));
 		CompoundTag migrated = loaded.save(new CompoundTag(), null);
 		assertEquals(2, migrated.getCompound("ResourceObservations").getInt("Version"));
-		assertEquals(24, migrated.getInt("DataVersion"));
+		assertEquals(27, migrated.getInt("DataVersion"));
 		var reloaded = SettlementSavedData.load(migrated, null); var recamp = reloaded.find(BlockPos.ZERO).orElseThrow();
 		assertFalse(reloaded.recordResourceObservation(recamp, BlockPos.ZERO, SettlementResourceObservations.Kind.STONE));
 		assertEquals(SettlementResourceObservations.Change.CHANGED, reloaded.changeResourceObservation(recamp, veto, false));

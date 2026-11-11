@@ -34,7 +34,7 @@ class SettlementShearingPermitsTest {
 		var snapshot = data.shearingPermitsOf(camp);
 		assertThrows(UnsupportedOperationException.class, snapshot::clear);
 		CompoundTag expected = save(data);
-		assertEquals(24, expected.getInt("DataVersion"));
+		assertEquals(27, expected.getInt("DataVersion"));
 		for (int i = 0; i < 2; i++) {
 			data = SettlementSavedData.load(save(data), null);
 			assertFalse(data.isDirty()); assertFalse(data.shearingPermitsBlocked());

@@ -217,10 +217,43 @@ public final class SimulationWorld {
 		child.assignParents(parentIds);
 	}
 
+	public long recordWorkCoordination(String actorId, EventType type, Map<String, String> context) {
+		person(actorId);
+		return recordSocialEvent(type, List.of(actorId), context, List.of());
+	}
+
 	long recordSocialEvent(EventType type, List<String> actors, Map<String, String> context, List<Long> causalLinks) {
 		long eventId = ledger.nextEventId();
 		ledger.append(new SimulationEvent(eventId, day, type, actors, List.of(), List.of(), context, causalLinks));
 		return eventId;
+	}
+
+	public long recordCareProvided(
+		String caregiverId,
+		String dependentId,
+		int hours,
+		Map<String, String> context
+	) {
+		return recordCareProvided(caregiverId, dependentId, hours, context, List.of());
+	}
+
+	public long recordCareProvided(
+		String caregiverId,
+		String dependentId,
+		int hours,
+		Map<String, String> context,
+		List<Long> causalLinks
+	) {
+		Person caregiver = person(caregiverId);
+		Person dependent = person(dependentId);
+		if (hours <= 0 || !caregiver.canProvideCare() || !dependent.needsCare()
+			|| !caregiver.campId().equals(dependent.campId())) {
+			throw new IllegalArgumentException("Invalid care event");
+		}
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("hours", Integer.toString(hours));
+		eventContext.put("sameHousehold", Boolean.toString(caregiver.householdId().equals(dependent.householdId())));
+		return recordSocialEvent(EventType.CARE_PROVIDED, List.of(caregiverId, dependentId), eventContext, causalLinks);
 	}
 
 	public Camp camp(String id) {
@@ -733,15 +766,30 @@ public final class SimulationWorld {
 		return nutrition;
 	}
 
+	public long recordExternalConsumption(String personId, Map<String, String> context, List<Long> causalLinks) {
+		person(personId);
+		return recordSocialEvent(EventType.CONSUME, List.of(personId), context, causalLinks);
+	}
+
 	public long recordShareRequest(String requesterId, String targetId, long neededNutrition) {
+		return recordShareRequest(requesterId, targetId, neededNutrition, Map.of());
+	}
+
+	public long recordShareRequest(
+		String requesterId,
+		String targetId,
+		long neededNutrition,
+		Map<String, String> context
+	) {
 		person(requesterId);
 		if (targetId.isBlank() || neededNutrition <= 0) {
 			throw new IllegalArgumentException("A share request needs a target and positive nutrition need");
 		}
 		long eventId = ledger.nextEventId();
+		Map<String, String> eventContext = new LinkedHashMap<>(context);
+		eventContext.put("neededNutrition", Long.toString(neededNutrition));
 		ledger.append(new SimulationEvent(
-			eventId, day, EventType.SHARE_REQUEST, List.of(requesterId, targetId), List.of(), List.of(),
-			Map.of("neededNutrition", Long.toString(neededNutrition)), List.of()
+			eventId, day, EventType.SHARE_REQUEST, List.of(requesterId, targetId), List.of(), List.of(), eventContext, List.of()
 		));
 		return eventId;
 	}
@@ -788,6 +836,14 @@ public final class SimulationWorld {
 		return recordSocialEvent(EventType.STAGE_ADVANCED, List.of(), Map.of("stage", stageId), List.of());
 	}
 
+	public long recordEraAdvanced(String campId, String eraId) {
+		camp(campId);
+		if (eraId.isBlank()) {
+			throw new IllegalArgumentException("Era ID cannot be blank");
+		}
+		return recordSocialEvent(EventType.ERA_ADVANCED, List.of(), Map.of("era", eraId), List.of());
+	}
+
 	public long recordGiftInteraction(
 		String villagerPersonId,
 		String playerActorId,
@@ -797,18 +853,36 @@ public final class SimulationWorld {
 		String reason,
 		int trustAfter
 	) {
-		return recordGiftInteraction(villagerPersonId, playerActorId, accepted, itemName, playerName, reason, trustAfter, Map.of());
+		return recordGiftInteraction(
+			villagerPersonId, playerActorId, accepted, itemName, playerName, reason, trustAfter, Map.of(), List.of()
+		);
 	}
 
 	/** Optional decision-time evidence; historical events retain their original context. */
 	public long recordGiftInteraction(String villagerPersonId, String playerActorId, boolean accepted,
 		String itemName, String playerName, String reason, int trustAfter, Map<String, String> evidence) {
+		return recordGiftInteraction(
+			villagerPersonId, playerActorId, accepted, itemName, playerName, reason, trustAfter, evidence, List.of()
+		);
+	}
+
+	public long recordGiftInteraction(
+		String villagerPersonId,
+		String playerActorId,
+		boolean accepted,
+		String itemName,
+		String playerName,
+		String reason,
+		int trustAfter,
+		Map<String, String> additionalContext,
+		List<Long> causalLinks
+	) {
 		person(villagerPersonId);
 		if (playerActorId.isBlank() || itemName.isBlank() || playerName.isBlank() || reason.isBlank()
 			|| trustAfter < 0 || trustAfter > 100) {
 			throw new IllegalArgumentException("Invalid gift interaction");
 		}
-		Map<String, String> context = new LinkedHashMap<>(evidence);
+		Map<String, String> context = new LinkedHashMap<>(additionalContext);
 		context.put("item", itemName);
 		context.put("player", playerName);
 		context.put("reason", reason);
@@ -817,7 +891,7 @@ public final class SimulationWorld {
 			accepted ? EventType.GIFT_RECEIVED : EventType.GIFT_REFUSED,
 			List.of(villagerPersonId, playerActorId),
 			context,
-			List.of()
+			causalLinks
 		);
 	}
 

@@ -72,7 +72,7 @@ class SettlementShearingLeasesTest {
 	@Test void leasesDoNotDirtyOrSerializeAndReloadCannotReuseTicket() {
 		Fixture f = new Fixture(); CompoundTag before = f.data.save(new CompoundTag(), null);
 		f.data.setDirty(false); var lease = f.claim(ACTOR, SHEEP, 0);
-		assertFalse(f.data.isDirty()); assertEquals(before, f.data.save(new CompoundTag(), null)); assertEquals(24, before.getInt("DataVersion"));
+		assertFalse(f.data.isDirty()); assertEquals(before, f.data.save(new CompoundTag(), null)); assertEquals(27, before.getInt("DataVersion"));
 		SettlementSavedData loaded = SettlementSavedData.load(before, null);
 		Settlement camp = loaded.settlementById(f.camp.id());
 		assertEquals(0, loaded.shearingLeases().size(1));

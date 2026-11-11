@@ -306,7 +306,7 @@ class SettlementMembershipTest {
 			assertSame(identity, loaded.memberIdentity(RESIDENT));
 			assertEquals(untouched, input);
 			assertEquals(canonical, save(loaded));
-			assertEquals(24, save(loaded).getInt("DataVersion"));
+			assertEquals(27, save(loaded).getInt("DataVersion"));
 			assertFalse(loaded.isDirty());
 			assertEquals(83, f.person(RESIDENT).trustIn(f.person(COMPANION).id()));
 			assertEquals(1, f.state.allocatedFoodUnits(f.person(RESIDENT).id()));

@@ -135,7 +135,7 @@ public final class VillagerInteraction {
 			? null : SettlementStockpile.getStockpile(level, data, settlement);
 		OfferResult result = VillagerGiftService.offer(data, settlement, villager.getUUID(), villager.isBaby(),
 			PLAYER_ACTOR_PREFIX + player.getUUID(), player.getScoreboardName(), player.getInventory(), slot,
-			() -> player.getInventory().selected, held, stockpile);
+			() -> player.getInventory().selected, held, stockpile, level.getDayTime() / Level.TICKS_PER_DAY);
 		if (!result.accepted()) return refuse(player, villager, result.reason());
 		player.displayClientMessage(Component.translatable(
 			"coopcraft.interaction.accepted", nameOf(villager), held.getHoverName(), reason(result.reason())), false);
@@ -188,6 +188,16 @@ public final class VillagerInteraction {
 		Container stockpile = SettlementStockpile.getStockpile(level, data, settlement);
 		lines.add(SettlementCommands.reservesMessage(settlement.name(),
 			SettlementReserves.inspect(data, settlement, stockpile)));
+		if (state != null) {
+			long day = level.getDayTime() / Level.TICKS_PER_DAY;
+			boolean careRequest = state.careFoodRequest(villager.getUUID(), day).isPresent();
+			boolean foodAvailable = state.survivalEnabled()
+				? SettlementSimulationService.hasFood(data, settlement)
+				: SettlementNeeds.hasFood(villager.getInventory(), stockpile);
+			if (careRequest && !foodAvailable) {
+				lines.add(Component.translatable("coopcraft.interaction.care_food_request", name));
+			}
+		}
 		if (isFood(player.getMainHandItem())) {
 			lines.add(Component.translatable("coopcraft.interaction.inspect_hint"));
 		}

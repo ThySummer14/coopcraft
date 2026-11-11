@@ -40,7 +40,7 @@ public final class SettlementForagingGameTest implements FabricGameTest {
 		helper.setBlock(CHEST, Blocks.CHEST);
 		helper.setBlock(BUSH, Blocks.SWEET_BERRY_BUSH.defaultBlockState().setValue(SweetBerryBushBlock.AGE, 3));
 		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
-		Settlement settlement = data.getOrCreate(helper.absolutePos(RESIDENT), "Foraging", 0);
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Foraging");
 		data.setStockpile(settlement, helper.absolutePos(CHEST));
 		Villager villager = helper.spawn(EntityType.VILLAGER, RESIDENT);
 		villager.setNoAi(true);

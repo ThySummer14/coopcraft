@@ -154,8 +154,8 @@ public final class VillagerInteractionGameTest implements FabricGameTest {
 
 	private static Fixture fixture(GameTestHelper helper) {
 		helper.setBlock(CHEST, Blocks.CHEST);
-		SettlementSavedData data = SettlementSavedData.load(new CompoundTag(), helper.getLevel().registryAccess());
-		Settlement settlement = data.getOrCreate(helper.absolutePos(BELL), "Interaction Test", 0);
+		SettlementSavedData data = SettlementSavedData.get(helper.getLevel());
+		Settlement settlement = CivilizationGameTestSupport.isolatedSettlement(helper, data, "Interaction Test");
 		Villager villager = helper.spawn(EntityType.VILLAGER, VILLAGER);
 		data.registerLoadedResidents(helper.getLevel(), settlement, List.of(villager));
 		data.setStockpile(settlement, helper.absolutePos(CHEST));

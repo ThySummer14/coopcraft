@@ -147,7 +147,10 @@ public final class ConstructionRecoveryGameTest implements FabricGameTest {
 			var restored = SettlementSavedData.load(loaded.save(new CompoundTag(), level.registryAccess()), level.registryAccess());
 			var restoredSettlement = restored.find(center).orElseThrow();
 			var resumed = ConstructionSystem.nextBuildTarget(level, restored, restoredSettlement).orElseThrow();
-			helper.assertValueEqual(pending, resumed, "Retain the original index, position, and full plan signature");
+			helper.assertValueEqual(pending.job().nextIndex(), resumed.job().nextIndex(), "Retain the original instruction index");
+			helper.assertValueEqual(pending.instruction(), resumed.instruction(), "Retain the original instruction");
+			helper.assertValueEqual(pending.position(), resumed.position(), "Retain the original position");
+			helper.assertValueEqual(pending.job().planFingerprint(), resumed.job().planFingerprint(), "Retain the full plan signature");
 			helper.assertTrue(ConstructionSystem.buildNext(level, restored, restoredSettlement, resumed, builder), "Resume after adoption and save/reload");
 			helper.assertTrue(!ConstructionSystem.buildNext(level, restored, restoredSettlement, resumed, builder), "Old target cannot charge twice");
 			helper.assertValueEqual(remaining - (resumed.instruction().consume() ? 1 : 0), chest.countItem(resumed.instruction().item()), "Pay for exactly one new instruction");

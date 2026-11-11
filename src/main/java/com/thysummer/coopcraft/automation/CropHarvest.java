@@ -15,11 +15,11 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.NetherWartBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-final class CropHarvest {
+public final class CropHarvest {
 	private CropHarvest() {
 	}
 
-	static boolean isMature(BlockState state) {
+	public static boolean isMature(BlockState state) {
 		boolean supported = state.is(Blocks.WHEAT)
 			|| state.is(Blocks.CARROTS)
 			|| state.is(Blocks.POTATOES)
@@ -34,14 +34,14 @@ final class CropHarvest {
 		return state.getValue(NetherWartBlock.AGE) == NetherWartBlock.MAX_AGE;
 	}
 
-	static BlockState getReplantState(BlockState state) {
+	public static BlockState getReplantState(BlockState state) {
 		if (state.getBlock() instanceof CropBlock crop) {
 			return crop.getStateForAge(0);
 		}
 		return state.setValue(NetherWartBlock.AGE, 0);
 	}
 
-	static boolean removeOneSeed(List<ItemStack> drops, ItemStack seed) {
+	public static boolean removeOneSeed(List<ItemStack> drops, ItemStack seed) {
 		if (seed.isEmpty()) {
 			return false;
 		}

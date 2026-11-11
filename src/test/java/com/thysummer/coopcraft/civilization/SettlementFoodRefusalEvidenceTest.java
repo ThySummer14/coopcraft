@@ -102,7 +102,7 @@ class SettlementFoodRefusalEvidenceTest {
 		SettlementSimulationService.eat(data, settlement, resident);
 		assertEquals(count, state.world().ledger().events().size());
 		CompoundTag saved = data.save(new CompoundTag(), null);
-		assertEquals(24, saved.getInt("DataVersion"));
+		assertEquals(27, saved.getInt("DataVersion"));
 		SettlementSavedData restored = SettlementSavedData.load(saved, null);
 		Settlement restoredSettlement = restored.find(settlement.center()).orElseThrow();
 		SettlementSimulationState restoredState = restored.simulationOf(restoredSettlement).orElseThrow();

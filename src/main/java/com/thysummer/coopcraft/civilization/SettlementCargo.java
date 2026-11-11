@@ -13,7 +13,8 @@ public final class SettlementCargo {
 		return stack != null && !stack.isEmpty() && !SettlementWorkbenchCargo.isMarked(stack)
 			&& !SettlementShearingCargo.isMarked(stack) && !SettlementShearsLoan.isMarked(stack)
 			&& (stack.is(ItemTags.LOGS)
-			|| stack.is(Items.COBBLESTONE) || stack.is(Items.STICK) || stack.is(Items.SMOOTH_STONE));
+			|| stack.is(Items.COBBLESTONE) || stack.is(Items.STICK) || stack.is(Items.SMOOTH_STONE)
+			|| stack.is(Items.RAW_IRON) || stack.is(Items.COAL) || stack.is(Items.IRON_INGOT));
 	}
 
 	public static boolean hasCargo(Container inventory) {

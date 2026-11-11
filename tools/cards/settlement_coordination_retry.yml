@@ -1,0 +1,42 @@
+id: settlement-coordination-retry
+description: Keep unavailable forage paused without event oscillation, then resume only after a real ripe bush appears.
+setup:
+  server_commands:
+    - "difficulty peaceful"
+    - "gamerule doMobSpawning false"
+    - "gamemode survival @p"
+    - "time set day"
+    - "forceload add 13296 13296 13312 13312"
+    - "fill 13296 -61 13296 13312 -61 13312 minecraft:stone"
+    - "fill 13296 -60 13296 13312 -58 13312 minecraft:air"
+    - "fill 13296 -60 13296 13312 -58 13296 minecraft:barrier"
+    - "fill 13296 -60 13312 13312 -58 13312 minecraft:barrier"
+    - "fill 13296 -60 13296 13296 -58 13312 minecraft:barrier"
+    - "fill 13312 -60 13296 13312 -58 13312 minecraft:barrier"
+    - "kill @e[type=minecraft:villager,x=13296,y=-60,z=13296,dx=16,dy=4,dz=16]"
+    - "tp @p 13303 -60 13305 180 0"
+    - "setblock 13303 -60 13302 minecraft:bell"
+    - "setblock 13303 -60 13303 minecraft:chest"
+    - "summon minecraft:villager 13303 -60 13300 {UUID:[I;0,0,0,37],PersistenceRequired:1b}"
+    - "summon minecraft:villager 13304 -60 13300 {UUID:[I;0,0,0,41],PersistenceRequired:1b}"
+steps:
+  - ui_close: {}
+  - wait: 3000
+  - player_use_until: {x: 13303, y: -60, z: 13302, face: up, screen_contains: "SettlementScreen", timeout_ms: 20000}
+  - ui_close: {}
+  - player_use: {x: 13303, y: -60, z: 13303, face: up, shift: true}
+  - wait: 7000
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: contains, value: "WORK_PAUSED"}
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: not_contains, value: "WORK_RESUMED"}
+  - server_command: "tp 00000000-0000-0000-0000-000000000029 13300.5 -60 13300.5"
+  - server_command: "tp 00000000-0000-0000-0000-000000000025 13312.0 -60 13312.0"
+  - server_command: "setblock 13300 -60 13300 minecraft:sweet_berry_bush[age=3]"
+  - wait: 1000
+  - assert_json: {side: server, endpoint: "/world/settlement-data", path: "data.Simulations.*.Events.*.Type", op: contains, value: "WORK_RESUMED", timeout_ms: 60000}
+  - player_use_until: {x: 13303, y: -60, z: 13302, face: up, screen_contains: "SettlementScreen", timeout_ms: 10000}
+  - wait: 500
+  - click_text: ["事件", "Events"]
+  - wait: 500
+  - click_text_until: {text_any: ["恢复工作承诺", "Work resumed"], button: ["下一页", "Next"], max_clicks: 8, interval_ms: 300}
+  - assert_ui: {text_contains_any: ["工作：", "Task:"], timeout_ms: 5000}
+  - screenshot: "settlement-coordination-forage-retry"

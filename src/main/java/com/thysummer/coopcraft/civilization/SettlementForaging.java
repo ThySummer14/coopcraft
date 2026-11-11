@@ -42,6 +42,10 @@ public final class SettlementForaging {
 		return needsForage(hasFood, role == WorkRole.FORAGER && reserveLow.getAsBoolean(), gameTime, cooldownUntil);
 	}
 
+	static boolean needsForage(boolean required, long gameTime, long cooldownUntil) {
+		return required && gameTime >= cooldownUntil;
+	}
+
 	static boolean reserveLow(SettlementSavedData data, Settlement settlement, Container stockpile) {
 		SettlementReserves.Snapshot snapshot = SettlementReserves.inspect(data, settlement, stockpile);
 		// Preserve the existing preventive-work behavior when a physical store cannot be resolved.
@@ -208,7 +212,10 @@ public final class SettlementForaging {
 			mature -> current.getAsBoolean() && data.canHarvestBerries(settlement, position)
 				&& inBounds(level, position) && level.isLoaded(position) && level.isPositionEntityTicking(position)
 				&& level.setBlock(position, mature.setValue(SweetBerryBushBlock.AGE, 1), Block.UPDATE_ALL));
-		if (harvested > 0) villager.swing(InteractionHand.MAIN_HAND);
+		if (harvested > 0) {
+			villager.swing(InteractionHand.MAIN_HAND);
+			SettlementCoordination.requestReplan(data, settlement);
+		}
 		return harvested;
 	}
 }

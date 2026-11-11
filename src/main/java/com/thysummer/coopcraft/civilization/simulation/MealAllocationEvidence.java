@@ -45,9 +45,12 @@ final class MealAllocationEvidence {
 				&& share.causalLinks().contains(request.eventId())
 				&& share.causalLinks().stream().map(id -> event(ledger, id))
 					.filter(cause -> cause.type() == EventType.SHARE_REQUEST).count() == 1);
-			// This receipt is emitted by a single uninterrupted meal execution.
-			require(share.eventId() == request.eventId() + 1 && consume.eventId() == share.eventId() + 1
-				&& (previousConsume == 0 || request.eventId() == previousConsume + 1));
+			// A care request may precede gift/import events and be reused by later parts of the same meal.
+			require(share.eventId() > request.eventId() && consume.eventId() == share.eventId() + 1);
+			if (previousConsume != 0) {
+				require(request.eventId() == previousConsume + 1
+					|| request.eventId() == evidence.allocations().getFirst().requestEventId());
+			}
 			previousConsume = consume.eventId();
 			require(Long.parseLong(request.context().get("neededNutrition")) > 0);
 			ResourceFlow input = share.inputs().getFirst();

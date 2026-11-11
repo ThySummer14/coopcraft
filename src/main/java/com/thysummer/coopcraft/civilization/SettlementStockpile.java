@@ -18,7 +18,6 @@ public final class SettlementStockpile {
 	private static final long WORK_INTERVAL_TICKS = 40;
 	private static final int BASIC_FOOD_POINTS = 12;
 	private static final double MEMBER_RADIUS_SQUARED = 64.0 * 64.0;
-
 	private SettlementStockpile() {
 	}
 

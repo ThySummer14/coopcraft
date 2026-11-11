@@ -105,8 +105,9 @@ final class SettlementShearing {
 			|| !target.readyWhiteAdult() || !target.activeInBounds() || !finite(target.position()) || !finite(target.box())) return false;
 		double distance = probe.distanceSquared(target);
 		double dx = target.position().x - camp.center().getX(), dz = target.position().z - camp.center().getZ();
-		return Double.isFinite(distance) && distance >= 0 && distance <= 144 && dx * dx + dz * dz <= 4096
+		boolean allowed = Double.isFinite(distance) && distance >= 0 && distance <= 144 && dx * dx + dz * dz <= 4096
 			&& !SettlementShearingCommands.protectedBox(data.protectedAreas(), target.box());
+		return allowed;
 	}
 
 	/** Read-only eligibility: never installs synthetic shears and never claims a sheep lease. */
@@ -247,15 +248,17 @@ final class SettlementShearing {
 	}
 
 	private static boolean identityAllowed(Session s) {
-		return !s.consumed && actorAllowed(s.data, s.camp, s.actor, s.probe, true)
-			&& s.probe.actorIdentity() == s.actorIdentity && s.probe.inventory() == s.inventory && s.member != null && s.data.memberIdentity(s.actor) == s.member
-			&& s.binding != null && s.data.stockpileBindingToken(s.camp) == s.binding
-			&& s.data.simulationOf(s.camp).orElse(null) == s.simulation
-			&& (s.simulation == null || s.simulation.foodRequestModeVersion() == s.modeVersion)
-			&& s.data.shearingPermitOf(s.permit.sheepId()).orElse(null) == s.permit
-			&& s.probe.mainHand() == s.tool && ItemStack.matches(s.tool, s.toolSnapshot)
-			&& s.data.shearingLeases().valid(s.lease, s.data, s.camp, s.actor, s.actorIdentity,
-				s.permit.sheepId(), s.sheepIdentity, s.probe.time());
+		boolean actor = actorAllowed(s.data, s.camp, s.actor, s.probe, true);
+		boolean identity = s.probe.actorIdentity() == s.actorIdentity && s.probe.inventory() == s.inventory
+			&& s.member != null && s.data.memberIdentity(s.actor) == s.member;
+		boolean binding = s.binding != null && s.data.stockpileBindingToken(s.camp) == s.binding;
+		boolean simulation = s.data.simulationOf(s.camp).orElse(null) == s.simulation
+			&& (s.simulation == null || s.simulation.foodRequestModeVersion() == s.modeVersion);
+		boolean permit = s.data.shearingPermitOf(s.permit.sheepId()).orElse(null) == s.permit;
+		boolean tool = s.probe.mainHand() == s.tool && ItemStack.matches(s.tool, s.toolSnapshot);
+		boolean lease = s.data.shearingLeases().valid(s.lease, s.data, s.camp, s.actor, s.actorIdentity,
+			s.permit.sheepId(), s.sheepIdentity, s.probe.time());
+		return !s.consumed && actor && identity && binding && simulation && permit && tool && lease;
 	}
 
 	static boolean valid(Session s) {

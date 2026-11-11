@@ -196,7 +196,7 @@ class VillagerGiftServiceTest {
 			assertEquals("not_member", outsider.reason()); assertNoAid(f);
 		}
 		var f = new Fixture(true);
-		f.hand.setItem(2, new ItemStack(Items.BREAD, 5));
+		f.hand.setItem(2, new ItemStack(Items.BEETROOT, 5));
 		assertEquals("unsupported_food", f.offer().reason()); assertEquals(5, f.hand.getItem(2).getCount()); assertNoAid(f);
 	}
 

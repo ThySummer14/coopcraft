@@ -1,6 +1,7 @@
 package com.thysummer.coopcraft;
 
 import com.thysummer.coopcraft.automation.Automation;
+import com.thysummer.coopcraft.civilization.AiPlayers;
 import com.thysummer.coopcraft.civilization.Civilization;
 import com.thysummer.coopcraft.civilization.SettlementSavedData;
 import com.thysummer.coopcraft.civilization.SettlementCargoRecovery;
@@ -28,6 +29,7 @@ public class CoopCraft implements ModInitializer {
 	public void onInitialize() {
 		Automation.register();
 		Civilization.register();
+		AiPlayers.register();
 		CoopNetworking.registerPayloads();
 		Waypoints.register();
 		Waystations.register();

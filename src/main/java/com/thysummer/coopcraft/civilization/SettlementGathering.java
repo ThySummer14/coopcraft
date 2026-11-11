@@ -40,7 +40,8 @@ public final class SettlementGathering {
 	}
 
 	static boolean gatherable(BlockState state) {
-		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS);
+		return state.is(Blocks.STONE) || state.is(Blocks.COBBLESTONE) || state.is(BlockTags.LOGS)
+			|| SettlementMetallurgy.isOre(state);
 	}
 
 	static boolean accessible(SettlementSavedData data, Settlement settlement, UUID actor, BlockPos pos,
@@ -105,7 +106,9 @@ public final class SettlementGathering {
 			() -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos) && level.isLoaded(pos),
 			() -> level.isPositionEntityTicking(pos), () -> level.getBlockState(pos),
 			() -> level.isLoaded(pos.below()), () -> level.getBlockState(pos.below()),
-			state -> Block.getDrops(state, level, pos, level.getBlockEntity(pos)),
+			state -> SettlementMetallurgy.isOre(state)
+				? Block.getDrops(state, level, pos, level.getBlockEntity(pos), villager, villager.getMainHandItem())
+				: Block.getDrops(state, level, pos, level.getBlockEntity(pos)),
 			state -> !SettlementSavedData.get(level).isResidentModificationBlocked(pos)
 				&& level.destroyBlock(pos, false, villager), stack -> villager.spawnAtLocation(stack));
 	}

@@ -1,0 +1,25 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "P": {
+      "item": "minecraft:oak_planks"
+    },
+    "S": {
+      "item": "minecraft:stick"
+    }
+  },
+  "pattern": [
+    "PSP",
+    "SIS",
+    "PSP"
+  ],
+  "result": {
+    "count": 1,
+    "id": "coopcraft:waterwheel"
+  },
+  "show_notification": true
+}

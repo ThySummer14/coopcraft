@@ -142,7 +142,8 @@ class SettlementMeetingDetailsTest {
 		var details = SettlementMeetingDetails.project(event(EventType.NORM_DELIBERATED, evidence("deliberating")));
 		var info = new SimulationEventInfo(0, "NORM_DELIBERATED", "NONE", 0, details);
 		SettlementOverviewPayload expected = new SettlementOverviewPayload("Meetings", 0, 0, 10, 10, 0,
-			0, 0, 0, SocialOrganization.PRIMITIVE_COMMUNE, SettlementStage.PRIMITIVE, List.of(), List.of(info));
+			0, 0, 0, SocialOrganization.PRIMITIVE_COMMUNE, SettlementStage.PRIMITIVE, List.of(), List.of(info),
+			List.of(), "food", CivilizationEras.PRIMITIVE, "coopcraft.milestone.common_stockpile", "new_camp");
 		RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
 		try {
 			SettlementOverviewPayload.STREAM_CODEC.encode(buffer, expected);

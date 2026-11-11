@@ -3,8 +3,14 @@ package com.thysummer.coopcraft.automation;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemStorage;
 import net.fabricmc.fabric.api.transfer.v1.item.ItemVariant;
 import net.fabricmc.fabric.api.transfer.v1.storage.Storage;
+
+import com.thysummer.coopcraft.civilization.SettlementIndustry;
+import com.thysummer.coopcraft.civilization.SettlementIntelligence;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,10 +21,10 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class FarmStationBlockEntity extends BlockEntity {
-	private static final long WORK_INTERVAL_TICKS = 40;
 	private static final double ALERT_RANGE_SQUARED = 16 * 16;
 
 	private Status status = Status.IDLE;
+	private long poweredHarvests;
 
 	public FarmStationBlockEntity(BlockPos pos, BlockState state) {
 		this(Automation.FARM_STATION_ENTITY, pos, state);
@@ -29,7 +35,15 @@ public class FarmStationBlockEntity extends BlockEntity {
 	}
 
 	public static void tick(Level level, BlockPos pos, BlockState state, FarmStationBlockEntity station) {
-		if (!(level instanceof ServerLevel serverLevel) || Math.floorMod(level.getGameTime() + pos.asLong(), WORK_INTERVAL_TICKS) != 0) {
+		if (!(level instanceof ServerLevel serverLevel)) {
+			return;
+		}
+		int interval = SettlementIntelligence.workInterval(serverLevel, pos);
+		if (Math.floorMod(level.getGameTime() + pos.asLong(), interval) != 0) {
+			return;
+		}
+		if (!SettlementIndustry.isPowered(serverLevel, pos)) {
+			station.setStatus(Status.NO_POWER, serverLevel);
 			return;
 		}
 
@@ -50,7 +64,12 @@ public class FarmStationBlockEntity extends BlockEntity {
 
 				CropHarvest.Result result = CropHarvest.harvest(serverLevel, cropPos, cropState, storage);
 				switch (result) {
-					case HARVESTED -> station.setStatus(Status.RUNNING, serverLevel);
+					case HARVESTED -> {
+						station.poweredHarvests++;
+						station.setChanged();
+						SettlementIndustry.recordPoweredHarvest(serverLevel, pos, pos.above());
+						station.setStatus(Status.RUNNING, serverLevel);
+					}
 					case OUTPUT_FULL -> station.setStatus(Status.OUTPUT_FULL, serverLevel);
 					case MISSING_SEED -> station.setStatus(Status.MISSING_SEED, serverLevel);
 				}
@@ -61,8 +80,26 @@ public class FarmStationBlockEntity extends BlockEntity {
 		station.setStatus(Status.IDLE, serverLevel);
 	}
 
+	public long poweredHarvests() {
+		return poweredHarvests;
+	}
+
 	Component getStatusMessage() {
-		return status.message();
+		return poweredHarvests == 0
+			? status.message()
+			: Component.translatable("coopcraft.farm_station.status.with_harvests", status.message(), poweredHarvests);
+	}
+
+	@Override
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
+		tag.putLong("PoweredHarvests", poweredHarvests);
+	}
+
+	@Override
+	public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
+		poweredHarvests = tag.getLong("PoweredHarvests");
 	}
 
 	private void setStatus(Status newStatus, ServerLevel level) {
@@ -85,6 +122,7 @@ public class FarmStationBlockEntity extends BlockEntity {
 	private enum Status {
 		RUNNING("running", false),
 		IDLE("idle", false),
+		NO_POWER("no_power", false),
 		NO_OUTPUT("no_output", true),
 		OUTPUT_FULL("output_full", true),
 		MISSING_SEED("missing_seed", true);
